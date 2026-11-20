@@ -4314,3 +4314,72 @@ but the correction quotes the phrase in order to retract it, so the
 test failed on the fix. "Absent" was never the property worth having.
 The property is that the phrase never appears without its retraction:
 slice to the block, then anchor inside it.
+
+## 2026-11-20 — three new chat tools, and the Rule 5 reason for them
+
+Rule 5 says a new tool needs a written reason from the owner. There
+were 59. Reaching Shopify's content actions from chat takes three more
+— collection text, blog post, image upload — so the count goes to 62.
+
+**The owner's reason, approved and recorded:** depth, not breadth. The
+write path for all five Shopify content actions is built and was
+verified live against hawlaitest on 20 November 2026 — real mutations,
+staleness holding, undo restoring byte-identically. It is unreachable:
+nothing in chat creates an action for any of it. These tools add no new
+capability to the product; they connect a capability that already
+exists and has been proven to work.
+
+**What did NOT need a new tool, and why that matters to the count:**
+`propose_page_meta` already exists and routes to Shopify by platform
+rather than by a twin. A fourth new tool was avoided the same way — see
+the next entry.
+
+**One ActionKey, one payload shape.** Found while preparing this and
+fixed first: `hawlaiSite` read `seoTitle` while `shopify` read
+`metaTitle`, so the first producer would have handed Shopify a payload
+it could not read — and the failure would have looked like "no title
+was given". `tests/publishPayloadContract.test.ts` now pins every
+adapter to one spelling per concept.
+
+## 2026-11-20 — a Shopify page comes back as ONE block
+
+`edit_page_text` addresses a **block id**. A Shopify page is a single
+HTML body with no blocks, so the tool's contract does not transfer and
+the choice was: share the tool, write a second one, or leave Shopify
+page text unreachable.
+
+**Decided: share the tool.** `read_page` returns a Shopify page as one
+block whose id means "the whole body". That is not a convenient
+fiction — the adapter addresses the whole body regardless, so there is
+nothing finer to point at.
+
+**The condition that made it honest.** The worry was routing Shopify
+around the tool's safety machinery. Checked rather than assumed, and
+it splits cleanly:
+
+| Guard | Input | Transfers |
+|---|---|---|
+| `statesPriceOrStock(text)` | plain text | yes |
+| `unknownProductName(text, facts)` | plain text | yes |
+| `CATALOGUE_REFUSAL` | constant | yes |
+| `legalWarning(applied)` | `{before, after}[]` | yes — one pair for a whole-body edit |
+| `applyEdits(sections, …)` | block tree | no, and it is plumbing rather than a guard |
+
+So a Shopify page edit gets the same protection a Hawlai one does.
+Sharing the tool would NOT have been acceptable otherwise, and if a
+future guard is block-shaped this decision has to be revisited rather
+than quietly waived.
+
+**One honest asymmetry, stated rather than papered over.**
+`legalWarning` fires on Hawlai pages by `page_type`. Shopify has no
+page type, so it is keyed on the handle — Shopify's own default legal
+pages have known ones. A page the owner created by hand and titled
+"Refund policy" will not match, so that one guard is WEAKER on Shopify
+than on the built-in site. It is a warning rather than a refusal, and
+the alternative was to claim an equivalence that does not exist.
+
+**Both surfaces at once.** A business with a Hawlai site AND a Shopify
+store makes "update my About page" ambiguous. The tool asks which,
+rather than preferring one — the same answer the existing resolver
+already gives for an unknown page, and for the same recorded reason:
+"the predecessor fell through to the hero and reported success".
