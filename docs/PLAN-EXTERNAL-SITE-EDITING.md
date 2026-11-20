@@ -292,11 +292,19 @@ their pages uneditable with no idea why.
 
 | | | |
 |---|---|---|
-| 3.0 | **Not code:** request the theme exemption; decide whether theme edits are in the first release at all | **—** |
-| 3.1 | Scope widening and the re-consent flow for already-connected merchants | **L** |
-| 3.2 | Extend `shopify.ts` with `update_page_text`, `update_page_meta`, `publish_post` | **M** |
-| 3.3 | Collections and files | **M** |
-| 3.4 | Make the absence of menus explicit in `supports`, and prove the assistant never offers it | **S** |
+| | | | **Status** |
+|---|---|---|---|
+| 3.0 | **Not code:** request the theme exemption; decide whether theme edits are in the first release at all | **—** | **deferred** — first step is Shopify's approval queue, not code |
+| 3.1 | Scope widening and the re-consent flow for already-connected merchants | **L** | **done 2026-11-20** — app version 4 released with `write_files`; test store reconnected |
+| 3.2 | Extend `shopify.ts` with `update_page_text`, `update_page_meta`, `publish_post` | **M** | **done 2026-11-20** (`ad129356`) |
+| 3.3 | Collections and files | **M** | **done 2026-11-20** — `update_collection_text` (`64c58e4a`), `upload_image` (`b9f39ae9`) |
+| 3.4 | Make the absence of menus explicit in `supports`, and prove the assistant never offers it | **S** | **done 2026-11-20** (`da367518`) — and the recorded reason was false; corrected |
+
+**Every one of 3.1–3.4 is UNVERIFIED against a live store.** The code,
+the tests and the API shapes are confirmed from the version-pinned
+2026-07 documentation; nothing has run against Shopify's real
+`pageUpdate`, `articleCreate`, `collectionUpdate` or `fileCreate`.
+Phase 3 is not finished until it has.
 
 **Riskiest:** 3.1, and it is a product risk rather than a technical
 one. A re-consent prompt is a moment where a merchant can say no, and
