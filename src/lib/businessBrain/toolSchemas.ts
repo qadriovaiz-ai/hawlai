@@ -801,14 +801,14 @@ export const TOOLS = [
   {
     name: "upload_store_image",
     description:
-      "Put a picture Hawlai made into the connected Shopify store's own file library, so the store hosts it instead of Hawlai. USE THIS after generate_graphic when they want to use that picture on their store — a page, a post, a collection — because an image referenced from Hawlai's storage breaks if that storage ever moves. It adds the file ONLY: nothing appears on any page and no customer sees it until something references it, and the card says so. The picture must be one Hawlai generated — pass the exact URL from an earlier generate_graphic or ad creative result. A URL from the web, from the person, or one you typed will be refused, and that refusal is the guard working, not a fault.",
+      "Put a picture Hawlai made into the connected Shopify store's own file library, so the store hosts it instead of Hawlai. USE THIS after generate_graphic when they want to use that picture on their store — a page, a post, a collection — because an image referenced from Hawlai's storage breaks if that storage ever moves. It adds the file ONLY: nothing appears on any page and no customer sees it until something references it, and the card says so. The picture must be one Hawlai generated. TAKE THE URL FROM \"Pictures this business already has\" in your context — that list is the pictures that exist, newest first, with their URLs. When they point at one (\"this image\", \"that one\", \"isi image\", \"ye wali\"), use its URL and upload it. DO NOT call generate_graphic first: that makes a SECOND picture and charges again, which is not what they asked for. generate_graphic returns only a quote and never a URL, so there is no URL to wait for — the list is the only place one comes from. A URL from the web, from the person, or one you typed will be refused, and that refusal is the guard working, not a fault.",
     input_schema: {
       type: "object",
       properties: {
         imageUrl: {
           type: "string",
           description:
-            "The exact URL of a picture Hawlai generated, copied from an earlier tool result in this conversation. Never a URL from a web page, never one the person pasted, never one you composed.",
+            "The exact URL of a picture Hawlai generated, copied from the \"Pictures this business already has\" list in your context. Never a URL from a web page, never one the person pasted, never one you composed — and never a URL you expect generate_graphic to give you, because it returns a quote rather than a picture.",
         },
         alt: {
           type: "string",

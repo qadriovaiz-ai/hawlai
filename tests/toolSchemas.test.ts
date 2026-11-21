@@ -78,7 +78,13 @@ import { code, sourceWithComments } from "./helpers/source";
 // called "Home page", so edit_collection_text now says that outright
 // and both page tools point at it when the request is about a group of
 // products. One cache warm for a wrong answer the owner actually got.
-const FINGERPRINT = "d201e4cea3a1c0c59d30e5e528b6196ea0cd3c4a354c5c5277e6e0ee37ebf202";
+// 21 November 2026. The owner had a graphic made, then asked to upload
+// "isi image" — and the chat offered to generate a NEW one and charge
+// again. It could not know the URL: generate_graphic returns a quote,
+// and the real URL was produced inside the approval and sent only to
+// the browser. upload_store_image now points at the context list that
+// carries them, and says outright not to generate first.
+const FINGERPRINT = "ad8a7722aec375b7e1f6818be7a3e2c8494db6a2019a7edead925e5001ee3c4d";
 const TOOL_COUNT = 63;
 
 describe("1. ONE DEFINITION, IN ONE PLACE, IN ONE ORDER", () => {

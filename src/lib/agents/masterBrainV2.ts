@@ -5440,6 +5440,42 @@ export async function runMasterBrainChat(
   // (frameworks, channel playbooks, case studies, psychology, metrics)
   // — returns [] gracefully if Voyage isn't configured or nothing is
   // relevant enough, so this never breaks the chat, only enhances it.
+  /**
+   * PICTURES THIS BUSINESS ALREADY HAS, with their URLs.
+   *
+   * THE GAP, reported 21 November 2026. The owner had a graphic made,
+   * saw it in the chat, and said "upload THIS image to my Shopify
+   * Files". The chat offered to generate a new one — and charge for it
+   * again.
+   *
+   * It was not being stubborn. It could not know the URL. The
+   * generate_graphic tool returns a QUOTE, because the image does not
+   * exist when the tool runs; the real URL is produced later, inside
+   * the approval, and until now it came back only in the PATCH
+   * response to the BROWSER. The owner could see the picture. The
+   * model never could.
+   *
+   * So upload_store_image, which requires "the exact URL from an
+   * earlier generate_graphic result", was unsatisfiable by
+   * construction: there was no earlier result carrying a URL. Offering
+   * to generate again was the only move it had.
+   *
+   * Read from `graphic_designs`, which is where generateDesign saves
+   * them, so this covers images made on the Graphic Design page too —
+   * not only ones made in this conversation.
+   */
+  const { data: recentDesigns } = await supabase
+    .from("graphic_designs")
+    .select("id, design_type, prompt, image_url, created_at")
+    .eq("dealership_id", ctx.id)
+    .order("created_at", { ascending: false })
+    .limit(5);
+  const recentImagesSection = (recentDesigns ?? []).length > 0
+    ? `\n\n## Pictures this business already has\nMade earlier, newest first. When they say "this image", "that one", "isi image", "ye wali" or anything else pointing at a picture that already exists, USE THE URL BELOW — pass it straight to upload_store_image or wherever it is needed. Do NOT call generate_graphic again: that makes a second image and charges for it, and it is not what they asked for. Only generate when they ask for something new.\n${(recentDesigns as any[])
+        .map((d) => `- ${d.design_type ?? "image"}${d.prompt ? ` — "${String(d.prompt).slice(0, 80)}"` : ""} (made ${new Date(d.created_at).toLocaleDateString("en-IN")}): ${d.image_url}`)
+        .join("\n")}`
+    : "";
+
   const relevantKnowledge = await retrieveRelevantKnowledge(supabase, message);
   const knowledgeSection = relevantKnowledge.length > 0
     ? `\n\n## Relevant marketing knowledge for this request\nDrawn from a curated knowledge base — use this to inform your thinking, don't just repeat it verbatim or cite it like a textbook:\n${relevantKnowledge.map((k) => `- **${k.title}**: ${k.content}`).join("\n")}`
@@ -5542,7 +5578,7 @@ ${soundRule(normaliseLanguage(storeFacts?.brand?.language), ctx.toneOfVoice ?? s
 ## Email and WhatsApp — rules for anything you write or send, and how to answer questions about them
 ${CHANNEL_POLICY_FOR_CHAT}`;
 
-  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}${soundSection}${channelPolicySection}
+  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}${recentImagesSection}${soundSection}${channelPolicySection}
 
 ## How you think, not just what you generate
 
