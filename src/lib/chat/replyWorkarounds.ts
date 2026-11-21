@@ -75,6 +75,37 @@ const HANDOVER = [
   /\bby hand\b[^.!?]{0,40}\b(instead|yourself)\b/i,
   // Hinglish. "khud paste kar lo", "manually daal do", "jaake daal do".
   /\bkhud\b[^.!?]{0,40}\b(paste|daal|add|kar lo|karlo|likh)/i,
+
+  // ── DO THE WORK YOURSELF SOMEWHERE ELSE ──────────────────────────
+  //
+  // ADDED 21 November 2026, after the guard let this straight through:
+  // generate_graphic was switched off, the chat said it did not know
+  // why, and then suggested "Canva mein khud bana lo".
+  //
+  // The guard's SCOPE was already general — any tool, any surface —
+  // but its vocabulary came from one incident, which was handing over
+  // TEXT to paste. "Go make it yourself in another product" is the
+  // same bypass in different words, and it is arguably worse: the
+  // other one at least kept the owner inside his own admin.
+  //
+  // NOT the same as Hawlai using another product on his behalf. This
+  // product has a real Canva integration and an edit_canvas_design
+  // tool, so "I'll open this in Canva for you" is the feature working
+  // — and it is first-person, which HAWLAI_IS_ACTING already excuses.
+  // Only a creation verb aimed at HIM is caught.
+  /\b(make|create|design|build|draw)\b[^.!?]{0,30}\b(yourself|by hand|on your own)\b/i,
+  /\byou (could|can|should|might)\b[^.!?]{0,30}\b(make|create|design|build|draw)\b/i,
+  /\btry\b[^.!?]{0,25}\b(instead|yourself)\b/i,
+  /\b(use|open|go to)\b[^.!?]{0,30}\binstead\b[^.!?]{0,30}/i,
+  // Hinglish: "khud bana lo", "Canva pe bana lijiye", "aap bana lo".
+  /\bkhud\b[^.!?]{0,30}\b(bana|banao|bana lo|bana lijiye|design)/i,
+  /\b(bana lo|banao|bana lijiye|bana lena)\b/i,
+  // A BARE IMPERATIVE, which "Design it in Canva and then upload it
+  // here" is — no "yourself", no "you", no "instead", so every pattern
+  // above missed it. Safe to catch at the start of a sentence because
+  // HAWLAI_IS_ACTING already excuses "I'll design it in Canva": that
+  // does not begin with the verb.
+  /^\s*(make|create|design|build|draw|write)\s+(it|this|that|them|one|your)\b/i,
   /\bmanually\b[^.!?]{0,30}\b(daal|daalo|add|kar)/i,
   /\b(paste|copy)\b[^.!?]{0,40}\bkar (lo|lijiye|dena|do)\b/i,
   /\bjaake\b[^.!?]{0,40}\b(daal|add|paste|likh)/i,

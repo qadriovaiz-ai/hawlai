@@ -229,3 +229,137 @@ describe("5. IT IS ACTUALLY WIRED IN", () => {
     expect(rule).toMatch(/door only they can open/i);
   });
 });
+
+describe("6. THE SECOND INCIDENT: go make it yourself somewhere else", () => {
+  // 21 November 2026, the same day the guard shipped. generate_graphic
+  // is behind NEXT_PUBLIC_GRAPHIC_DESIGN_ENABLED and was switched off.
+  // The tool returned a plain sentence saying so. The chat said it did
+  // not know why it failed — and then suggested "Canva mein khud bana
+  // lo".
+  //
+  // The guard's SCOPE was already general. Its VOCABULARY came from
+  // one incident, which was handing over TEXT to paste. "Go make it
+  // yourself in another product" is the same bypass in different
+  // words, and arguably worse: the first at least kept the owner
+  // inside his own admin.
+
+  const CAUGHT = [
+    "Canva mein khud bana lo.",
+    "Aap Canva pe khud bana lijiye.",
+    "You could make it yourself in Canva instead.",
+    "Design it in Canva and then upload it here.",
+    "Try Canva instead for this one.",
+    "You could design it in Figma and send it to me.",
+    "Make it by hand and I'll upload it.",
+    "Aap khud bana lo, phir mujhe bhejo.",
+    // NO "khud" IN THIS ONE, deliberately. Every other Hinglish case
+    // had it, so removing the standalone "bana lo" pattern survived
+    // its own mutation — the khud-prefixed pattern was covering for
+    // it. This is how a merchant would actually say it.
+    "Canva pe bana lo, phir bhej do.",
+  ];
+
+  it.each(CAUGHT)("withholds: %s", (sentence) => {
+    const out = checkReplyWorkarounds(`The graphic tool is switched off. ${sentence}`);
+    expect(out.withheld.length, sentence).toBeGreaterThan(0);
+    // The explanation survives — it is the half the owner needs.
+    expect(out.reply, sentence).toContain("switched off");
+  });
+
+  it("THE LOAD-BEARING ONE: the exact reply from the incident", () => {
+    const out = checkReplyWorkarounds(
+      "Graphic banane wala tool abhi kaam nahi kar raha. Canva mein khud bana lo, phir upload kar dena."
+    );
+    expect(out.withheld.length).toBeGreaterThan(0);
+    expect(out.note).toMatch(/try again, or leave it\?/i);
+  });
+});
+
+describe("7. HAWLAI USING ANOTHER PRODUCT IS NOT HANDING IT OVER", () => {
+  // The distinction that had to survive. This product has a real Canva
+  // integration and an edit_canvas_design tool, so Hawlai opening
+  // something in Canva is the FEATURE, not a workaround. Breaking that
+  // to catch the incident would have been the wrong trade.
+  const KEPT = [
+    "I'll open this in Canva and bring the edits back.",
+    "I can design it in Canva for you now.",
+    "Let me make that in Canva and show you.",
+    "Main Canva mein bana ke dikhata hoon.",
+    "Opening it in Canva — the card below has the link.",
+    "I've put it in Canva; have a look and tell me what to change.",
+  ];
+
+  it.each(KEPT)("keeps: %s", (sentence) => {
+    expect(checkReplyWorkarounds(sentence).withheld, sentence).toEqual([]);
+  });
+
+  it("THE LINE IS WHO IS DOING THE WORK, not which product is named", () => {
+    // Same product, same verb, opposite sides of the line.
+    expect(checkReplyWorkarounds("I'll design it in Canva for you.").withheld).toEqual([]);
+    expect(checkReplyWorkarounds("You could design it in Canva instead.").withheld.length).toBeGreaterThan(0);
+  });
+});
+
+describe("8. A SWITCHED-OFF FEATURE EXPLAINS ITSELF", () => {
+  // THE SECOND HALF OF THE INCIDENT, and the part the guard cannot
+  // reach. generate_graphic is behind
+  // NEXT_PUBLIC_GRAPHIC_DESIGN_ENABLED. It was off, so the tool
+  // returned a plain sentence — "AI Graphic Design isn't part of
+  // Hawlai right now. Anything you already created with it is safe and
+  // still in your library."
+  //
+  // The chat said "I'm not sure why, the result didn't say". The reason
+  // was in the result. Nothing told the model to repeat it, and
+  // nothing told it not to invent an alternative — so it sent the
+  // owner to Canva.
+  //
+  // A guard on the prose can withhold the Canva sentence. It cannot
+  // put the missing reason back. That has to travel WITH the refusal,
+  // the way `_claimsNote` does — the system prompt already tells the
+  // model to repeat that one rather than summarise it.
+  const BRAIN = "src/lib/agents/masterBrainV2.ts";
+
+  it("THE LOAD-BEARING ONE: the refusal carries instructions to say the reason", () => {
+    const src = code(BRAIN);
+    const at = src.indexOf("unavailableMessage(killSwitch)");
+    expect(at, "the kill-switch refusal is gone").toBeGreaterThan(-1);
+    const block = src.slice(at, at + 1400);
+    expect(block).toMatch(/Tell the owner exactly what `error` says/);
+    expect(block).toMatch(/Do NOT say you don't know why it failed/);
+  });
+
+  it("AND IT FORBIDS OFFERING ANOTHER WAY", () => {
+    // "not another product, not another website, not doing it by
+    // hand" — the Canva suggestion in three forms.
+    const src = code(BRAIN);
+    const at = src.indexOf("unavailableMessage(killSwitch)");
+    const block = src.slice(at, at + 1400);
+    expect(block).toMatch(/Do NOT offer another way to get it done/);
+    expect(block).toMatch(/not another product/);
+  });
+
+  it("it says there is nothing to retry, because a kill switch is not a failure", () => {
+    // The workaround guard's note asks "try again, or leave it?" —
+    // which is right for a failure and wrong here. A switched-off
+    // feature will not succeed on a retry, and offering one wastes the
+    // owner's time.
+    const src = code(BRAIN);
+    const at = src.indexOf("unavailableMessage(killSwitch)");
+    const block = src.slice(at, at + 1400);
+    expect(block).toMatch(/nothing to retry/);
+  });
+
+  it("BOTH gates carry it, not just the one that was reported", () => {
+    // There are two: the central TOOL_FEATURE_MAP gate and
+    // generate_graphic's own, which runs earlier so a quote cannot
+    // spend a month's allowance. The reported bug was the second; a
+    // fix to one of them would leave the other silent.
+    const src = code(BRAIN);
+    const sites = [...src.matchAll(/unavailableMessage\(/g)];
+    expect(sites.length, "expected two kill-switch refusals").toBeGreaterThanOrEqual(2);
+    for (const m of sites) {
+      const block = src.slice(m.index!, m.index! + 1400);
+      expect(block, "a kill-switch refusal with no instructions").toMatch(/Tell the owner exactly what `error` says/);
+    }
+  });
+});

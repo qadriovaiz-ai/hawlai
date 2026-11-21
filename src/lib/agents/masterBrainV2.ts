@@ -307,7 +307,25 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
     // longer ships — and it would say so in chat, in its own voice.
     const killSwitch = killSwitchFor(gatedFeature);
     if (killSwitch && !isFeatureEnabled(killSwitch)) {
-      return { error: unavailableMessage(killSwitch), unavailable: true };
+      return {
+        error: unavailableMessage(killSwitch),
+        unavailable: true,
+        note:
+          // THE REASON IS RIGHT THERE AND IT WAS NOT SAID. On
+          // 21 November 2026 this returned "AI Graphic Design isn't
+          // part of Hawlai right now" and the chat told the owner
+          // "I'm not sure why, the result didn't say" — then sent
+          // him to Canva to draw it himself.
+          //
+          // So the instruction travels with the refusal, the way
+          // `_claimsNote` does: the system prompt already tells the
+          // model to repeat that one rather than summarise it.
+          "Tell the owner exactly what `error` says — it is a plain sentence written for him, not a code. " +
+          "Do NOT say you don't know why it failed: the reason is in this result. " +
+          "Do NOT offer another way to get it done — not another product, not another website, not doing it by hand. " +
+          "This part of Hawlai is switched off, so there is nothing to retry and nothing for him to work around. " +
+          "Say what is unavailable, say his existing work is safe, and ask what else he wants to do.",
+      };
     }
 
     const limits = await getDealershipPlanLimits(supabase, ctx.id);
@@ -2292,7 +2310,25 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       // Deliberately placed ahead of checkAndRecordGenerationUsage
       // (above): a quote must not consume a month's allowance.
       if (!isFeatureEnabled("graphicDesign")) {
-        return { error: unavailableMessage("graphicDesign"), unavailable: true };
+        return {
+          error: unavailableMessage("graphicDesign"),
+          unavailable: true,
+          note:
+            // THE REASON IS RIGHT THERE AND IT WAS NOT SAID. On
+            // 21 November 2026 this returned "AI Graphic Design isn't
+            // part of Hawlai right now" and the chat told the owner
+            // "I'm not sure why, the result didn't say" — then sent
+            // him to Canva to draw it himself.
+            //
+            // So the instruction travels with the refusal, the way
+            // `_claimsNote` does: the system prompt already tells the
+            // model to repeat that one rather than summarise it.
+            "Tell the owner exactly what `error` says — it is a plain sentence written for him, not a code. " +
+            "Do NOT say you don't know why it failed: the reason is in this result. " +
+            "Do NOT offer another way to get it done — not another product, not another website, not doing it by hand. " +
+            "This part of Hawlai is switched off, so there is nothing to retry and nothing for him to work around. " +
+            "Say what is unavailable, say his existing work is safe, and ask what else he wants to do.",
+        };
       }
       {
         const quoteFacts = await factsFor(supabase, ctx);
