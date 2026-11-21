@@ -105,6 +105,21 @@ export async function applyApprovalDecision(
   const hasValidModification = modified_details && typeof modified_details.new_budget === "number" && modified_details.new_budget > 0;
 
   const service = createServiceClient();
+
+  /**
+   * What the approval actually MADE, for the card that asked.
+   *
+   * Some approvals produce a thing: a picture, most obviously. Until
+   * 21 November 2026 the graphic branch generated one, saved it, and
+   * threw the URL away — so the chat could say only "Applied to your
+   * store" with a link to another page to go and look.
+   *
+   * This product is chat-first. Website copy and social posts come
+   * back into the conversation after approval; the one approval whose
+   * result IS an image did not. The department page is meant to be a
+   * fallback, not the only way to see what you just agreed to.
+   */
+  let produced: { imageUrl: string; id?: string } | null = null;
   const { data: approval } = await service.from("pending_approvals").select("*").eq("id", id).single();
   if (!approval) return NextResponse.json({ error: "Approval not found" }, { status: 404 });
 
@@ -394,6 +409,16 @@ export async function applyApprovalDecision(
       // stays pending so the owner can press again once the reason is
       // gone, rather than being told it succeeded.
       if (!made.ok) return NextResponse.json({ error: made.error }, { status: made.status });
+      // THE PICTURE COMES BACK, and until 21 November 2026 it did not.
+      // `made.url` was computed, saved to the Design Studio, and then
+      // discarded — so the owner approved an image and the chat could
+      // only tell him it had been "applied", with a link to another
+      // page to go and look at it.
+      //
+      // That is the opposite of what this product is. Website copy and
+      // social posts come back into the conversation after approval;
+      // the one thing that is actually a picture did not.
+      produced = { imageUrl: made.url, ...(made.id ? { id: String(made.id) } : {}) };
     }
 
     if (approval?.action_type === "create_discount_code") {
@@ -720,6 +745,9 @@ export async function applyApprovalDecision(
     }
   }
 
-  return NextResponse.json(data);
+  // `produced` travels on the response rather than replacing it: the
+  // card still needs the decision and the publish verdict, and a
+  // picture is additional information rather than a different answer.
+  return NextResponse.json(produced ? { ...data, produced } : data);
 }
 

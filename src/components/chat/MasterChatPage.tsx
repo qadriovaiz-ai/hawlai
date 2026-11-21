@@ -270,6 +270,16 @@ export default function MasterChatPage({
                         artifact={artifact}
                         onOpen={() => { setActiveArtifact(artifact); setPanelClosed(false); }}
                         onEdit={(text) => setMessage(text)}
+                        /* THE PANEL STOPS LYING. It renders by `type`,
+                           so an approved quote kept showing "Not made
+                           yet" about a picture that now existed. The
+                           artifact becomes the real image, which is
+                           what the panel was always able to show. */
+                        onProduced={({ imageUrl }) => {
+                          const made: Artifact = { ...artifact, type: "image", url: imageUrl, label: "Generated Image" };
+                          setActiveArtifact(made);
+                          setPanelClosed(false);
+                        }}
                       />
                     ) : (
                       <ArtifactCard key={ai} artifact={artifact} onEdit={(text) => setMessage(text)} />
@@ -699,10 +709,12 @@ export function VisualArtifactStrip({
   artifact,
   onOpen,
   onEdit,
+  onProduced,
 }: {
   artifact: Artifact;
   onOpen?: () => void;
   onEdit?: (text: string) => void;
+  onProduced?: (produced: { imageUrl: string }) => void;
 }) {
   return (
     <div className="space-y-1">
@@ -726,7 +738,9 @@ export function VisualArtifactStrip({
       {/* THE DECISION, when there is one. Without this a visual card
           carrying an approval renders a "View" link and nothing else,
           which is what happened to the graphic quote. */}
-      {artifact.approval && !artifact.publish && <ArtifactCard artifact={artifact} onEdit={onEdit} />}
+      {artifact.approval && !artifact.publish && (
+        <ArtifactCard artifact={artifact} onEdit={onEdit} onProduced={onProduced} />
+      )}
     </div>
   );
 }
@@ -1020,7 +1034,19 @@ function PublishStrip({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text
  * Exactly the cardLayout incident of 3 October, which cost five
  * rounds of diagnosis for the same reason.
  */
-export function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?: (text: string) => void }) {
+export function ArtifactCard({
+  artifact,
+  onEdit,
+  onProduced,
+}: {
+  artifact: Artifact;
+  onEdit?: (text: string) => void;
+  /**
+   * What the approval made, handed up so the side panel can stop
+   * saying "not made yet" about a thing that now exists.
+   */
+  onProduced?: (produced: { imageUrl: string }) => void;
+}) {
   const [copied, setCopied] = useState(false);
   const [editingDraft, setEditingDraft] = useState(false);
 
@@ -1029,6 +1055,16 @@ export function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?
   // list of pending approvals it otherwise has no reason to know about.
   const [decision, setDecision] = useState<"idle" | "working" | "approved" | "rejected" | "error">("idle");
   const [decisionNote, setDecisionNote] = useState<string | null>(null);
+  /**
+   * THE PICTURE THE APPROVAL MADE.
+   *
+   * Approving a graphic used to end at "Applied to your store" and a
+   * link to the Design Studio — the owner agreed to an image and then
+   * had to leave the conversation to see it. Website copy and social
+   * posts come back here after approval; this is the one case where
+   * the result IS a picture, and it was the one that did not.
+   */
+  const [producedImage, setProducedImage] = useState<string | null>(null);
   /**
    * How the decided message should read.
    *   ok     — done, and confirmed.
@@ -1114,6 +1150,13 @@ export function ArtifactCard({ artifact, onEdit }: { artifact: Artifact; onEdit?
           ? (data?.publish?.message ?? "Applied to your store.")
           : "Rejected — nothing was changed."
       );
+      // SHOWN HERE, IN THE CONVERSATION. The route now returns what it
+      // made; without this the URL would arrive and be dropped a
+      // second time.
+      if (status === "approved" && typeof data?.produced?.imageUrl === "string") {
+        setProducedImage(data.produced.imageUrl);
+        onProduced?.({ imageUrl: data.produced.imageUrl });
+      }
     } catch {
       setDecision("error");
       setDecisionNote("Couldn't reach the server.");
@@ -1169,6 +1212,32 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
 }
 
 
+  /**
+   * What was made, under the decision that made it.
+   *
+   * Deliberately the full image rather than a thumbnail with a link:
+   * the owner has just paid for it, and "go to the department page to
+   * see what you bought" is the behaviour this fixes.
+   */
+  const producedStrip = producedImage ? (
+    <div className="mt-2 space-y-1">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={producedImage}
+        alt={artifact.label ? `${artifact.label} — the image that was made` : "The image that was made"}
+        className="w-full rounded-lg border border-slate-200"
+      />
+      <a
+        href={producedImage}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[10px] text-slate-500 underline"
+      >
+        Open the full size
+      </a>
+    </div>
+  ) : null;
+
   const approvalStrip = artifact.approval ? (
     <div className="border-t border-slate-100 px-3 py-2">
       {/* WHAT IS ABOUT TO HAPPEN, before the button that does it. The
@@ -1219,6 +1288,13 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
           )}
         </>
       )}
+      {/* INSIDE the approval strip, not beside it at each render site.
+          ArtifactCard has several return paths — that is exactly how
+          the email card lost its button on 10 October, and how three
+          Shopify tools shipped with no card at all. A result nested in
+          the strip cannot be forgotten by a path that renders the
+          strip. */}
+      {producedStrip}
     </div>
   ) : null;
   const publishStrip = artifact.publish ? (
