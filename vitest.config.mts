@@ -45,7 +45,7 @@ export default defineConfig({
     exclude: ["node_modules/**", "tests/smoke/**"],
     // Zeroes the Meta retry waits (attempts unchanged) so retry tests
     // don't sleep. Not a *.test.ts file, so `include` never runs it as one.
-    setupFiles: ["tests/setup/metaRetryTiming.ts"],
+    setupFiles: ["tests/setup/metaRetryTiming.ts", "tests/setup/noExternalNetwork.ts"],
     // Vitest's default is 5 seconds, and that is too close to what this
     // suite genuinely needs. Several tests dynamically import
     // masterBrainV2 — the largest module in the app, with a long
