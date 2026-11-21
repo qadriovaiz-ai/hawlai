@@ -24,6 +24,7 @@
 //    claim is still removed.
 
 import { describeShipping, knownText, normalise, physicalProducts, serviceItems, type BusinessFacts } from "./businessFacts";
+import { ownAssetHost } from "@/lib/assetHost";
 import { computeShippingAmount } from "@/lib/shipping";
 import { checkNarrative, narrativeNote, type NarrativeFinding } from "./narrativeProvenance";
 
@@ -677,6 +678,21 @@ export function findUnsupportedLinks(text: string, f: BusinessFacts): string[] {
   const allowedHosts = new Set<string>();
   if (f.links?.store) allowedHosts.add(hostOf(f.links.store));
   for (const p of f.links?.products ?? []) allowedHosts.add(hostOf(p.url));
+  // OUR OWN PICTURES ARE NOT A CLAIM ABOUT THEIR WEBSITE.
+  //
+  // 21 November 2026: the chat was given a list of the business's
+  // existing generated images, so it could re-use one instead of
+  // making a second and charging again. This guard stripped every URL
+  // with "this business has no published website to link to".
+  //
+  // The rule was right and the subject was wrong. A Supabase storage
+  // URL for an image this product generated is this product's
+  // infrastructure, not a link to a site the business does not have.
+  // replyLinks.ts has exempted the same host since 2026-09-21 — the
+  // bug was that only one of the two guards knew. ownAssetHost() is
+  // now the single definition both read.
+  const assetHost = ownAssetHost();
+  if (assetHost) allowedHosts.add(assetHost);
   const known = knownText(f);
 
   /**

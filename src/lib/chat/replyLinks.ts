@@ -20,6 +20,7 @@
 // leaving the words.
 
 import type { BusinessFacts } from "@/lib/claims/businessFacts";
+import { ownAssetHost } from "@/lib/assetHost";
 import { bookingLinkFor } from "@/lib/claims/businessFacts";
 
 export type LinkFix = { reply: string; corrected: number; removed: number; bookingLink: string | null };
@@ -60,8 +61,14 @@ export function knownLinks(facts: BusinessFacts | null | undefined): { exact: Se
   for (const p of facts?.links?.products ?? []) hosts.add(hostOf(p.url));
   // Where Hawlai puts the pictures it makes — a generated image in a reply
   // is not a customer-facing link and must survive untouched.
-  const storage = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (storage) hosts.add(hostOf(storage));
+  //
+  // THROUGH THE SHARED DEFINITION as of 21 November 2026. This was the
+  // only guard that knew, and claimCheck's link rule did not — so a
+  // list of the business's own generated images survived here and was
+  // stripped there, with "this business has no published website to
+  // link to". Two copies of "which host is ours" was one too many.
+  const assetHost = ownAssetHost();
+  if (assetHost) hosts.add(assetHost);
   return { exact, hosts };
 }
 
