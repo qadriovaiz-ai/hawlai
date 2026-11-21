@@ -790,11 +790,14 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         if (!textHit.ok) {
           if (textHit.reason === "unreadable") return { error: textHit.message };
           if (textHit.reason === "none_exist") return { error: "This Shopify store has no pages yet." };
-          return {
-            needs_clarification: true,
-            question: textHit.reason === "needs_confirmation" ? textHit.message : "Which page did you mean?",
-            candidates: textHit.candidates.map((c) => ({ page: c.handle, title: c.title })),
-          };
+          const { clarifyChoice: clarifyTextPage } = await import("../chat/clarify");
+          return clarifyTextPage({
+            noun: "page",
+            keyName: "page",
+            source: "this Shopify store",
+            candidates: textHit.candidates.map((c) => ({ key: c.handle, title: c.title })),
+            confirmMessage: textHit.reason === "needs_confirmation" ? textHit.message : null,
+          });
         }
 
         const liveRead = await textGraphQL<{ page: { id: string; title: string; handle: string; body: string | null; isPublished: boolean } | null }>(
@@ -1032,11 +1035,13 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       // Asked for a page that isn't there: show what is. The predecessor
       // fell through to the hero and reported success.
       if (!target) {
-        return {
-          needs_clarification: true,
-          question: "Which page did you mean?",
-          candidates: sitePages.map((p) => ({ page: p.slug, title: p.title ?? p.slug })),
-        };
+        const { clarifyChoice: clarifySitePage } = await import("../chat/clarify");
+        return clarifySitePage({
+          noun: "page",
+          keyName: "page",
+          source: "your Hawlai website",
+          candidates: sitePages.map((p) => ({ key: String(p.slug), title: String(p.title ?? p.slug) })),
+        });
       }
 
       // The tree as it stands. Replaced by the converted one below when
@@ -1413,11 +1418,14 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
           if (pageHit.reason === "none_exist") {
             return { error: "This Shopify store has no pages yet, so there's nothing to set a search title on." };
           }
-          return {
-            needs_clarification: true,
-            question: pageHit.reason === "needs_confirmation" ? pageHit.message : "Which page did you mean?",
-            candidates: pageHit.candidates.map((c) => ({ page: c.handle, title: c.title })),
-          };
+          const { clarifyChoice: clarifyMetaPage } = await import("../chat/clarify");
+          return clarifyMetaPage({
+            noun: "page",
+            keyName: "page",
+            source: "this Shopify store",
+            candidates: pageHit.candidates.map((c) => ({ key: c.handle, title: c.title })),
+            confirmMessage: pageHit.reason === "needs_confirmation" ? pageHit.message : null,
+          });
         }
 
         const shopMetaService = makeSiteService();
@@ -1505,11 +1513,13 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
       // Asked for a page that isn't there: show what is, rather than
       // guessing which one they meant and writing to the wrong page.
       if (!page) {
-        return {
-          needs_clarification: true,
-          question: "Which page did you mean?",
-          candidates: allPages.map((p) => ({ page: p.slug, title: p.title ?? p.slug })),
-        };
+        const { clarifyChoice: clarifySiteMetaPage } = await import("../chat/clarify");
+        return clarifySiteMetaPage({
+          noun: "page",
+          keyName: "page",
+          source: "your Hawlai website",
+          candidates: allPages.map((p) => ({ key: String(p.slug), title: String(p.title ?? p.slug) })),
+        });
       }
 
       const siteService = makeSiteService();
@@ -1671,14 +1681,28 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         // mean Diwali gifting?" is answerable with a yes; "which of
         // these?" needs a choice. Asking the wrong one of those is how
         // a conversation stalls.
-        return {
-          needs_clarification: true,
-          question:
-            resolved.reason === "needs_confirmation"
-              ? resolved.message
-              : "Which collection did you mean?",
-          candidates: resolved.candidates.map((c) => ({ collection: c.handle, title: c.title })),
-        };
+        // THE NAMES GO IN THE QUESTION ITSELF — 21 November 2026.
+        //
+        // This returned "Which collection did you mean?" with the
+        // three real names in a `candidates` field beside it. The chat
+        // relayed the question and NOT the list, asking the owner to
+        // recall a name the tool had just handed it. Then, when he
+        // answered "Home page", the model refused to call this tool at
+        // all and told him "Home page is not a collection, it's a
+        // regular website page" — contradicting a result it already
+        // had, which listed Home page as a collection.
+        //
+        // A field next to the question is advisory. Names inside the
+        // question travel wherever the question travels, so relaying
+        // it relays them.
+        const { clarifyChoice } = await import("../chat/clarify");
+        return clarifyChoice({
+          noun: "collection",
+          keyName: "collection",
+          source: "this Shopify store",
+          candidates: resolved.candidates.map((c) => ({ key: c.handle, title: c.title })),
+          confirmMessage: resolved.reason === "needs_confirmation" ? resolved.message : null,
+        });
       }
 
       const collService = makeCollectionService();
@@ -1830,11 +1854,14 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
             note: "They create one in Shopify under Online Store > Blog posts. Do not offer to publish until it exists.",
           };
         }
-        return {
-          needs_clarification: true,
-          question: blogHit.reason === "needs_confirmation" ? blogHit.message : "Which blog did you mean?",
-          candidates: blogHit.candidates.map((b) => ({ blog: b.handle, title: b.title })),
-        };
+        const { clarifyChoice: clarifyBlog } = await import("../chat/clarify");
+        return clarifyBlog({
+          noun: "blog",
+          keyName: "blog",
+          source: "this Shopify store",
+          candidates: blogHit.candidates.map((b) => ({ key: b.handle, title: b.title })),
+          confirmMessage: blogHit.reason === "needs_confirmation" ? blogHit.message : null,
+        });
       }
 
       const postService = makePostService();

@@ -148,7 +148,7 @@ export const TOOLS = [
           description:
             "Which site the page is on. Omit it: the tool works this out, and ASKS when the business has both a Hawlai website and a Shopify store, because \"my About page\" is then two different pages. Only pass it on the follow-up call, after they have said which. A Shopify page comes back as ONE body rather than separate lines, and an edit there replaces the whole thing.",
         },
-        page: { type: "string", description: "Which page — the slug, e.g. \"home\", \"about\", \"contact\", or its menu title. Defaults to the homepage." },
+        page: { type: "string", description: "Which page — the slug, e.g. \"home\", \"about\", \"contact\", or its menu title. Defaults to the homepage. IF THEY WERE TALKING ABOUT A COLLECTION, a category or a group of products, this is the wrong tool — use edit_collection_text. A collection may be NAMED like a page: \"Home page\" is a collection on most Shopify stores." },
       },
       required: [],
     },
@@ -166,7 +166,7 @@ export const TOOLS = [
           description:
             "Which site the page is on. Omit it: the tool works this out, and ASKS when the business has both a Hawlai website and a Shopify store, because \"my About page\" is then two different pages. Only pass it on the follow-up call, after they have said which. A Shopify page comes back as ONE body rather than separate lines, and an edit there replaces the whole thing.",
         },
-        page: { type: "string", description: "Which page — the slug or menu title read_page reported. Defaults to the homepage." },
+        page: { type: "string", description: "Which page — the slug or menu title read_page reported. Defaults to the homepage. IF THEY WERE TALKING ABOUT A COLLECTION, a category or a group of products, this is the wrong tool — use edit_collection_text. A collection may be NAMED like a page: \"Home page\" is a collection on most Shopify stores." },
         edits: {
           type: "array",
           description: "One entry per line you are changing. Change only lines the person actually asked about.",
@@ -746,14 +746,14 @@ export const TOOLS = [
   {
     name: "edit_collection_text",
     description:
-      "Rewrite the paragraph shown above a group of products on one COLLECTION page of the connected Shopify store — what a customer reads before the grid of products. USE THIS when they talk about a collection, a category, a range or a group of products on their Shopify store — they will name the group rather than one product, and often in Hinglish (\"is group ka description badlo\", \"change the text above that range\"). NOT for a page like About or Contact — that is edit_page_text. NOT for a single product's own description. It shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT and nothing on the storefront changes until they approve; never send them to Shopify admin to paste it in. If you are not sure which collection they mean, call it with your best reading of their words and the tool returns the list to choose from rather than guessing. Anything you write yourself goes through the claims check; wording the owner typed is kept exactly as they typed it.",
+      "Rewrite the paragraph shown above a group of products on one COLLECTION page of the connected Shopify store — what a customer reads before the grid of products. USE THIS when they talk about a collection, a category, a range or a group of products on their Shopify store — they will name the group rather than one product, and often in Hinglish (\"is group ka description badlo\", \"change the text above that range\"). NOT for a page like About or Contact — that is edit_page_text. NOT for a single product's own description. A COLLECTION CAN BE CALLED ANYTHING, INCLUDING SOMETHING THAT SOUNDS LIKE A PAGE: Shopify's own default collection on every store is named \"Home page\" (its handle is \"frontpage\"), and stores commonly have ones called \"Sale\", \"New in\" or \"Featured\". So NEVER decide from a name that something is a page rather than a collection, and never tell the owner \"that is not a collection\" — you cannot know that, and on 21 November 2026 a real owner was told exactly that about a collection he was looking at in his admin. Call this tool and let it answer: if the name does not match, it returns the collections that DO exist, and you show him that list. It shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT and nothing on the storefront changes until they approve; never send them to Shopify admin to paste it in. If you are not sure which collection they mean, call it with your best reading of their words and the tool returns the list to choose from rather than guessing. Anything you write yourself goes through the claims check; wording the owner typed is kept exactly as they typed it.",
     input_schema: {
       type: "object",
       properties: {
         collection: {
           type: "string",
           description:
-            "Which collection, in the words they used, or the handle from its URL if they gave you that. Omit only when the store has exactly one collection. A near match is returned for them to confirm rather than applied, and several matches come back as candidates — so pass your best reading of their words rather than guessing between two.",
+            "Which collection, in the words they used, or the handle from its URL if they gave you that. Pass what they said even when it sounds like a page name — \"Home page\" is a real collection on most Shopify stores. Omit only when the store has exactly one collection. A near match is returned for them to confirm rather than applied, and several matches come back as candidates — so pass your best reading of their words rather than guessing between two.",
         },
         text: {
           type: "string",

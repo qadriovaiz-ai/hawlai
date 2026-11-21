@@ -155,13 +155,20 @@ describe("4. IT ASKS, IT NEVER PICKS", () => {
       // storefront the owner approves a card naming the thing they
       // asked for and the write lands elsewhere.
       const body = caseBody(name);
-      expect(body).toMatch(/needs_clarification: true/);
-      // THE CANDIDATES MUST COME FROM THE RESOLVER. `toMatch(/candidates:/)`
-      // was the first version of this and a mutation setting
-      // `candidates: []` SURVIVED it — the word was still there. A
-      // bare substring finds its own target and passes, which is the
-      // fourth time that shape has cost something in this project.
-      expect(body).toMatch(/candidates: resolved\.candidates\.map|candidates: \w+\.candidates\.map/);
+      // THROUGH clarifyChoice NOW, which is a strengthening rather
+      // than a loosening. The inline version returned the question and
+      // put the names in a `candidates` field beside it — and on
+      // 21 November the chat relayed the question WITHOUT the list,
+      // asked the owner to recall a name it had just been handed, and
+      // then told him his real collection "is not a collection".
+      // clarifyChoice puts the names inside the question and attaches
+      // a note saying the list is not open to argument.
+      expect(body).toMatch(/clarifyChoice|clarify[A-Z]\w*\(/);
+      // THE CANDIDATES MUST STILL COME FROM THE RESOLVER. An earlier
+      // version of this asserted `toMatch(/candidates:/)` and a
+      // mutation setting `candidates: []` SURVIVED it — the word was
+      // still there.
+      expect(body).toMatch(/candidates: \w+\.candidates\.map/);
       expect(body).not.toMatch(/candidates: \[\]/);
       // Never an index into the list.
       expect(body).not.toMatch(/candidates\[0\]|\.candidates\.find/);
@@ -233,6 +240,61 @@ describe("6. rule 3 — no trade's words shipped to every business", () => {
       expect(JSON.stringify(schema), name).not.toMatch(forbidden);
       const entry = BUSINESS_BRAIN_TOOLS.find((t) => t.name === name)!;
       expect(JSON.stringify(entry), name).not.toMatch(forbidden);
+    }
+  });
+});
+
+describe("7. A COLLECTION'S NAME SAYS NOTHING ABOUT WHAT IT IS", () => {
+  // THE LIVE FAILURE, 21 November 2026. The owner asked for a
+  // collection description, the tool returned his three real
+  // collections, he answered "Home page" — and the chat told him
+  // "Home page is not a collection, it's a regular website page."
+  //
+  // It is a collection. It is Shopify's own default on every store,
+  // handle `frontpage`, and it was sitting in his admin with a product
+  // in it. The model decided from the NAME, against a tool result it
+  // already had.
+  //
+  // The fingerprint test fails on any schema edit, so it caught the
+  // removal of this guidance — but only incidentally. Update the
+  // fingerprint deliberately and the warning could go with it. This
+  // asserts the guidance itself.
+  const schemaFor = (name: string) => (TOOLS as any[]).find((t) => t.name === name)!;
+
+  it("THE LOAD-BEARING ONE: edit_collection_text says a collection may be named like a page", () => {
+    const text = JSON.stringify(schemaFor("edit_collection_text"));
+    expect(text).toMatch(/CAN BE CALLED ANYTHING/i);
+    // The specific name that went wrong, so the model has the example.
+    expect(text).toContain("Home page");
+    expect(text).toContain("frontpage");
+  });
+
+  it("and it forbids declaring something is not a collection", () => {
+    // The model cannot know that. The tool reads the store.
+    const text = JSON.stringify(schemaFor("edit_collection_text"));
+    expect(text).toMatch(/never tell the owner/i);
+    expect(text).toMatch(/not a collection/i);
+  });
+
+  it("THE PAGE TOOLS POINT AT IT, so the wrong tool is not chosen in the first place", () => {
+    // The other half: a request about a GROUP of products is a
+    // collection, whatever it is called.
+    for (const name of ["read_page", "edit_page_text"]) {
+      const text = JSON.stringify(schemaFor(name));
+      expect(text, name).toMatch(/edit_collection_text/);
+      expect(text, name).toMatch(/group of products/i);
+      expect(text, name).toContain("Home page");
+    }
+  });
+
+  it("rule 3 still holds — the example is Shopify's own default, not a trade's word", () => {
+    // "Home page" is a Shopify platform default on every store, which
+    // is why naming it is not naming one business's vocabulary.
+    // multiTenantVocabulary runs over these files too; this states the
+    // reasoning so the next reader does not take it for a slip.
+    const forbidden = /candle|kurta|dealership|salon|bakery|restaurant|clinic|boutique/i;
+    for (const name of ["edit_collection_text", "read_page", "edit_page_text"]) {
+      expect(JSON.stringify(schemaFor(name)), name).not.toMatch(forbidden);
     }
   });
 });

@@ -72,7 +72,13 @@ import { code, sourceWithComments } from "./helpers/source";
 // Shopify content actions are reachable. Four cache warms in one
 // session is the cost of one approved change landing in four commits;
 // splitting the tools themselves was avoided for exactly this reason.
-const FINGERPRINT = "f9328b926c52b4792c7649e582ffc2fead6a8a75b319868e7efe46d29155f9b0";
+// 21 November 2026, after a live failure: the chat told the owner his
+// real collection "is not a collection, it's a regular website page".
+// A collection can be named anything and Shopify's own default is
+// called "Home page", so edit_collection_text now says that outright
+// and both page tools point at it when the request is about a group of
+// products. One cache warm for a wrong answer the owner actually got.
+const FINGERPRINT = "d201e4cea3a1c0c59d30e5e528b6196ea0cd3c4a354c5c5277e6e0ee37ebf202";
 const TOOL_COUNT = 63;
 
 describe("1. ONE DEFINITION, IN ONE PLACE, IN ONE ORDER", () => {
