@@ -1773,6 +1773,14 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         collection: resolved.resource.handle,
         collection_title: resolved.resource.title,
         summary: collCreated.preview.summary,
+        // THE OLD TEXT AND THE NEW ONE, both whole, for the card.
+        // Approving this replaces the whole description, so the owner
+        // has to see what is going and what is arriving — the same
+        // reason the page-text card shows both in full rather than a
+        // summary that sends him back to the chat message.
+        changed: collCreated.preview.changes
+          .filter((c) => c.field === "descriptionHtml")
+          .map((c) => ({ what: "Collection text", from: String(c.before ?? ""), to: String(c.after) })),
         warnings: [...collCreated.preview.warnings, ...collWarnings],
         note: collCreated.alreadyPending
           ? "You already asked for this exact change — here it is again, still waiting on your approval."
@@ -1999,6 +2007,9 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         action_id: uploadCreated.actionId,
         summary: uploadCreated.preview.summary,
         warnings: uploadCreated.preview.warnings,
+        // For the card: someone approving an upload should see the
+        // picture, not a URL.
+        image_url: src,
         note: uploadCreated.alreadyPending
           ? "You already asked for this exact upload — here it is again, still waiting on your approval."
           : "Ready for your approval below. This only adds the picture to the store's file library — no customer sees it until something puts it on a page.",
@@ -4955,6 +4966,114 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
           ...(result?.lengths ? [{ label: "Length", value: String(result.lengths) }] : []),
           ...(result?.published === false ? [{ label: "Site status", value: "Not published — this won't be public until you publish it" }] : []),
           ...(Array.isArray(result?.warnings) ? result.warnings.map((w: string, i: number) => ({ label: i === 0 ? "Worth knowing" : " ", value: w })) : []),
+        ],
+        departmentHref,
+      };
+    }
+
+    // THE CARDS FOR THE THREE SHOPIFY CONTENT TOOLS — 21 November
+    // 2026, after the owner reported a missing approval card.
+    //
+    // THE BUG, and it is the registry failure in another coat. The
+    // tools ran, created the approval row, and returned
+    // "Ready for your approval below" — but this switch had no case
+    // for them, they have no DEPARTMENT_HREF either, so `default`
+    // returned null and NO CARD WAS RENDERED. The approval existed in
+    // the database with no way to take it from the chat, and the model
+    // dutifully said the card was right below.
+    //
+    // The same sentence already sits on the propose_page_meta card:
+    // "Without the approval id the owner gets a description of a
+    // change with no way to take it." It was true of three more tools
+    // for a day.
+    case "edit_collection_text": {
+      if (result?.needs_clarification) {
+        return {
+          kind: "document",
+          label: "Which collection?",
+          groups: [
+            {
+              heading: "Collections on this store",
+              items: (result.candidates ?? []).map((c: any) => ({ label: c.title, note: `/collections/${c.collection}` })),
+            },
+          ],
+          departmentHref,
+        };
+      }
+      if (!result?.approval_id) {
+        return { kind: "record", label: "Collection text", summary: result?.error ?? result?.note ?? "", departmentHref };
+      }
+      return {
+        kind: "document",
+        label: `${result.collection_title ?? result.collection} — approve to change the text`,
+        // BOTH TEXTS WHOLE. A Shopify collection description is
+        // replaced outright, not patched, so a truncated field would
+        // hide what is being lost.
+        changes: (result.changed ?? []).map((c: any) => ({
+          label: String(c.what ?? "Collection text"),
+          before: String(c.from ?? ""),
+          after: String(c.to ?? ""),
+        })),
+        summary: [result.note, ...(result.warnings ?? [])].filter(Boolean).join(" "),
+        approval: { id: result.approval_id, publishActionId: result.action_id },
+        departmentHref,
+      };
+    }
+
+    case "publish_blog_post": {
+      if (result?.needs_clarification) {
+        return {
+          kind: "document",
+          label: "Which blog?",
+          groups: [
+            {
+              heading: "Blogs on this store",
+              items: (result.candidates ?? []).map((c: any) => ({ label: c.title, note: `/blogs/${c.blog}` })),
+            },
+          ],
+          departmentHref,
+        };
+      }
+      if (!result?.approval_id) {
+        return { kind: "record", label: "Blog post", summary: result?.error ?? result?.note ?? "", departmentHref };
+      }
+      return {
+        kind: "record",
+        label: result?.already_pending ? "Already waiting for approval" : "Blog post — approve to create the draft",
+        summary: [result.summary, result.note].filter(Boolean).join(" "),
+        approval: { id: result.approval_id, publishActionId: result.action_id },
+        fields: [
+          { label: "Blog", value: String(result?.blog ?? "") },
+          // SAID ON THE CARD, not only in the chat line above it. The
+          // one thing an owner needs to know before approving is that
+          // this does NOT put a post in front of a customer.
+          { label: "Goes live?", value: "No — created as a draft in Shopify. You publish it there when you're happy." },
+          ...(Array.isArray(result?.warnings)
+            ? result.warnings.map((w: string, i: number) => ({ label: i === 0 ? "Worth knowing" : " ", value: w }))
+            : []),
+        ],
+        departmentHref,
+      };
+    }
+
+    case "upload_store_image": {
+      if (!result?.approval_id) {
+        return { kind: "record", label: "Picture", summary: result?.error ?? result?.note ?? "", departmentHref };
+      }
+      return {
+        kind: "record",
+        label: result?.already_pending ? "Already waiting for approval" : "Add a picture to the store's files",
+        summary: [result.summary, result.note].filter(Boolean).join(" "),
+        approval: { id: result.approval_id, publishActionId: result.action_id },
+        // THE PICTURE ITSELF, not its address. Someone approving an
+        // upload should see what they are uploading — the same
+        // decision the page-meta card makes about a share image.
+        ...(result?.image_url ? { imageUrl: String(result.image_url) } : {}),
+        fields: [
+          { label: "Appears on the site?", value: "No — it only goes in the file library until something uses it." },
+          ...(Array.isArray(result?.warnings)
+            ? result.warnings.map((w: string, i: number) => ({ label: i === 0 ? "Worth knowing" : " ", value: w }))
+            : []),
         ],
         departmentHref,
       };

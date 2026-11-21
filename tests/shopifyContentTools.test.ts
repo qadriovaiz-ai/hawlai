@@ -209,6 +209,19 @@ describe("5. the promises each card makes", () => {
     expect(body).toMatch(/no customer sees it until something puts it on a page/);
   });
 
+  it("THE COLLECTION HANDLER SUPPLIES THE BEFORE/AFTER the card renders", () => {
+    // shopifyContentCards.test.ts calls extractArtifact with a
+    // synthetic `changed`, so it cannot see the HANDLER failing to
+    // produce one — a mutation emptying it there survived. The card
+    // would then render with no before/after and the owner would
+    // approve a replacement he never saw.
+    const body = caseBody("edit_collection_text");
+    expect(body).toMatch(/changed: collCreated\.preview\.changes/);
+    expect(body).toMatch(/c\.field === "descriptionHtml"/);
+    expect(body).toMatch(/from: String\(c\.before/);
+    expect(body).toMatch(/to: String\(c\.after\)/);
+  });
+
   it("a collection edit REPLACES the description, and the note says so", () => {
     // There is no partial edit on a Shopify collection. An owner who
     // thinks one sentence changed would be wrong.
