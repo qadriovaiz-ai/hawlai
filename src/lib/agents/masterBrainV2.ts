@@ -4541,6 +4541,16 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
     // model to relay — reused here as the card's sentence instead of a
     // separate fields list repeating the same facts in a colder shape.
     case "create_discount_code":
+      if (result?.approvalId) {
+        return {
+          kind: "record",
+          label: "Create the discount code — approve to add it",
+          summary: result.confirm ?? "",
+          approval: { id: result.approvalId },
+          confirm: result.confirm,
+          departmentHref,
+        };
+      }
       return { kind: "record", label: "Discount code created", summary: result.note, departmentHref };
     case "assign_task":
       return { kind: "record", label: "Task assigned", summary: result.note, departmentHref };
@@ -4604,6 +4614,16 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       };
     }
     case "trigger_call":
+      if (result?.approvalId) {
+        return {
+          kind: "record",
+          label: "Place the call — approve to dial",
+          summary: result.confirm ?? "",
+          approval: { id: result.approvalId },
+          confirm: result.confirm,
+          departmentHref,
+        };
+      }
       return { kind: "record", label: "Call placed", summary: result.note, departmentHref };
     case "schedule_lead_export":
       return { kind: "record", label: result.frequency === "off" ? "Leads export turned off" : "Leads export scheduled", summary: result.note, departmentHref };
@@ -4637,7 +4657,36 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
     case "create_workflow":
       return { kind: "record", label: "Automation workflow created", fields: [{ label: "Status", value: result.enabled ? "Enabled" : "Created, not enabled yet" }], departmentHref };
     case "set_automation_toggle":
-      return { kind: "record", label: "Automation setting changed", fields: [{ label: result.toggle.replace(/_/g, " "), value: result.enabled ? "Turned on" : "Turned off" }], departmentHref };
+      // THIS ONE THREW, rather than merely losing its button. Turning a
+      // toggle ON returns requestApproval's object, which has no
+      // `toggle` — so `result.toggle.replace(...)` crashed on every
+      // attempt to enable a gated automation from chat. Switching OFF
+      // is never gated (the safe direction must not be the slow one),
+      // returns toggle/enabled, and worked throughout — which is why
+      // the break went unnoticed.
+      if (result?.approvalId) {
+        return {
+          kind: "record",
+          label: "Turn this automation on — approve to start it",
+          summary: result.confirm ?? "",
+          approval: { id: result.approvalId },
+          confirm: result.confirm,
+          departmentHref,
+        };
+      }
+      return {
+        kind: "record",
+        label: "Automation setting changed",
+        fields: [
+          {
+            // Guarded, because a result without `toggle` is exactly how
+            // this crashed.
+            label: String(result?.toggle ?? "automation").replace(/_/g, " "),
+            value: result?.enabled ? "Turned on" : "Turned off",
+          },
+        ],
+        departmentHref,
+      };
     case "propose_price_change": {
       // Two genuinely different cards, because the two outcomes ask
       // different things of the person. A candidate list is a
@@ -4837,7 +4886,34 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
       return { kind: "record", label: "Watch added", departmentHref };
     case "remember_insight":
       return { kind: "record", label: "Remembered for next time", summary: result.note, departmentHref };
+    // ---- GATED IN PHASE 2B, AND THE CARDS WERE NEVER UPDATED ----
+    //
+    // Found 21 November 2026 by the sweep in
+    // tests/everyApprovalHasAButton.test.ts, while fixing a different
+    // missing card. On 2026-10-09 these actions were put behind an
+    // approval: the handlers now `return await requestApproval(...)`,
+    // which hands back { approvalId, risk, confirm } and NOTHING ELSE.
+    //
+    // Their cards still read as though the work had been done —
+    // "Published to YouTube", "Call placed", "Discount code created" —
+    // from fields that no longer exist on the result. So the owner was
+    // told an action had happened that had not, with no button to make
+    // it happen, and `result.url` rendered as undefined.
+    //
+    // That is worse than a missing button. A card claiming a completed
+    // action is the thing this codebase refuses everywhere else: a
+    // write that writes nothing must not report success.
     case "publish_to_youtube":
+      if (result?.approvalId) {
+        return {
+          kind: "record",
+          label: "Publish to YouTube — approve to go ahead",
+          summary: result.confirm ?? "",
+          approval: { id: result.approvalId },
+          confirm: result.confirm,
+          departmentHref,
+        };
+      }
       return { kind: "link", label: "Published to YouTube", url: result.url, departmentHref };
 
     // ---- Link: an actual URL to open ----

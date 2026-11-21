@@ -265,25 +265,12 @@ export default function MasterChatPage({
                 <div className="w-full space-y-1.5">
                   {msg.artifacts.map((artifact, ai) =>
                     artifact.kind === "visual" ? (
-                      <div key={ai} className="space-y-1">
-                        <button
-                          onClick={() => { setActiveArtifact(artifact); setPanelClosed(false); }}
-                          className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 border border-brand-400/30 flex items-center gap-1"
-                        >
-                          <ExternalLink className="w-2.5 h-2.5" /> View {artifact.label}
-                        </button>
-                        {/* A website draft is a visual artifact, and publishing it is
-                            the point of generating it — so the actions live here, not
-                            only on the department page. */}
-                        {artifact.cannotPublish && (
-                          <CannotPublishStrip reason={artifact.cannotPublish.reason} text={artifact.cannotPublish.text} />
-                        )}
-                        {artifact.publish && (
-                          <div className="rounded-lg border border-slate-200 bg-white">
-                            <PublishStrip artifact={artifact} onEdit={(text) => setMessage(text)} />
-                          </div>
-                        )}
-                      </div>
+                      <VisualArtifactStrip
+                        key={ai}
+                        artifact={artifact}
+                        onOpen={() => { setActiveArtifact(artifact); setPanelClosed(false); }}
+                        onEdit={(text) => setMessage(text)}
+                      />
                     ) : (
                       <ArtifactCard key={ai} artifact={artifact} onEdit={(text) => setMessage(text)} />
                     )
@@ -675,6 +662,71 @@ function CannotPublishStrip({ reason, text }: { reason: string; text: string }) 
       >
         {copied ? "Copied" : "Copy caption"}
       </button>
+    </div>
+  );
+}
+
+/**
+ * A visual artifact in the conversation — and its decision, if it has one.
+ *
+ * THE BUG THIS EXISTS TO FIX, reported 21 November 2026. The graphic
+ * quote card is `kind: "visual"`, and this branch rendered only
+ * `artifact.publish` and `artifact.cannotPublish`. G-3 step 1b
+ * deliberately REPLACED the publish descriptor with an approval id for
+ * that card — so `artifact.publish` became undefined, nothing rendered,
+ * and the chat said "hit the button above to confirm" above no button.
+ * The owner could not generate the image at all.
+ *
+ * THAT IS THE 10 OCTOBER BUG AGAIN, in a different branch of this same
+ * file. tests/approveButtonRenders.test.ts opens with it: the email
+ * card's branch "contained `{publishStrip}` ... and never
+ * `{approvalStrip}`", for exactly the same reason — G-3 removed the
+ * descriptor the branch was built around. That test covered the branch
+ * that broke rather than the property, so this one broke next.
+ *
+ * EXTRACTED RATHER THAN PATCHED IN PLACE, because the reason it broke
+ * twice is that neither branch could be rendered on its own: the first
+ * lived inside ArtifactCard's four return paths, this one inside a page
+ * component with its own hooks and fetches. A component that can be
+ * rendered in a test is a component whose button can be asserted.
+ *
+ * The approval itself is ArtifactCard's — reused, not reimplemented.
+ * It already holds the PATCH, the confirm sentence, and the re-check
+ * that stops a reloaded card offering a decision twice. Two copies of
+ * logic that spends money is not a trade worth making.
+ */
+export function VisualArtifactStrip({
+  artifact,
+  onOpen,
+  onEdit,
+}: {
+  artifact: Artifact;
+  onOpen?: () => void;
+  onEdit?: (text: string) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <button
+        onClick={onOpen}
+        className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-600 border border-brand-400/30 flex items-center gap-1"
+      >
+        <ExternalLink className="w-2.5 h-2.5" /> View {artifact.label}
+      </button>
+      {/* A website draft is a visual artifact, and publishing it is
+          the point of generating it — so the actions live here, not
+          only on the department page. */}
+      {artifact.cannotPublish && (
+        <CannotPublishStrip reason={artifact.cannotPublish.reason} text={artifact.cannotPublish.text} />
+      )}
+      {artifact.publish && (
+        <div className="rounded-lg border border-slate-200 bg-white">
+          <PublishStrip artifact={artifact} onEdit={onEdit} />
+        </div>
+      )}
+      {/* THE DECISION, when there is one. Without this a visual card
+          carrying an approval renders a "View" link and nothing else,
+          which is what happened to the graphic quote. */}
+      {artifact.approval && !artifact.publish && <ArtifactCard artifact={artifact} onEdit={onEdit} />}
     </div>
   );
 }
@@ -1736,6 +1788,24 @@ function WorkspacePanel({ artifact, onClose }: { artifact: Artifact; onClose: ()
         <button onClick={onClose} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
       </div>
       <div className="flex-1 overflow-y-auto p-4">
+        {/* A QUOTE HAS NO PICTURE YET, and the panel had no branch for
+            it — so opening a graphic quote showed an empty panel, which
+            is what the owner reported on 21 November 2026. The panel
+            renders by `type`, and `image_quote` was added by G-3 step
+            1b without one.
+            What belongs here is what he is deciding about: the brief,
+            and the fact that nothing has been made or spent. */}
+        {artifact.type === "image_quote" && (
+          <div className="space-y-2">
+            <p className="text-[11px] uppercase tracking-wide text-slate-500">Not made yet</p>
+            {artifact.summary && (
+              <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{artifact.summary}</p>
+            )}
+            <p className="text-xs text-slate-600 leading-snug">
+              Nothing has been generated and nothing has been spent. Approve on the card in the chat to make it.
+            </p>
+          </div>
+        )}
         {artifact.type === "image" && artifact.url && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={artifact.url} alt={artifact.label} className="w-full rounded-lg border border-slate-200" />
