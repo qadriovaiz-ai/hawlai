@@ -66,3 +66,68 @@ export function renderRichText(raw: string | null | undefined): ReactNode {
   if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
   return nodes;
 }
+
+/** `&`, `<` and `>` as entities, so nothing a person typed becomes markup. */
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * The same markdown subset, as an HTML STRING.
+ *
+ * FOR A SURFACE THAT REALLY DOES RENDER HTML — a Shopify page body.
+ * `renderRichText` above returns React nodes for this product's own
+ * site, where tags are escaped and a `<p>` would be printed to the
+ * visitor literally (the 2026-09-21 live bug). A Shopify page is the
+ * opposite: its body IS markup, and markdown sent there renders as
+ * asterisks on a real storefront.
+ *
+ * SHARING ONE DEFINITION OF THE SUBSET IS THE POINT. The tool schema
+ * promises the model "**bold**, *italic*, [text](url) — never HTML
+ * tags", and that promise is now kept on both surfaces by the same
+ * PATTERN. A second copy of that regex would be two definitions of
+ * what the model is allowed to write, and one of them would drift.
+ *
+ * STRIPPED, THEN ESCAPED, THEN CONVERTED, in that order and for
+ * safety rather than tidiness. This text can come from a model, so
+ * anything tag-like is removed first and whatever survives is escaped
+ * before this function inserts tags of its own. The only markup in
+ * the output is the markup this function wrote.
+ */
+export function richTextToHtml(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const text = stripTags(raw);
+  if (!text.trim()) return "";
+
+  const inline = (chunk: string): string => {
+    let out = "";
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    PATTERN.lastIndex = 0;
+    while ((match = PATTERN.exec(chunk)) !== null) {
+      if (match.index > lastIndex) out += escapeHtml(chunk.slice(lastIndex, match.index));
+      if (match[1] !== undefined) {
+        // The href is already restricted by PATTERN to http(s), mailto
+        // and relative paths, so no javascript: URL can reach here.
+        out += `<a href="${escapeHtml(match[2])}" target="_blank" rel="noopener noreferrer">${escapeHtml(match[1])}</a>`;
+      } else if (match[3] !== undefined) {
+        out += `<strong>${escapeHtml(match[3])}</strong>`;
+      } else if (match[4] !== undefined) {
+        out += `<em>${escapeHtml(match[4])}</em>`;
+      }
+      lastIndex = PATTERN.lastIndex;
+    }
+    if (lastIndex < chunk.length) out += escapeHtml(chunk.slice(lastIndex));
+    return out;
+  };
+
+  // A BLANK LINE IS A PARAGRAPH, and a single newline is a line break.
+  // Without this the whole page body arrives as one run-on paragraph,
+  // which is what a merchant would see on their live storefront.
+  return text
+    .split(/\n\s*\n/)
+    .map((para) => para.trim())
+    .filter(Boolean)
+    .map((para) => `<p>${inline(para).replace(/\n/g, "<br>")}</p>`)
+    .join("\n");
+}

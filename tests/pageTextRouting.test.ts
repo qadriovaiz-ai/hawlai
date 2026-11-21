@@ -68,7 +68,12 @@ describe("1. THE GUARDS TRANSFERRED — the condition the decision rested on", (
     const b = pageCase();
     const shop = shopifyHalf();
     expect(b).toMatch(/statesPriceOrStock/);
-    expect(shop).toMatch(/shopStatesPrice\(newBody\)/);
+    // ON THE AUTHORED TEXT, not the generated HTML. The guards used to
+    // read `newBody`, which is now the converted markup — and a price
+    // check run over markup can have a number split out of its own
+    // pattern by a tag boundary. They read what the model actually
+    // wrote.
+    expect(shop).toMatch(/shopStatesPrice\(authored\)/);
     expect(shop).toMatch(/Do NOT retry with a different number/);
   });
 
@@ -77,7 +82,7 @@ describe("1. THE GUARDS TRANSFERRED — the condition the decision rested on", (
     // comes to ask for something nobody can send — but a name the
     // OWNER dictated may be a product they are about to add.
     const shop = shopifyHalf();
-    expect(shop).toMatch(/shopUnknownName\(newBody, shopFacts\)/);
+    expect(shop).toMatch(/shopUnknownName\(authored, shopFacts\)/);
     expect(shop).toMatch(/if \(!ownerWrote\)/);
     expect(shop).toMatch(/shopNameRefusal/);
     expect(shop).toMatch(/shopNameWarning/);
@@ -138,7 +143,53 @@ describe("2. ONE BLOCK, AND IT SAYS SO", () => {
 
   it("an empty edit is refused with that explanation", () => {
     const shop = shopifyHalf();
-    expect(shop).toMatch(/A Shopify page is replaced whole/);
+    expect(shop).toMatch(/because a Shopify page is replaced whole/);
+  });
+
+  it("THE LOAD-BEARING ONE: the edit arrives in `edits`, not in a parameter that does not exist", () => {
+    // THE LIVE FAILURE, 21 November 2026. This branch read
+    // `input.text` — and edit_page_text has no `text` parameter, so the
+    // model had nowhere to put the answer. The tool asked for text it
+    // never offered, and the model retried identically, which is why
+    // the owner saw the same error twice with no reason.
+    //
+    // Reading `edits` is also what returning ONE BLOCK was for:
+    // read_page hands back `shopify:page-body` and the model addresses
+    // it with the shape it already knows.
+    const shop = shopifyHalf();
+    expect(shop).toMatch(/input\.edits/);
+    expect(shop).toMatch(/blockId \?\? ""\) === "shopify:page-body"/);
+    // The parameter that never existed.
+    expect(shop).not.toMatch(/input\.text/);
+    expect(shop).not.toMatch(/input\.writtenByOwner/);
+  });
+
+  it("and every field it reads is one the EDIT item declares", () => {
+    // blockId, prop, text, writtenByOwner — the shape in the schema.
+    // Anything else would be another invented parameter.
+    const shop = shopifyHalf();
+    expect(shop).toMatch(/bodyEdit\.text/);
+    expect(shop).toMatch(/bodyEdit\.writtenByOwner/);
+  });
+
+  it("MARKDOWN BECOMES HTML, because a Shopify body renders it", () => {
+    // The schema promises the model markdown and forbids tags, since
+    // this product's own renderer prints a tag literally. A Shopify
+    // body is markup, so sending markdown through would show asterisks
+    // on a live storefront.
+    const shop = shopifyHalf();
+    expect(shop).toMatch(/richTextToHtml/);
+    // Converted, then sent — the payload is the HTML, not the markdown.
+    expect(shop).toMatch(/const newBody = richTextToHtml\(authored\)/);
+  });
+
+  it("reports a prop the EDIT schema will actually accept", () => {
+    // `prop` is an enum of TEXT_PROPS — text | heading | html | label.
+    // read_page reported "body", a value the model's own schema would
+    // have rejected on the way back.
+    const shop = shopifyHalf();
+    expect(shop).toMatch(/prop: "html"/);
+    expect(shop).not.toMatch(/prop: "body"/);
   });
 
   it("it reads the page LIVE rather than trusting the resolver's listing", () => {

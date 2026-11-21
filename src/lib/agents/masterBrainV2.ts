@@ -835,7 +835,12 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
             lines: [
               {
                 blockId: "shopify:page-body",
-                prop: "body",
+                // `html`, NOT `body`. edit_page_text's `prop` is an
+                // enum of TEXT_PROPS — text | heading | html | label —
+                // so reporting "body" handed the model a value its own
+                // schema would reject. A page body is the markup prop,
+                // which is what `html` means here.
+                prop: "html",
                 blockType: "page_body",
                 text: currentBody,
                 source: "unknown",
@@ -854,18 +859,60 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         const { statesPriceOrStock: shopStatesPrice, unknownProductName: shopUnknownName, unknownNameWarning: shopNameWarning, unknownNameRefusal: shopNameRefusal, legalWarning: shopLegalWarning } = await import("../pages/editPage");
         const shopFacts = await factsFor(supabase, ctx);
 
-        const newBody = typeof input.text === "string" ? input.text : "";
-        if (!newBody.trim()) {
-          return { error: "Tell me what the page should say. A Shopify page is replaced whole, so send the complete new text." };
+        // THE EDIT ARRIVES IN `edits`, and this read `input.text` —
+        // a parameter edit_page_text does not have and the model
+        // therefore could not send. It asked for text, got none, said
+        // "tell me what the page should say", and the model retried
+        // identically because there was nowhere to put the answer.
+        // Reported live on 21 November 2026.
+        //
+        // Reading `edits` is also what returning ONE BLOCK was for:
+        // read_page hands back `shopify:page-body` and the model
+        // addresses it with the shape it already knows. A new `text`
+        // parameter would have contradicted that decision to save
+        // typing.
+        const shopEdits = Array.isArray(input.edits) ? (input.edits as any[]) : [];
+        const bodyEdit =
+          shopEdits.find((e) => String(e?.blockId ?? "") === "shopify:page-body") ??
+          // One edit and no id is unambiguous on a page with one block.
+          (shopEdits.length === 1 ? shopEdits[0] : null);
+        if (!bodyEdit) {
+          return {
+            error:
+              shopEdits.length > 1
+                ? "A Shopify page is one body, so there is only one thing to change — send a single edit for shopify:page-body with the complete new text."
+                : "Tell me what the page should say. Call read_page first, then send one edit for shopify:page-body with the COMPLETE new text, because a Shopify page is replaced whole.",
+          };
         }
-        const ownerWrote = input.writtenByOwner === true;
+
+        // MARKDOWN IN, HTML OUT. The schema promises the model
+        // "**bold**, *italic*, [text](url) — never HTML tags", because
+        // this product's own renderer prints a tag literally. A
+        // Shopify body is the opposite: it IS markup, so markdown sent
+        // straight through would show asterisks on a live storefront.
+        // One shared definition of the subset converts it — see
+        // richTextToHtml.
+        const { richTextToHtml } = await import("../richText");
+        const authored = typeof bodyEdit.text === "string" ? bodyEdit.text : "";
+        if (!authored.trim()) {
+          return { error: "That edit had no text in it. Send the complete new page body." };
+        }
+        const newBody = richTextToHtml(authored);
+        if (!newBody) {
+          return { error: "There was nothing left in that text once the markup was removed. Send it as plain words." };
+        }
+        const ownerWrote = bodyEdit.writtenByOwner === true;
 
         // THE SAME GUARDS, IN THE SAME ORDER, AND FOR THE SAME REASONS
         // as the Hawlai branch below. A price in page text is refused
         // outright — not because the number is wrong but because no
         // number belongs in prose that nothing keeps in step with the
         // catalogue.
-        const statedShop = shopStatesPrice(newBody);
+        // THE GUARDS READ THE AUTHORED TEXT, not the generated HTML.
+        // A price is a price whether or not it ends up inside a <p>,
+        // and running statesPriceOrStock over markup would let a tag
+        // boundary split a number out of its own pattern.
+        const statedShop = shopStatesPrice(authored);
         if (statedShop) {
           return {
             error: statedShop,
@@ -877,7 +924,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         // A product name Hawlai does not recognise: refused when
         // Hawlai wrote it, warned when the owner dictated it. Rule C.
         const shopWarnings: string[] = [];
-        const unknownShopName = shopUnknownName(newBody, shopFacts);
+        const unknownShopName = shopUnknownName(authored, shopFacts);
         if (unknownShopName) {
           if (!ownerWrote) {
             return {
@@ -895,7 +942,7 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         if (process.env.FACT_BOUND_COPY === "1" && shopFacts && !ownerWrote) {
           const { verifyEditedText, editRefusalNote } = await import("../content/verifyEditedText");
           const checkedShop = await verifyEditedText({
-            texts: [newBody],
+            texts: [authored],
             facts: shopFacts,
             dealershipId: ctx.id,
             topic: shopPage.handle,
