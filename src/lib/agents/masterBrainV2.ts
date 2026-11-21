@@ -5237,15 +5237,30 @@ ${truthBlock(storeFacts).trim()}
   // explained. Same guard, same wording, quoted claims left alone so the
   // product can still explain its own refusals (src/lib/chat/replyClaims.ts).
   const { checkReplyClaims } = await import("../chat/replyClaims");
+  const { checkReplyWorkarounds } = await import("../chat/replyWorkarounds");
   // REPAIR FIRST, THEN JUDGE. Order matters and the existing
   // chatReplyLinks test caught it: with the claims check first, a reply
   // carrying "[Book here](https://calendly.com)" lost the whole sentence
   // as an unsupported link — when fixReplyLinks would have pointed it at
   // the workshop's real booking URL a moment later.
+  //
+  // AND THE WORKAROUND GUARD RUNS LAST, on whatever prose survives.
+  // 21 November 2026: a page edit refused for a reason the model could
+  // not satisfy, so it printed the new copy in the chat and told the
+  // owner to paste it into his Shopify admin. That walks around the
+  // preview, the approval record, the staleness check, the claims
+  // check and the undo — the work still happens, only the machinery is
+  // missing.
+  //
+  // Last because it is about the SHAPE of the finished sentence. A
+  // link repair or a claim strip can turn one sentence into another,
+  // and it is the sentence the owner actually reads that must not hand
+  // the job back to him.
   const checkedReply = (text: string): string => {
     const fix = fixReplyLinks(text, storeFacts);
     const claims = checkReplyClaims(fix.reply, storeFacts);
-    return `${claims.reply}${linkFixNote(fix) ?? ""}${claims.note ?? ""}`;
+    const work = checkReplyWorkarounds(claims.reply);
+    return `${work.reply}${linkFixNote(fix) ?? ""}${claims.note ?? ""}${work.note ?? ""}`;
   };
 
   // The owner set Preferred Ad Language to English and chat kept writing
@@ -5285,6 +5300,9 @@ A junior marketer takes a request literally and produces the thing asked for. A 
 ## Guidelines
 - When the person asks for something concrete, USE THE RELEVANT TOOL rather than just talking about it. For a broad request ("help me launch my skincare brand"), call multiple tools in sequence (e.g. brand kit, then a launch content piece, then SEO) and weave the results into one helpful reply — with the shared strategic thread from above, not disconnected outputs.
 - **Copy a customer will read goes through the tool, always — even one line.** A caption, a headline, an ad line, a subject line, a tagline: call generate_content (or generate_email / generate_whatsapp / generate_ad_plan) and show what it returns. Never type the copy out yourself in the reply because it's short or because you can see the facts right here. The tools are where the checks live — the owner's language setting, their real Business Story detail, the claims check, and the links. Copy written straight into a reply has none of that, and it has already gone out wrong: a workshop caption with a booking link that led to the wrong page. Writing it yourself is faster and worse. If a tool fails, say so plainly rather than quietly writing the copy by hand instead.
+- **WHEN A TOOL FAILS, NEVER OFFER THE MANUAL WORKAROUND.** Not for copy, not for a page, not for anything. Do not print the content and tell them to paste it into Shopify, their site, their inbox or any admin screen; do not tell them to do it by hand this once; do not apologise for "the extra step" and hand the job back. Everything that reaches a live surface here goes through one path — the tool resolves the target, a card shows the before and after, they approve, and the write is recorded and reversible. A sentence telling them to do it themselves walks around every part of that: no preview, no approval record, no claims check on the words, nothing to undo. The work still happens and only the safety is missing, which is worse than the failure you were trying to soften.
+  Say what failed, in plain words. Say nothing was saved, if nothing was. Then ask whether to try again or leave it — and wait for the answer. That is the whole of the correct behaviour.
+  This is DIFFERENT from a door only they can open. "This store has no blog yet — create one in Shopify, then ask me again", "connect Shopify from Settings first", or pointing at Website Builder for something chat genuinely cannot do: those are right, and they are not workarounds, because you are not handing over work you were asked to do. The line is whether you are giving them content to place, or naming a prerequisite only they can satisfy.
 - **Do the work, don't hand out homework.** If a request could be read as either "explain what I should do" or "go do it," default to doing it. A day-by-day or step-by-step "plan" that just tells the person what to go do themselves (write these posts yourself, set up your profile like this, message these contacts) is the wrong shape for almost every request here — call the tools to actually produce the brand kit, the content, the website draft, the first WhatsApp message, right now, in this reply. Reserve pure instructional/advisory text for the specific things only the person can physically do (a phone call to a local shop owner, walking into a store) — everything else, build it, don't describe it.
 - Especially for a new or newly-onboarding business: don't front-load a wall of questions before doing anything. Ask at most 1-2 short clarifying questions if something is genuinely unclear (category, target city), then immediately start producing real output with reasonable assumptions for anything else — a brand kit, a first batch of content, a website — rather than making the person answer a long requirements list before any actual work happens.
 - Everything you GENERATE (content, a brand kit, a graphic, a draft) is automatically saved and also shows up on its normal dashboard page. End such a reply with one short, clearly separated line confirming this — e.g. "✅ Saved to Brand Voice — you can view or edit it there." Put it on its own line, not buried inside a long explanation, so it's easy to spot at a glance. Name the exact page/tab it landed on, not just "your dashboard." EXCEPTION — this does NOT apply when the reply carries an inline approval card (propose_price_change) or is asking the person a question. Nothing has been saved yet in those cases: the change is waiting on their decision, which is on the card in this same message. NEVER add a "saved to" or "you can review it at" line to those replies — there is no page to name, and naming one sends them away from the buttons they need to press.
