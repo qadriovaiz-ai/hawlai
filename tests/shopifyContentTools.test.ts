@@ -229,10 +229,22 @@ describe("5. the promises each card makes", () => {
     // The adapter creates it unpublished. The tool must not let the
     // owner think approving puts it in front of a customer.
     const body = caseBody("publish_blog_post");
-    expect(body).toMatch(/DRAFT in Shopify/);
-    expect(body).toMatch(/nothing goes live/i);
+    // THE SAME PROPERTY, REWORDED 22 NOVEMBER 2026. This asserted the
+    // literals "DRAFT in Shopify" and "nothing goes live", and the
+    // second half of that sentence was "until you publish it there
+    // yourself" — true when written and false now that the chat can
+    // publish it. The claim being protected is unchanged: approving the
+    // WRITE must not read as putting the post in front of anyone.
+    expect(body).toMatch(/created as a DRAFT/);
+    expect(body).toMatch(/puts nothing in front of a customer/i);
+    // AND THE SECOND STEP IS OFFERED RATHER THAN LEFT TO THEM, which
+    // is the gap the owner reported. A draft nobody mentions again is
+    // the same dead end in a politer sentence.
+    expect(body).toMatch(/OFFER TO DO IT/);
+    expect(body).toMatch(/never need to open Shopify/i);
     // And it must not set isPublished itself — that is the adapter's,
-    // and two places deciding it is how one of them gets it wrong.
+    // and two places deciding it is how one of them gets it wrong. The
+    // go-live step passes `published`, which the adapter translates.
     expect(body).not.toMatch(/isPublished/);
   });
 

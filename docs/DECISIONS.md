@@ -4646,3 +4646,59 @@ moved between that test's two lists and the rule did not change.
 equality. A new assertion was added beside it driving the new undo
 branch for real, because that block records two mutations that survived
 by **declaring** reversibility the method did not deliver.
+
+---
+
+## 2026-11-22 — the chat offers the second step, with no new tool
+
+The platform action landed first; this is how the chat reaches it.
+
+**A second MODE of `publish_blog_post`, not a second tool.** Rule 5 —
+58 tools already — and the owner's own words were "`publish_blog_post`
+approval mein hi ek dusra step". `postId` is that step: a separate
+approval, its own preview, its own undo. A test asserts no tool name
+matching `article|go_live|publish_post` exists, so a later convenience
+tool fails the suite rather than slipping in.
+
+**The id comes from `result_details`, so there is no resolver kind, no
+search, and no second unverified GraphQL query.** The created article's
+id comes back inside `platformResponse` and is written to the publish
+action row, which the chat does not read. `result_details` (migration
+237) is the channel for what an approval *produced*, and the recall
+section already renders it into the next turn's context — so the id
+travels the way every other produced value does. This is the first
+thing built on top of that mechanism.
+
+Recorded **only on a real execution**: an id attached to a stale or
+failed outcome would offer to publish a post that was never created.
+
+**The direction is explicit, never defaulted.** `postId` absent means
+"write a new post", not "publish something"; `publish: false` is how the
+same step takes a live post back down. And the tool passes `published`,
+never `isPublished` — an existing assertion keeps the platform the only
+thing that decides the Shopify field, because two places deciding it is
+how one of them gets it wrong.
+
+**The sentence the owner actually read is corrected.** It said "nothing
+goes live on the storefront until you publish it there yourself" — true
+when written, false now. It now tells the model to OFFER the second
+step, because a draft nobody mentions again is the same dead end in a
+politer sentence.
+
+**The prompt-cache fingerprint was updated deliberately**
+(`tests/toolSchemas.test.ts`), because the tool schema gained two
+inputs. Every chat turn pays full price until the cache warms again.
+
+**Two existing assertions updated** (rule 7): the card-promise test
+greped the old sentence's literals, and its claim — approving the write
+must not read as putting the post in front of anyone — is unchanged and
+now asserted in the new wording, plus two assertions that the second
+step is offered.
+
+**And one of my own tests was passing for the wrong reason.** It sliced
+`decide.ts` from `indexOf("const made =")` — and there are TWO of those,
+the graphic branch declaring one 350 lines earlier. The slice covered
+both branches, so two mutations survived with the strings they removed
+still present elsewhere inside it. Caught by mutating, not review;
+anchored on the full declaration now, with an upper bound on the slice
+length so an anchor that drifts fails loudly.

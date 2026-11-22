@@ -277,3 +277,110 @@ describe("5. rule 3 — no business, product or trade is named", () => {
     expect(src.slice(start, end)).not.toMatch(/candle|qaaf|kurta|dealership|salon|bakery/i);
   });
 });
+
+// ---------------------------------------------------------------------
+// THE CHAT SIDE — how the second step is reached without a new tool.
+// ---------------------------------------------------------------------
+describe("6. THE SECOND STEP IS A MODE OF publish_blog_post, NOT A NEW TOOL", () => {
+  const BRAIN_SRC = "src/lib/agents/masterBrainV2.ts";
+
+  /** The tool's own case, bounded at both ends. */
+  function postCase(): string {
+    const src = code(BRAIN_SRC);
+    const start = src.indexOf('case "publish_blog_post": {');
+    expect(start, "the publish_blog_post case is gone").toBeGreaterThan(-1);
+    const end = src.indexOf('case "', start + 30);
+    expect(end, "no case follows it, so this slice has no end").toBeGreaterThan(start);
+    const block = src.slice(start, end);
+    expect(block.length).toBeGreaterThan(400);
+    return block;
+  }
+
+  it("THE LOAD-BEARING ONE: a postId creates an update_post action, not a second draft", () => {
+    // Rule 5 — 58 tools already, and the owner asked for a second step
+    // inside this approval rather than a new tool.
+    const block = postCase();
+    expect(block).toMatch(/if \(goLiveId\) \{/);
+    expect(block).toMatch(/actionKey: "update_post"/);
+    expect(block).toMatch(/targetRef: goLiveId/);
+    expect(block).toMatch(/requestedChanges: \{ published: wantLive \}/);
+  });
+
+  it("it returns BEFORE any of the draft-writing path runs", () => {
+    // Otherwise a go-live call would demand a title and a body it has
+    // no use for, and refuse the owner for not supplying them.
+    const block = postCase();
+    const goLive = block.indexOf("if (goLiveId) {");
+    const needsTitle = block.indexOf("A blog post needs a headline.");
+    expect(goLive).toBeGreaterThan(-1);
+    expect(needsTitle).toBeGreaterThan(-1);
+    expect(goLive, "the go-live branch must come first or it never runs").toBeLessThan(needsTitle);
+    // AND THE CONDITION IS READ FROM THE INPUT, which position cannot
+    // show. A mutation setting `const goLiveId = ""` left the branch
+    // exactly where it is and SURVIVED this test: ordering is not
+    // liveness, and the id's source is the thing that makes it live.
+    expect(block, "goLiveId no longer comes from the input").toMatch(
+      /const goLiveId = typeof input\.postId === "string" \? input\.postId\.trim\(\) : ""/
+    );
+  });
+
+  it("THE DIRECTION IS EXPLICIT: live is the default, down is asked for", () => {
+    const block = postCase();
+    expect(block).toMatch(/input\.publish === false \? false : true/);
+  });
+
+  it("NO NEW TOOL WAS ADDED, and the schema carries the new inputs instead", () => {
+    const schemas = code("src/lib/businessBrain/toolSchemas.ts");
+    const names = [...schemas.matchAll(/name: "([a-z_]+)"/g)].map((m) => m[1]);
+    expect(names).toContain("publish_blog_post");
+    // Rule 5, stated as the assertion rather than as a hope — and
+    // narrowed after the first version caught publish_to_youtube, a
+    // tool that predates all of this. The claim is specifically that
+    // no SEPARATE tool was added for taking a store post live.
+    expect(names.filter((n) => /article|go_?live|publish_post/.test(n))).toEqual([]);
+    expect(names.filter((n) => /blog/.test(n))).toEqual(["publish_blog_post"]);
+    expect(schemas).toMatch(/postId: \{/);
+    expect(schemas).toMatch(/TAKING IT LIVE IS A SECOND CALL/);
+  });
+
+  it("THE ID COMES FROM result_details, so the model is never guessing one", () => {
+    // No resolver kind for articles, no search, and no second
+    // unverified GraphQL query: the creating approval records what it
+    // produced (migration 237) and the recall section renders it.
+    const decide = code("src/lib/approvals/decide.ts");
+    // THE ANCHOR IS THE WHOLE DECLARATION, not `const made =`.
+    //
+    // There are TWO of those in this file — the graphic branch declares
+    // one 350 lines earlier — so `indexOf("const made =")` landed on
+    // that one and this slice covered both branches. Every assertion
+    // below passed for the wrong reason, and two mutations survived
+    // because the strings they removed were still somewhere inside a
+    // region far too big. Caught by mutating, 22 November 2026.
+    const start = decide.indexOf("const made = outcome.status");
+    expect(start, "the created post's id is not recorded").toBeGreaterThan(-1);
+    const end = decide.indexOf('if (outcome.status !== "executed")', start);
+    expect(end).toBeGreaterThan(start);
+    const block = decide.slice(start, end);
+    expect(block.length, "the slice is implausibly large — check the anchor").toBeLessThan(1600);
+    // ANCHORED ON THE SPREAD'S CONDITION. `...(false ? { postId: ... })`
+    // leaves every word in the file, so the key alone proves nothing.
+    expect(block).toMatch(/\.\.\.\(made\?\.id\n?\s*\? \{/);
+    expect(block).toMatch(/postId: String\(made\.id\)/);
+    expect(block).toMatch(/postIsLive: made\.isPublished === true/);
+    // ONLY ON A REAL EXECUTION. Recording an id for a stale or failed
+    // outcome would offer to publish a post that was never created —
+    // and this assertion must be on the `made` line itself, since the
+    // `sealed` line above carries the same words.
+    expect(block.slice(0, block.indexOf("\n", 1))).toMatch(/outcome\.status === "executed" \?/);
+  });
+
+  it("and the schema tells the model NOT to invent an id", () => {
+    const schemas = code("src/lib/businessBrain/toolSchemas.ts");
+    const start = schemas.indexOf("postId: {");
+    const end = schemas.indexOf("publish: {", start);
+    expect(end).toBeGreaterThan(start);
+    const field = schemas.slice(start, end);
+    expect(field).toMatch(/Never invent one/);
+    expect(field).toMatch(/never guess from a title/);
+  });
+});

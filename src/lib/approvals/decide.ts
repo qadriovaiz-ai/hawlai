@@ -784,11 +784,41 @@ export async function applyApprovalDecision(
       // Narrowed rather than cast: platformResponse exists only on the
       // executed variant, and `as any` here would have hidden that.
       const sealed = outcome.status === "executed" ? ((outcome.platformResponse as any)?.verification ?? null) : null;
+      // THE CREATED POST'S ID, so the next turn can take it live.
+      //
+      // Added 22 November 2026, and it is the whole reason the chat
+      // needs no new tool and no new resolver kind for that step. A
+      // blog post is created as a DRAFT on purpose — a creation has no
+      // undo, so it is made inert instead — and until today the owner
+      // had to open the Shopify admin to publish it. `update_post` can
+      // do it from the chat now, but only if something knows WHICH
+      // post, and the id exists nowhere the model can see: it comes
+      // back inside `platformResponse` and is written to the publish
+      // action row, which the chat does not read.
+      //
+      // result_details (migration 237) is exactly the channel for
+      // this — what an approval PRODUCED, rendered into the next
+      // turn's context by masterBrainV2's recall section. So the id
+      // travels the way every other produced value already does.
+      //
+      // NARROWED, NOT CAST. `platformResponse` exists only on the
+      // executed variant, and the article only on an articleCreate.
+      const made = outcome.status === "executed" ? ((outcome.platformResponse as any)?.article ?? null) : null;
       await saveResult({
         publish: {
           status: outcome.status,
           ...(sealed ? { verified: Boolean(sealed.verified), url: sealed.url ?? null } : {}),
         },
+        ...(made?.id
+          ? {
+              postId: String(made.id),
+              postTitle: String(made.title ?? ""),
+              // SAID AS A FACT THE MODEL CAN ACT ON, not as prose it
+              // has to infer from. "isPublished" is the platform's
+              // word; the model is told the state in its own terms.
+              postIsLive: made.isPublished === true,
+            }
+          : {}),
       });
 
       if (outcome.status !== "executed") {

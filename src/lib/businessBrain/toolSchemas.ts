@@ -772,12 +772,22 @@ export const TOOLS = [
   {
     name: "publish_blog_post",
     description:
-      "Put a blog post on the connected Shopify store's blog. It is created UNPUBLISHED — a draft in their Shopify admin — so approving it puts nothing in front of a customer; they press publish in Shopify when they are happy. USE THIS when they want a post actually on their store (\"ye blog store pe daal do\", \"publish this to my shop's blog\"), not when they just want one written: generate_seo_keywords writes a post and saves nothing to the store. It shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT. If the store has more than one blog and they did not say which, the tool returns the list rather than picking. Anything you wrote goes through the claims check; wording the owner typed is kept exactly as typed.",
+      "Put a blog post on the connected Shopify store's blog, and take it live when they are ready. It is created UNPUBLISHED — a draft — so approving the write puts nothing in front of a customer. TAKING IT LIVE IS A SECOND CALL to this same tool with `postId`, and it needs its own approval: Hawlai does that from here, so they never open the Shopify admin. USE THIS when they want a post actually on their store (\"ye blog store pe daal do\", \"publish this to my shop's blog\"), not when they just want one written: generate_seo_keywords writes a post and saves nothing to the store. It shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT. If the store has more than one blog and they did not say which, the tool returns the list rather than picking. Anything you wrote goes through the claims check; wording the owner typed is kept exactly as typed.",
     input_schema: {
       type: "object",
       properties: {
         title: { type: "string", description: "The post's headline, as it will appear on the store." },
         text: { type: "string", description: "The body of the post, as HTML or plain text with paragraphs." },
+        postId: {
+          type: "string",
+          description:
+            "The id of a post that ALREADY EXISTS on the store, to take it live (or put it back to a draft). Set this ONLY with an id an earlier approval actually produced — it appears in this conversation as postId=... on a line marked DONE. Never invent one, and never guess from a title. With this set, `title` and `text` are not used and nothing is rewritten: the only thing that changes is whether customers can see the post.",
+        },
+        publish: {
+          type: "boolean",
+          description:
+            "Used only with `postId`. True (the default) takes the post live. False puts a live post back to being a draft — nothing is deleted and the words stay in Shopify. Set it to false only when they asked to take a post down.",
+        },
         blog: {
           type: "string",
           description:

@@ -1917,11 +1917,6 @@ export async function executeTool(
       const { createPublishAction: createPostAction } = await import("../publish/create");
       const { createServiceClient: makePostService } = await import("../supabase/service");
 
-      const postTitle = typeof input.title === "string" ? input.title.trim() : "";
-      const postBody = typeof input.text === "string" ? input.text.trim() : "";
-      if (!postTitle) return { error: "A blog post needs a headline." };
-      if (!postBody) return { error: "A blog post needs some text." };
-
       const postCreds = await blogCreds(ctx.id);
       if (!postCreds) {
         return {
@@ -1929,6 +1924,65 @@ export async function executeTool(
           note: "Connect Shopify from Settings first. Do not offer to publish a post until it is connected.",
         };
       }
+
+      // ---- SECOND STEP: take a post that already exists live -------
+      //
+      // THE GAP THE OWNER REPORTED, 22 November 2026: approving a post
+      // created a draft and then told him to "hit Publish in Shopify".
+      // Every other content approval applies in full from the chat, so
+      // that one step sent him into another dashboard.
+      //
+      // A SECOND MODE RATHER THAN A SECOND TOOL. Rule 5 — there are 58
+      // tools already, and the owner asked for "publish_blog_post
+      // approval mein hi ek dusra step". `goLive` is that step: a
+      // separate approval, a separate preview, and its own undo.
+      //
+      // IT NEEDS NO RESOLVER AND NO SEARCH. `postId` comes from
+      // result_details, which records what the creating approval
+      // PRODUCED (migration 237) and is rendered into this turn's
+      // context by the recall section. The model is not guessing an id
+      // and there is no article lookup to write — which also means no
+      // second unverified GraphQL query.
+      //
+      // THE DIRECTION IS EXPLICIT, never defaulted. `goLive` absent is
+      // "write a new post", not "publish something"; and `publish:
+      // false` is how the same step puts a live post back to a draft.
+      const goLiveId = typeof input.postId === "string" ? input.postId.trim() : "";
+      if (goLiveId) {
+        const wantLive = input.publish === false ? false : true;
+        const postService = makePostService();
+        const liveCreated = await createPostAction(
+          postService,
+          makeShopifyForBlog({ getCredentials: async () => postCreds }),
+          {
+            dealershipId: ctx.id,
+            platform: "shopify",
+            actionKey: "update_post",
+            targetRef: goLiveId,
+            targetLabel: typeof input.title === "string" && input.title.trim() ? input.title.trim() : goLiveId,
+            requestedChanges: { published: wantLive },
+            requestedBy: null,
+          }
+        );
+        if (!liveCreated.ok) return { error: liveCreated.reason, saved: false };
+        return {
+          saved: true,
+          approval_id: liveCreated.approvalId,
+          action_id: liveCreated.actionId,
+          summary: liveCreated.preview.summary,
+          warnings: liveCreated.preview.warnings,
+          note: liveCreated.alreadyPending
+            ? "You already asked for this — it is still waiting on your approval."
+            : wantLive
+              ? "Ready for your approval below. Approving puts the post on the live blog from here — nothing to do in Shopify."
+              : "Ready for your approval below. The post goes back to being a draft; nothing is deleted.",
+        };
+      }
+
+      const postTitle = typeof input.title === "string" ? input.title.trim() : "";
+      const postBody = typeof input.text === "string" ? input.text.trim() : "";
+      if (!postTitle) return { error: "A blog post needs a headline." };
+      if (!postBody) return { error: "A blog post needs some text." };
 
       // THE CLAIMS CHECK, on the headline and the body together. A
       // blog post is the longest piece of customer-facing prose this
@@ -2057,9 +2111,15 @@ export async function executeTool(
         blog: blogHit.resource.handle,
         summary: postCreated.preview.summary,
         warnings: [...postCreated.preview.warnings, ...postWarnings],
+        // THE SENTENCE THE OWNER READ, CORRECTED 22 NOVEMBER 2026. It
+        // said "nothing goes live on the storefront until you publish
+        // it there yourself" — true when written and false now. The
+        // draft is still deliberate (a creation has no undo, so it is
+        // made inert instead), but the publishing is no longer his to
+        // do in another dashboard: it is a second approval here.
         note: postCreated.alreadyPending
           ? "You already asked for this exact post — here it is again, still waiting on your approval."
-          : "Ready for your approval below. It is created as a DRAFT in Shopify — nothing goes live on the storefront until you publish it there yourself.",
+          : "Ready for your approval below. It is created as a DRAFT, so approving puts nothing in front of a customer. When they want it live, OFFER TO DO IT — call this tool again with the postId the approval produced. They never need to open Shopify for it.",
       };
     }
     case "upload_store_image": {
