@@ -84,13 +84,37 @@ export function woocommerceConsumerSecret(row: Row): string | null {
   return read(row?.woocommerce_consumer_secret_encrypted, "WooCommerce consumer secret");
 }
 
+/**
+ * A WordPress application password.
+ *
+ * MISSED BY MIGRATION 160, and found on 22 November 2026 while sizing
+ * the WordPress work. That migration encrypted the Razorpay secret, the
+ * Shopify access token and the WooCommerce consumer secret; this column
+ * was added separately in migration 025 and nobody came back for it, so
+ * it sat in plaintext for the whole time the others were ciphertext.
+ *
+ * IT IS THE MOST POWERFUL OF THE FOUR, which is why it is not a
+ * stylistic objection. An application password carries exactly the
+ * capabilities of the user it belongs to, and WordPress offers no
+ * scopes on it — an administrator's app password is administrator
+ * access to the whole site: posts, pages, media, users, plugins. A dump
+ * of this table yielded that, in the clear, for every merchant who had
+ * connected one.
+ */
+export function wordpressAppPassword(row: Row): string | null {
+  return read(row?.wordpress_app_password_encrypted, "WordPress application password");
+}
+
+export const WORDPRESS_SECRET_SELECT = "wordpress_app_password_encrypted";
+
 export type CommerceSecretColumn =
   | "razorpay_key_secret"
   | "razorpay_oauth_access_token"
   | "razorpay_oauth_refresh_token"
   | "shopify_access_token"
   | "shopify_refresh_token"
-  | "woocommerce_consumer_secret";
+  | "woocommerce_consumer_secret"
+  | "wordpress_app_password";
 
 /** Update payload for storing a commerce secret. Only the encrypted column is written. */
 export function encryptedWrite(column: CommerceSecretColumn, value: string) {
