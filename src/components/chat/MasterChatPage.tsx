@@ -95,6 +95,13 @@ interface Artifact {
   complianceFlags?: { rule: string; detail: string }[];
   /** The piece used nothing of the owner's own story (lib/content/storyEcho.ts). */
   storyNote?: string;
+  /**
+   * What the claims layer did to this piece. MIRRORED from the Artifact
+   * interface in masterBrainV2.ts — the two are separate declarations,
+   * and that one's own comment records a live test finding a field
+   * missing HERE entirely. Added to both in the same commit.
+   */
+  claimsNote?: string;
   departmentHref?: string;
 }
 
@@ -1384,6 +1391,29 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
     </div>
   ) : null;
 
+  /*
+    WHAT THE CLAIMS LAYER DID — added 22 November 2026.
+
+    ITS OWN STRIP, not a `fields` row: a field renders on one line with
+    `truncate`, and this note is three sentences naming the claim and
+    what to write down to keep it. The reason is the one CopyChange
+    records for 3 October — an owner approving a page edit saw the
+    wording cut off mid-sentence, and an ellipsis is a different promise
+    from a clamp they can open.
+
+    RENDERED WHEREVER storyWarning IS, which is every branch. A card
+    that shows the piece but not what was taken out of it is the failure
+    this exists for.
+  */
+  const claimsWarning = artifact.claimsNote ? (
+    <div className="px-3 py-2 bg-amber-500/10 border-t border-amber-400/20">
+      <p className="text-[10px] font-semibold text-amber-600 flex items-center gap-1">
+        <AlertTriangle className="w-3 h-3" /> What Hawlai changed, and why
+      </p>
+      <p className="text-[10.5px] text-amber-700 leading-snug mt-0.5">{artifact.claimsNote}</p>
+    </div>
+  ) : null;
+
   const complianceWarning = artifact.complianceFlags && artifact.complianceFlags.length > 0 ? (
     <div className="px-3 py-2 bg-red-500/10 border-t border-red-400/20 space-y-1">
       <p className="text-[10px] font-semibold text-red-500 flex items-center gap-1">
@@ -1434,6 +1464,7 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
           <pre className="px-3 py-2 text-[11.5px] text-slate-700 whitespace-pre-wrap font-sans leading-relaxed max-h-[360px] overflow-y-auto">{preview.text}</pre>
         )}
         {storyWarning}
+        {claimsWarning}
         {complianceWarning}
         {/*
           THE LIVE BUG, 10 October 2026.
@@ -1472,6 +1503,7 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
           <p className="text-[11.5px] text-slate-700 leading-relaxed">{artifact.summary}</p>
         </div>
         {storyWarning}
+        {claimsWarning}
         {complianceWarning}
         {/*
           NO approvalStrip HERE, AND IT IS NOT AN OVERSIGHT.
@@ -1559,7 +1591,7 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
           )}
         </div>
         {storyWarning}
-        {storyWarning}
+        {claimsWarning}
       {complianceWarning}
         {artifact.departmentHref && (
           <a
@@ -1798,6 +1830,7 @@ function CardImage({ src, alt }: { src: string; alt: string }) {
         </div>
       </div>
       {storyWarning}
+      {claimsWarning}
       {complianceWarning}
       {/*
         The Approve / Edit / Reject row.

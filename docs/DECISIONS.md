@@ -4539,3 +4539,52 @@ its new assertion searched for `publishCheckWording(` and found two of
 the four call sites, because each `case` in that switch shares one block
 scope and so imports the helper under its own alias. It follows the
 aliases now.
+
+---
+
+## 2026-11-22 — the claims note reaches the card, cross-cutting
+
+The 21 November slip — a blog draft reading "No paraffin, no shortcuts."
+with no warning — was not a detection failure. Four explanations were
+measured and ruled out: the term is on the list and fires on that exact
+sentence; the records really do not back it; the site-as-evidence loop
+makes no difference to it; and item 4 was a test that changed no code
+path. `"no shortcuts"` is not in `PERFORMANCE_CLAIMS`, so it is a
+**composition** claim — kept in a draft with a note, stripped on
+publish. **The text surviving was the design. Only the warning was
+missing.**
+
+It was missing in two ways. `generate_seo_keywords` with
+`writeFullBlogPost` hand-builds its card's `draft` and carried no note,
+so `_claimsNote` reached only the model, where the system prompt asks it
+to repeat the note — a prompt instruction, not a guard. And
+`grep -rl writeFullBlogPost tests/` returned **zero files**: the longest
+piece of customer-facing prose this product writes had no test on its
+chat path.
+
+**Attached cross-cutting, not per tool**, beside `_storyNote` — whose
+own comment records this identical failure for its own field: *"the
+Content Marketing page had this note from the start; chat silently
+dropped it."* A card added later cannot forget it.
+
+**Its own strip, not a `fields` row.** A field renders on one line with
+`truncate`, and this note is three sentences naming the claim and what
+to write down. That is the reason `CopyChange` records for 3 October —
+an owner approving an edit read the wording cut off mid-sentence.
+
+**Separate from `storyNote` rather than joined to it.** They answer
+different questions, and an owner who cannot tell which they are reading
+has been told neither.
+
+**A pre-existing display bug fixed in passing.** The AEO branch rendered
+`{storyWarning}` on two consecutive lines, so that note appeared twice.
+This file's own comments record the same bug being removed from two
+other branches; this was the third. Pinned now for both strips.
+
+**Two of my own assertions were wrong, and the mutation run found both.**
+One asserted `claimsRemoved` is present on a draft that kept its claim —
+the opposite of the design documented in the same file, and it made the
+baseline red, which would have made every "KILLED" verdict meaningless.
+The other asserted the *comment* explaining why the strip does not
+truncate, not the markup, so a mutation swapping `leading-snug` for
+`truncate` survived while the documentation still read correctly.

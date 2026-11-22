@@ -4193,6 +4193,23 @@ export interface Artifact {
   complianceFlags?: { rule: string; detail: string }[];
   /** Said on the card when the piece used nothing of the owner's own story. */
   storyNote?: string;
+  /**
+   * What the claims layer DID to this piece — said on the card.
+   *
+   * ADDED 22 NOVEMBER 2026, and the reason is the sentence `storyNote`
+   * carries three lines up: "the Content Marketing page had this note
+   * from the start; chat silently dropped it." `_claimsNote` was still
+   * in exactly that state. It reached the MODEL in the tool result,
+   * and the system prompt asks it to repeat the note — but a prompt
+   * instruction is not a guard, and the blog-draft card built its own
+   * `draft` by hand and carried nothing.
+   *
+   * SEPARATE FROM storyNote RATHER THAN JOINED TO IT. They answer
+   * different questions — "this used none of your own story" and "a
+   * claim was taken out, or kept and unbacked" — and an owner who
+   * cannot tell which they are reading has been told neither.
+   */
+  claimsNote?: string;
 }
 
 // Where each tool's result actually lives, so a person can jump straight
@@ -5944,6 +5961,23 @@ A junior marketer takes a request literally and produces the thing asked for. A 
       // page had this note from the start; chat silently dropped it.
       if (artifact && typeof result?._storyNote === "string") {
         artifact.storyNote = result._storyNote;
+      }
+      // AND THE CLAIMS NOTE, for the same reason and in the same place.
+      //
+      // `_claimsNote` says what the guard removed, or kept and could not
+      // back. Until today it reached the MODEL in the tool result and
+      // nothing else: the system prompt asks it to repeat the note,
+      // which is a prompt instruction rather than a guard. Cards that
+      // build their own shape carried nothing — generate_seo_keywords
+      // with writeFullBlogPost hand-builds `draft` and dropped it, so a
+      // blog post keeping an unbacked composition claim (draft mode
+      // keeps those BY DESIGN) showed the owner no warning at all.
+      //
+      // CROSS-CUTTING, not per tool, for the reason written above: this
+      // runs whichever tool produced the piece, so a card added later
+      // cannot forget it.
+      if (artifact && typeof result?._claimsNote === "string" && result._claimsNote.trim()) {
+        artifact.claimsNote = result._claimsNote.trim();
       }
       if (artifact) {
         const complianceCheck = validateAdvertisingClaimCompliance(flattenResultText(result));
