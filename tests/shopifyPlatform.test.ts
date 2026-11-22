@@ -84,11 +84,17 @@ describe("capabilities are declared honestly", () => {
   it("STILL DOES NOT CLAIM WHAT IS NOT BUILT", () => {
     // The rule the test above was protecting, which has not changed: a
     // declared capability is a promise the tool layer reads, so
-    // anything unbuilt stays absent. update_post is a separate read
-    // and a separate staleness contract; discounts were removed once
+    // anything unbuilt stays absent. Discounts were removed once
     // already for being declared before they worked.
+    //
+    // update_post MOVED TO THE BUILT LIST ON 22 NOVEMBER 2026, and this
+    // test's own reason for excluding it is what it had to satisfy
+    // first: "a separate read and a separate staleness contract". It
+    // has both now — readArticle(), and a re-read compared against
+    // preview.changes[].before like every other edit here. The rule did
+    // not move; the key did.
     const p = platform(sequence([{}]));
-    expect(p.supports).not.toContain("update_post");
+    expect(p.supports).toContain("update_post");
     expect(p.supports).not.toContain("create_discount_code");
     expect(p.supports).not.toContain("update_product_description");
   });

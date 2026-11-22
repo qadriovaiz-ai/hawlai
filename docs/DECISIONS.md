@@ -4588,3 +4588,61 @@ baseline red, which would have made every "KILLED" verdict meaningless.
 The other asserted the *comment* explaining why the strip does not
 truncate, not the markup, so a mutation swapping `leading-snug` for
 `truncate` survived while the documentation still read correctly.
+
+---
+
+## 2026-11-22 — a drafted blog post can be taken live from the chat
+
+The owner reported that approving a blog post left him a card saying
+*"go live whenever you're ready by hitting Publish in Shopify"*, while
+every other content approval applies in full from the chat.
+
+**The draft was deliberate; the dead end was not.** `articleCreate`
+sends `isPublished: false`, and that is load-bearing three times: a
+creation has no undo, a double write leaves a duplicate draft rather
+than two live posts, and `canHoldL1` refuses L1 to anything with no
+undo. The rule this codebase actually runs on is **reversibility, not
+consequence** — `update_collection_text` applies live because it is in
+`undoes`. What was missing was the second step, exactly the shape a Meta
+campaign already has: every object created PAUSED, activation its own
+gated action.
+
+**`update_post` was declared and implemented nowhere** — in `ActionKey`,
+`ALWAYS_REQUIRES_APPROVAL`, `ACTION_RISK` and `executionPolicy.ts`, with
+no branch in any platform. The slot was left and never filled.
+
+**Publishing is reversible, which is the only reason this could be
+built.** `isPublished: false` is the exact inverse of `isPublished:
+true`. Un-creating a post is a deletion and is the reverse of nothing,
+so `publish_post` stays out of `undoes` and `update_post` goes in,
+passing `canHoldL1` as a genuine undo rather than a deletion wearing the
+word. **The owner settled the semantics: undo unpublishes, never
+deletes** — the post keeps its words, handle and author, so a second
+approval can take it live again.
+
+**`published` is read strictly as a boolean.** `Boolean(value)` reads
+the string `"false"` — which a JSON round trip through a jsonb column
+can easily produce — as **true**, and the failure direction of that cast
+is a live post nobody approved. A non-boolean is refused instead.
+
+**The mutation is UNVERIFIED against a live store, and says so.**
+`article(id:)` and its fields are live-confirmed by
+`scripts/verify-shopify-content.ts`. `articleUpdate` and `isPublished`
+on `ArticleUpdateInput` come from the version-pinned 2026-07
+documentation and nothing else — the same gap that produced three
+recorded live failures in this file (`seo` not existing on `Page`, a
+required `author` hidden by a filtered introspection, an empty metafield
+write Shopify accepted and ignored). So the verification script gained
+**step 2b** in the same commit: it takes the draft *it just created*
+live, re-reads it, and puts it back through the adapter's own `undo()`.
+It never touches a post the owner wrote.
+
+**Two existing assertions were updated and brought here** (rule 7).
+`shopifyPlatform.test.ts` kept `update_post` out of `supports` for a
+stated reason — *"a separate read and a separate staleness contract"* —
+which is precisely what it had to satisfy first, and now has; the key
+moved between that test's two lists and the rule did not change.
+`shopifyContentActions.test.ts` asserted `undoes` by exact array
+equality. A new assertion was added beside it driving the new undo
+branch for real, because that block records two mutations that survived
+by **declaring** reversibility the method did not deliver.

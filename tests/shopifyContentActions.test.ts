@@ -445,9 +445,35 @@ describe("6. UNDO: THE DECLARATION AND THE METHOD MUST AGREE", () => {
     // honour is a promise about reversibility that nothing keeps.
     const { impl } = sequence([pageBody()]);
     const p = platform(impl);
-    expect(p.undoes).toEqual(["update_page_text", "update_page_meta", "update_collection_text"]);
+    // update_post JOINED THIS LIST ON 22 NOVEMBER 2026, and the reason
+    // it could is the distinction the next-but-one test protects:
+    // taking a post live has an exact inverse — putting it back to a
+    // draft — while un-CREATING one is a deletion. Deleting is not the
+    // reverse of creating, so publish_post is still absent.
+    expect(p.undoes).toEqual(["update_page_text", "update_page_meta", "update_collection_text", "update_post"]);
     // And it is a subset of what the platform can do at all.
     for (const key of p.undoes ?? []) expect(p.supports).toContain(key);
+  });
+
+  it("AND THE NEW ONE IS HONOURED BY THE METHOD, not merely declared", async () => {
+    // The two mutations this describe-block records both survived by
+    // DECLARING reversibility the method did not deliver. A key added
+    // to the list above without a branch below is exactly that again,
+    // so the branch is driven here rather than assumed.
+    const { impl } = sequence([
+      { data: { article: { id: "gid://shopify/Article/1", title: "A post", handle: "a-post", isPublished: true, publishedAt: "2026-11-22T00:00:00Z", blog: { id: "gid://shopify/Blog/1", title: "News" } } } },
+    ]);
+    const r = await platform(impl).undo!(
+      action({
+        actionKey: "update_post",
+        targetRef: "gid://shopify/Article/1",
+        preview: { ...previewed, changes: [{ field: "isPublished", before: "false", after: "true" }] } as any,
+      })
+    );
+    expect(r.ok, !r.ok ? r.reason : "").toBe(true);
+    // IT GOES BACK TO A DRAFT. Not deleted — the owner settled that.
+    expect(r.ok && r.requestedChanges).toEqual({ published: false });
+    expect(r.ok && r.warnings.join(" ")).toMatch(/[Nn]othing is deleted/);
   });
 
   it("A KEY IT DOES NOT CLAIM IS REFUSED BY THE METHOD TOO", async () => {

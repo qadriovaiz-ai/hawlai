@@ -45,6 +45,14 @@
 //     their ids so they can be deleted by hand. The article is created
 //     unpublished, so nothing reaches the storefront.
 //
+//     AMENDED 22 NOVEMBER 2026: the CREATION is still one-way, but
+//     PUBLISHING it is not. Step 2b takes that same draft live through
+//     `update_post` and puts it back through the adapter's own undo(),
+//     so the one mutation in this file that no live store has ever
+//     accepted — `articleUpdate` — gets exercised on a post this script
+//     made and already calls disposable. It never touches a post the
+//     owner wrote.
+//
 //   - NO TOKEN IS EVER PRINTED.
 // ------------------------------------------------------------------
 
@@ -609,6 +617,63 @@ async function main(): Promise<number> {
               );
             }
             console.log(`        NOT UNDOABLE — delete by hand if unwanted: ${created.id}`);
+
+            // ========================================================
+            // 2b. articleUpdate — take that draft live, then put it
+            //     back. THE ONLY UNVERIFIED MUTATION IN THIS FILE.
+            // ========================================================
+            //
+            // `article(id:)` above is live-confirmed. `articleUpdate`
+            // and `isPublished` on ArticleUpdateInput are from the
+            // 2026-07 documentation and nothing else, which is exactly
+            // how the `seo`-on-Page error and the missing required
+            // `author` both got written. So this runs last, on the
+            // draft this script just created and is already reporting
+            // as disposable — it cannot touch a post the owner wrote.
+            //
+            // AND IT IS PUT BACK THROUGH THE ADAPTER'S OWN undo(),
+            // like every other edit here. A post left live by a failed
+            // restore is the one outcome that reaches a stranger, so
+            // it is reported separately and loudly.
+            console.log("\n2b. articleUpdate — the draft goes live, then back\n");
+            const goLive = action({
+              dealershipId,
+              actionKey: "update_post",
+              targetRef: created.id,
+              targetLabel: `${STAMP} verification draft`,
+              requestedChanges: { published: true },
+            });
+            const livePv = await platform.preview(goLive);
+            if (!livePv.ok) {
+              record("go-live preview", false, livePv.reason);
+            } else {
+              record("go-live preview", true, livePv.preview.summary);
+              record(
+                "the preview warns that customers will see it",
+                livePv.preview.warnings.join(" ").toLowerCase().includes("customers"),
+                livePv.preview.warnings.join(" ")
+              );
+              const liveDone = { ...goLive, preview: livePv.preview as PreviewDiff, previewedAt: new Date().toISOString() };
+              const liveEx = await platform.execute(liveDone);
+              if (!liveEx.ok) {
+                record("go-live execute", false, (liveEx as any).stale ? "reported stale" : (liveEx as any).reason);
+              } else {
+                const back = await shopifyGraphQL<any>(creds.shop, creds.accessToken, READ_ARTICLE, { id: created.id });
+                record(
+                  "THE POST IS NOW LIVE ON THE STOREFRONT",
+                  back.ok && back.data.article?.isPublished === true,
+                  back.ok ? `isPublished=${back.data.article?.isPublished} publishedAt=${JSON.stringify(back.data.article?.publishedAt)}` : "re-read failed"
+                );
+                // AND BACK TO A DRAFT, through undo().
+                record("put back: " + (await applyUndo(platform, dealershipId, liveDone as PublishActionRecord)), true, "");
+                const after = await shopifyGraphQL<any>(creds.shop, creds.accessToken, READ_ARTICLE, { id: created.id });
+                record(
+                  "THE POST IS A DRAFT AGAIN, AND STILL EXISTS",
+                  after.ok && after.data.article?.isPublished === false && Boolean(after.data.article?.id),
+                  after.ok ? `isPublished=${after.data.article?.isPublished} id=${after.data.article?.id}` : "re-read failed"
+                );
+              }
+            }
           }
         }
       }

@@ -195,6 +195,60 @@ const ARTICLE_MUTATION = `
   }
 `;
 
+// TAKING THE DRAFT LIVE — the second half of the post flow, 22 November
+// 2026.
+//
+// WHY THERE IS A SECOND STEP AT ALL. `articleCreate` sends
+// `isPublished: false`, and that is load-bearing in three places: a
+// creation has no undo, a double write leaves a duplicate draft rather
+// than two live posts, and `canHoldL1` refuses L1 to anything with no
+// undo. None of that is a reason the owner should have to open the
+// Shopify admin, which is what they did until today — the same shape as
+// a Meta campaign, where every object is created PAUSED and activation
+// is its own gated step.
+//
+// AND THIS STEP IS REVERSIBLE, which is the whole reason it can exist
+// as a normal action. `isPublished: false` is the exact inverse of
+// `isPublished: true` — unlike un-creating a post, which is a deletion
+// and is not the reverse of anything. So `update_post` goes in
+// `undoes`, passes `canHoldL1`, and the undo unpublishes rather than
+// deleting. The owner chose that on 22 November.
+//
+// THE FIELD NAMES ON THE READ ARE LIVE-CONFIRMED. `article(id:) { id
+// title isPublished publishedAt blog { title } }` is the query
+// scripts/verify-shopify-content.ts has already run against a real
+// store. THE MUTATION IS NOT: `articleUpdate(id:, article:
+// ArticleUpdateInput!)` and `isPublished` on that input come from the
+// version-pinned 2026-07 documentation and nothing else. This file
+// records three separate live failures from exactly that gap — a `seo`
+// field that did not exist on `Page`, a required `author` hidden by a
+// filtered introspection, and an empty metafield write Shopify
+// accepted and ignored. Its own lesson applies: reading a schema is
+// not reading a schema if the output is pre-selected by what you think
+// is in it. So this is UNVERIFIED until the verification script runs
+// it, and the script gained a step for it in the same commit.
+const ARTICLE_QUERY = `
+  query PublishArticle($id: ID!) {
+    article(id: $id) {
+      id
+      title
+      handle
+      isPublished
+      publishedAt
+      blog { id title }
+    }
+  }
+`;
+
+const ARTICLE_UPDATE_MUTATION = `
+  mutation PublishArticleUpdate($id: ID!, $article: ArticleUpdateInput!) {
+    articleUpdate(id: $id, article: $article) {
+      article { id title handle isPublished publishedAt }
+      userErrors { field message }
+    }
+  }
+`;
+
 // ─────────────────────────────────────────────────────────────────────
 // COLLECTIONS (3.3)
 // ─────────────────────────────────────────────────────────────────────
@@ -289,6 +343,15 @@ type CollectionNode = {
   handle: string;
   descriptionHtml: string | null;
   productsCount: { count: number } | null;
+};
+
+type ArticleNode = {
+  id: string;
+  title: string;
+  handle: string;
+  isPublished: boolean;
+  publishedAt: string | null;
+  blog: { id: string; title: string } | null;
 };
 
 type PageNode = {
@@ -414,6 +477,12 @@ export function createShopifyPlatform(deps: {
     "update_page_text",
     "update_page_meta",
     "publish_post",
+    // TAKING THAT POST LIVE, added 22 November 2026. It was declared in
+    // ActionKey, in ALWAYS_REQUIRES_APPROVAL, in ACTION_RISK and in
+    // executionPolicy.ts — and implemented NOWHERE. A key declared with
+    // no branch is a promise nothing keeps, which is the same thing
+    // this file says about `undoes` a few lines down.
+    "update_post",
     "update_collection_text",
     "upload_image",
   ];
@@ -432,8 +501,35 @@ export function createShopifyPlatform(deps: {
    * deletion is not the reverse of a creation in any sense an owner
    * would accept — the article may have been edited since. It is
    * created unpublished, so nothing went live to take back.
+   *
+   * update_post IS PRESENT, and the difference from publish_post above
+   * is the whole reason it could be built (22 November 2026). Taking a
+   * post live has an exact inverse — putting it back to unpublished —
+   * so the undo is a real undo and not a deletion wearing the word.
+   * That is also what lets it hold L1 at all: `canHoldL1` refuses
+   * anything with no undo, so had this been one-way it would have been
+   * pinned to L0 for ever.
    */
-  const undoes: readonly ActionKey[] = ["update_page_text", "update_page_meta", "update_collection_text"];
+  const undoes: readonly ActionKey[] = ["update_page_text", "update_page_meta", "update_collection_text", "update_post"];
+
+  async function readArticle(shop: string, token: string, id: string): Promise<ArticleNode | null> {
+    const result = await shopifyGraphQL<{ article: ArticleNode | null }>(shop, token, ARTICLE_QUERY, { id }, fetchImpl);
+    return result.ok ? result.data.article ?? null : null;
+  }
+
+  /**
+   * What the owner asked for, as a boolean, or null when they asked for
+   * nothing legible.
+   *
+   * STRICTLY BOOLEAN. `Boolean(action.requestedChanges.published)` would
+   * read the string "false" — which is what a JSON round trip through a
+   * database column can easily produce — as TRUE, and publish a post on
+   * an action that asked for the opposite. The failure direction of a
+   * loose cast here is an unwanted live post, so it is refused instead.
+   */
+  function wantedPublishState(value: unknown): boolean | null {
+    return value === true || value === false ? value : null;
+  }
 
   async function readPage(shop: string, token: string, pageId: string): Promise<PageNode | null> {
     const result = await shopifyGraphQL<{ page: PageNode | null }>(shop, token, PAGE_QUERY, { id: pageId }, fetchImpl);
@@ -603,6 +699,58 @@ export function createShopifyPlatform(deps: {
             warnings: [
               "This only adds the picture to the store's file library. No customer sees it until something puts it on a page.",
             ],
+          },
+        };
+      }
+
+      // ---- content: take a drafted post live, or put it back -------
+      //
+      // THE PREVIEW IS THE WHOLE POINT ON THIS ONE. Every other action
+      // here previews a change to words; this one previews a change to
+      // WHO CAN SEE THEM, and the owner approving it is entitled to
+      // know which post, on which blog, and which direction.
+      if (action.actionKey === "update_post") {
+        if (!action.targetRef) return { ok: false, reason: "No post was specified." };
+        const article = await readArticle(creds.shop, creds.accessToken, action.targetRef);
+        if (!article) return { ok: false, reason: "That post no longer exists in Shopify." };
+
+        const wanted = wantedPublishState(action.requestedChanges.published);
+        if (wanted === null) {
+          return { ok: false, reason: "That action didn't say whether to publish the post or unpublish it." };
+        }
+
+        const warnings: string[] = [];
+        if (article.isPublished === wanted) {
+          warnings.push(
+            wanted
+              ? "This post is already live, so approving will change nothing."
+              : "This post is already a draft, so approving will change nothing."
+          );
+        }
+        // SAID OUT LOUD, because it is the only consequence that
+        // reaches a stranger. The card for every other content action
+        // describes words changing on a page somebody already found;
+        // this one makes a page findable.
+        if (wanted && article.isPublished === false) {
+          warnings.push("Approving this puts the post on your live blog, where customers and search engines can read it.");
+        }
+        if (!wanted && article.isPublished === true) {
+          warnings.push("The post comes off your live blog and goes back to being a draft. Nothing is deleted.");
+        }
+
+        return {
+          ok: true,
+          preview: {
+            summary: wanted
+              ? `"${article.title}" goes live on the "${article.blog?.title ?? "blog"}" blog`
+              : `"${article.title}" comes off the "${article.blog?.title ?? "blog"}" blog and goes back to a draft`,
+            target: { title: article.title, variantTitle: null, currentPrice: null, imageUrl: null },
+            // BOOLEANS AS STRINGS, because FieldChange carries strings
+            // and undo is built from `before`. "false" and "" are not
+            // the same value, and an undo that reads a blank as false
+            // would unpublish a post nobody asked about.
+            changes: [{ field: "isPublished", before: String(article.isPublished), after: String(wanted) }],
+            warnings,
           },
         };
       }
@@ -832,6 +980,47 @@ export function createShopifyPlatform(deps: {
 
       const creds = await deps.getCredentials(action.dealershipId);
       if (!creds) return { ok: false, reason: "Shopify isn't connected." };
+
+      // PUTTING A POST BACK MEANS UNPUBLISHING IT, NEVER DELETING IT.
+      //
+      // The owner settled this on 22 November 2026, and it is the
+      // reason this key is in `undoes` at all. Going back to a draft
+      // is the exact inverse of going live; deleting is not, and this
+      // file already says so about un-creating a post. A post put back
+      // this way keeps its words, its handle and its author, so a
+      // second approval can take it live again.
+      if (action.actionKey === "update_post") {
+        const article = await readArticle(creds.shop, creds.accessToken, action.targetRef);
+        if (!article) {
+          return { ok: false, reason: "That post isn't in Shopify any more, so there's nothing to put back." };
+        }
+        const was = action.preview.changes.find((c) => c.field === "isPublished");
+        // NOTHING RECORDED MEANS NOTHING OFFERED, the same rule the
+        // collection path below follows. Guessing the prior state is
+        // how an undo unpublishes a post that was live before anyone
+        // asked Hawlai about it.
+        const before = wantedPublishState(was?.before === "true" ? true : was?.before === "false" ? false : null);
+        if (before === null) {
+          return { ok: false, reason: "That change didn't record whether the post was live before, so I can't put it back." };
+        }
+        return {
+          ok: true,
+          actionKey: action.actionKey,
+          targetRef: action.targetRef,
+          targetLabel: String(action.targetLabel ?? article.title),
+          requestedChanges: { published: before },
+          changed: [
+            {
+              what: "Post on your blog",
+              from: article.isPublished ? "live" : "a draft",
+              to: before ? "live" : "a draft",
+            },
+          ],
+          warnings: before
+            ? []
+            : ["The post goes back to being a draft. Nothing is deleted — the words stay in Shopify."],
+        };
+      }
 
       if (action.actionKey === "update_collection_text") {
         const collection = await readCollection(creds.shop, creds.accessToken, action.targetRef);
@@ -1134,6 +1323,63 @@ export function createShopifyPlatform(deps: {
       // paths: already-at-target first so a retry after a timeout is a
       // no-op rather than a false "stale", then the staleness check,
       // then the write.
+      // ---- content: take a drafted post live, or put it back -------
+      //
+      // RE-READ BEFORE WRITING, the same contract as every other edit
+      // here. The approval was for a TRANSITION — "this draft becomes
+      // live" — not for a final state, so a post somebody published by
+      // hand between the preview and the approval is STALE rather than
+      // an excuse to write the same value again.
+      if (action.actionKey === "update_post") {
+        if (!action.targetRef) return { ok: false, reason: "No post was specified." };
+        const current = await readArticle(creds.shop, creds.accessToken, action.targetRef);
+        if (!current) return { ok: false, reason: "That post no longer exists in Shopify." };
+
+        const expected = action.preview.changes.find((c) => c.field === "isPublished");
+        if (!expected) return { ok: false, reason: "The preview did not record anything to verify against." };
+
+        const wanted = wantedPublishState(action.requestedChanges.published);
+        if (wanted === null) {
+          return { ok: false, reason: "That action didn't say whether to publish the post or unpublish it." };
+        }
+
+        if (current.isPublished === wanted) {
+          publishLog("shopify.noop", { action: action.id, article: current.id, why: "already_at_target" });
+          return {
+            ok: true,
+            platformResponse: { skipped: wanted ? "the post is already live" : "the post is already a draft" },
+          };
+        }
+        if (String(current.isPublished) !== (expected.before ?? "")) {
+          publishError("shopify.stale", { action: action.id, article: current.id, fields: "isPublished" });
+          return {
+            ok: false,
+            stale: true,
+            changed: [{ field: "isPublished", before: expected.before, after: String(current.isPublished) }],
+          };
+        }
+
+        publishLog("shopify.write", { action: action.id, article: current.id, what: wanted ? "article_publish" : "article_unpublish" });
+        const result = await shopifyMutation<{ article: { id: string; isPublished: boolean } }>(
+          creds.shop,
+          creds.accessToken,
+          ARTICLE_UPDATE_MUTATION,
+          // ONLY isPublished IS SENT. An ArticleUpdateInput carrying
+          // just the field that changes leaves the title, the body and
+          // the author alone — and this action is not entitled to touch
+          // any of them, whatever the approval row happens to carry.
+          { id: current.id, article: { isPublished: wanted } },
+          "articleUpdate",
+          fetchImpl
+        );
+        if (!result.ok) {
+          publishError("shopify.write_failed", { action: action.id, detail: result.reason });
+          return { ok: false, reason: result.reason };
+        }
+        publishLog("shopify.write_ok", { action: action.id, article: current.id });
+        return { ok: true, platformResponse: result.data };
+      }
+
       if (action.actionKey === "update_collection_text") {
         if (!action.targetRef) return { ok: false, reason: "No collection was specified." };
         const current = await readCollection(creds.shop, creds.accessToken, action.targetRef);
