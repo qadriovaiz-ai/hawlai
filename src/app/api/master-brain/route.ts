@@ -57,7 +57,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runMasterBrainChat(supabase, dealershipId, Array.isArray(history) ? history : [], message);
+    // activeConversationId travels so the turn can read its own
+    // earlier output back — see recallSection in masterBrainV2.
+    const result = await runMasterBrainChat(
+      supabase,
+      dealershipId,
+      Array.isArray(history) ? history : [],
+      message,
+      activeConversationId
+    );
 
     let savedMessageId: string | null = null;
     if (activeConversationId) {

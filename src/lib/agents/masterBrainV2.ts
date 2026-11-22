@@ -5402,7 +5402,16 @@ export async function runMasterBrainChat(
   supabase: any,
   dealershipId: string,
   history: { role: "user" | "assistant"; content: string }[],
-  message: string
+  message: string,
+  /**
+   * The conversation this turn belongs to, when there is one.
+   *
+   * NEEDED FOR EPISODIC RECALL, and optional because a WhatsApp turn
+   * has no chat conversation row. Without it the recall section below
+   * is simply absent, which is the behaviour this function had for
+   * its whole life.
+   */
+  conversationId?: string | null
 ): Promise<ChatTurnResult> {
   const ctx = await getContext(supabase, dealershipId);
   const toolsUsed: string[] = [];
@@ -5475,6 +5484,62 @@ export async function runMasterBrainChat(
         .map((d) => `- ${d.design_type ?? "image"}${d.prompt ? ` — "${String(d.prompt).slice(0, 80)}"` : ""} (made ${new Date(d.created_at).toLocaleDateString("en-IN")}): ${d.image_url}`)
         .join("\n")}`
     : "";
+
+  /**
+   * WHAT THIS CONVERSATION HAS ALREADY PRODUCED.
+   *
+   * THE FINDING THIS COMES FROM, 22 November 2026.
+   * `chat_messages.artifacts` has existed since migration 081. Every
+   * assistant turn writes its artifacts there — the cards, their
+   * labels, their image urls, their approval ids. NOTHING HAS EVER
+   * READ IT BACK into the model's context.
+   *
+   * A per-message record of this agent's own output has been
+   * accumulating for months, unread. The "upload isi image" failure
+   * was a question the database could already answer: the owner
+   * pointed at a picture the chat had shown him two turns earlier, and
+   * the model had no memory of showing it.
+   *
+   * In CoALA's terms this is the missing EPISODIC memory. Hawlai had
+   * semantic memory (ctx.memories — durable facts about the business)
+   * and no record of its own actions.
+   *
+   * DELIBERATELY NARROW. It carries what a later turn might be asked
+   * to point at — a label, a kind, a url, an id — and not the whole
+   * card. A raw jsonb dump of ten turns would cost more context than
+   * it earns and would bury the one line that matters.
+   */
+  const recallSection = await (async () => {
+    if (!conversationId) return "";
+    const { data: past } = await supabase
+      .from("chat_messages")
+      .select("artifacts, created_at")
+      .eq("conversation_id", conversationId)
+      .eq("role", "assistant")
+      .order("created_at", { ascending: false })
+      .limit(12);
+
+    type Shown = { label: string; kind: string; url?: string; approvalId?: string };
+    const shown: Shown[] = [];
+    for (const row of (past ?? []) as any[]) {
+      for (const a of Array.isArray(row.artifacts) ? row.artifacts : []) {
+        if (!a || typeof a !== "object") continue;
+        const label = String(a.label ?? "").trim();
+        if (!label) continue;
+        // The url is the part a later turn actually needs — "use that
+        // image" is answerable only with an address.
+        const url = typeof a.url === "string" ? a.url : typeof a.imageUrl === "string" ? a.imageUrl : undefined;
+        const approvalId = a.approval && typeof a.approval.id === "string" ? a.approval.id : undefined;
+        shown.push({ label, kind: String(a.kind ?? "card"), ...(url ? { url } : {}), ...(approvalId ? { approvalId } : {}) });
+        if (shown.length >= 10) break;
+      }
+      if (shown.length >= 10) break;
+    }
+    if (shown.length === 0) return "";
+    return `\n\n## What you have already shown in this conversation\nNewest first. This is YOUR OWN output from earlier turns, read back from the record — not a guess. When the owner points at something ("that one", "the image you made", "isi wali", "woh draft"), it is in this list: use it. Do NOT remake a thing that is already here, and do not tell him you cannot find it.\n${shown
+      .map((s) => `- ${s.kind}: "${s.label}"${s.url ? ` — ${s.url}` : ""}${s.approvalId ? ` (approval ${s.approvalId})` : ""}`)
+      .join("\n")}`;
+  })();
 
   const relevantKnowledge = await retrieveRelevantKnowledge(supabase, message);
   const knowledgeSection = relevantKnowledge.length > 0
@@ -5578,7 +5643,7 @@ ${soundRule(normaliseLanguage(storeFacts?.brand?.language), ctx.toneOfVoice ?? s
 ## Email and WhatsApp — rules for anything you write or send, and how to answer questions about them
 ${CHANNEL_POLICY_FOR_CHAT}`;
 
-  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}${recentImagesSection}${soundSection}${channelPolicySection}
+  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}${recentImagesSection}${recallSection}${soundSection}${channelPolicySection}
 
 ## How you think, not just what you generate
 
