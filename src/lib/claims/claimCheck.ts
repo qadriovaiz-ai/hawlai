@@ -112,6 +112,33 @@ const CLAIM_TERMS = [
   // rejected, which is discussing a material rather than claiming
   // anything — and the claim forms above already cover the real case.
   "paraffin free", "no paraffin", "soy wax", "pure soy", "beeswax", "coconut wax", "palm free",
+  // ------------------------------------------------------------------
+  // SHORTCUTS AND CORNERS, added 21 November 2026 — and this list has
+  // been carrying the phrase in a COMMENT since October without ever
+  // holding it as a term.
+  //
+  // The note at the top of this list describes the incident in its own
+  // words: a generated homepage said "No paraffin. No synthetic
+  // shortcuts." for a business whose records said nothing of the kind.
+  // "no paraffin" was added. "no synthetic shortcuts" was not, so the
+  // second half of the very sentence that caused the rule has been
+  // publishable ever since — and it slipped again, into a blog post
+  // for a live storefront, on 21 November.
+  //
+  // THE OTHER HALF WAS CORRECTLY ALLOWED THAT DAY, which is worth
+  // recording so nobody "fixes" it: this business states "Our candles
+  // are paraffin-free — soy wax only" in Business Knowledge and
+  // "Made with 100% soy wax, paraffin-free" on a product. That is the
+  // rule working as designed — say it yourself first.
+  //
+  // SEVERAL SURFACE FORMS, per the lesson the soot entry records: "One
+  // phrasing of a claim on a term list is a list that catches the
+  // drafts that happen to agree with it." A claim about how carefully
+  // something was made is unverifiable unless the business has said
+  // it, whatever words it arrives in.
+  "no shortcuts", "no synthetic shortcuts", "without shortcuts", "zero shortcuts",
+  "no corners cut", "cut no corners", "never cut corners", "cutting no corners",
+  "no compromise", "no compromises", "without compromise",
   // Fragrance and additives.
   "no synthetic fragrance", "synthetic fragrance free", "no fake fragrance", "essential oil", "essential oils",
   "natural fragrance", "no added colour", "no added color", "dye free",
