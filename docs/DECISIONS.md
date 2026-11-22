@@ -4383,3 +4383,53 @@ store makes "update my About page" ambiguous. The tool asks which,
 rather than preferring one — the same answer the existing resolver
 already gives for an unknown page, and for the same recorded reason:
 "the predecessor fell through to the hero and reported success".
+
+---
+
+## 2026-11-22 — the prose-vs-code test checks two comment blocks, not the whole file
+
+Phase 1 item 1d asked for a test that makes the `CLAIM_TERMS` class fail
+loudly: a phrase a guard's own comment quotes as the reason the guard
+exists must be a phrase the guard actually catches. Built as
+`tests/guardPhrasesAreExecutable.test.ts`.
+
+**It runs the guard, it does not grep it.** A source-grep here is
+defeated by the thing it checks — the phrase it looks for is sitting in
+the comment, so the comment satisfies the test on behalf of the missing
+code. CLAUDE.md rule 8 records that trap. This test calls
+`findUnsupportedClaims` and `findUnverifiableClaims` for real, against a
+business whose records support nothing.
+
+**Two regions, not the file.** A sweep of every comment in
+`claimCheck.ts` on 2026-11-22 found 112 quoted sentences, 46 of them
+unflagged — and almost all of those 46 are pattern SHAPES rather than
+phrases: "than X", "compared to", "separates X from Y". Requiring those
+to be caught is impossible; exempting them would mean 46 entries, which
+is an allowlist with a test attached rather than a test. So the test
+covers the two blocks whose comments quote real draft copy —
+`CLAIM_TERMS` and the `-est` forms — and says in its own text that the
+comparative and benefit blocks are excluded and why.
+
+**A phrase must be caught by the rule it is written above.** The first
+version asked only whether SOME guard flagged the phrase, and deleting
+`"no synthetic shortcuts"` from `CLAIM_TERMS` did not fail it: that
+phrase is also caught by `RIVAL_DISPARAGEMENT`, because saying other
+products have a fault is a claim about them. The phrase stayed
+unpublishable, so nothing was unsafe — but the test was no longer
+pinning the list its comment belongs to, which was the point. Each
+region now declares the signature of its own rule.
+
+**Exemptions are assertions, not passes.** Three kinds of quoted phrase
+are not draft copy, and each is declared with a reason and a date:
+`not_copy` for a comment quoting its own reasoning, and `must_not_flag`
+for a phrase the comment names as one that must be LEFT ALONE — those
+are asserted in the opposite direction, which is the only place
+over-filtering is pinned. A declaration that stops matching a real
+quoted phrase fails the suite, so the list cannot outlive the comment.
+
+**Open, reported rather than fixed.** That same sweep listed phrases no
+guard flags which do read like real copy — "a better way to unwind",
+"ours is better", "without the fuss", "exactly what you need", "Always
+Free", "mega grade". Several are probably deliberate counter-examples
+the comments describe as acceptable; telling which is which needs
+reading each comment, and that is an audit, not this item.
