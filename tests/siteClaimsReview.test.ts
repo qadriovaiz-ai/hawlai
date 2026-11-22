@@ -144,10 +144,30 @@ describe("the evidence rule, and when it applies", () => {
     expect(honest.site!.pages[0].paragraphs.join(" ")).toContain("Poured by hand");
   });
 
-  it("WAITS for the owner: facts only drop generated copy once they have reviewed", () => {
+  it("DOES NOT WAIT for the owner: generated copy is never evidence, reviewed or not", () => {
+    // THIS TEST ASSERTED THE OPPOSITE UNTIL 22 NOVEMBER 2026, under the
+    // name "WAITS for the owner", and pinned the two lines that gated
+    // the exclusion on dealerships.claims_reviewed_at. The owner
+    // reversed that decision, and the reason is in businessFacts' own
+    // comment: confirmed live the same day, this business had never
+    // completed the review, so the gate had never once closed and its
+    // home page was still backing its own claims — "No synthetic
+    // shortcuts." there since 20 September.
+    //
+    // BOTH ASSERTIONS ARE POSITIVE, deliberately. "No gate is present"
+    // as a `not.toMatch` only forbids the one spelling guessed at, and a
+    // grep for `claims_reviewed_at` would now hit the comment that
+    // explains its removal — rule 8, both halves. The exact adjacency of
+    // `blocksText(ownerWritten(` is the load-bearing part: any condition
+    // in front of it, ternary or otherwise, breaks the match.
+    //
+    // The behaviour itself is pinned in tests/siteIsNotItsOwnEvidence
+    // .test.ts, which runs the real read against a fake that honours
+    // both .eq() and .select().
     const facts_ts = readFileSync("src/lib/claims/businessFacts.ts", "utf8");
-    expect(facts_ts).toMatch(/const reviewed = Boolean\(dealership\?\.claims_reviewed_at\)/);
-    expect(facts_ts).toMatch(/blocksText\(reviewed \? ownerWritten\(p\.sections\) : p\.sections\)/);
+    expect(facts_ts).toMatch(/\.\.\.blocksText\(ownerWritten\(p\.sections, p\.content_source \?\? null\)\),/);
+    // And the column is asked for, or the mark it needs arrives undefined.
+    expect(facts_ts).toMatch(/select\("slug, title, page_type, meta_description, og_image_url, sections, order_index, content_source"\)/);
   });
 });
 

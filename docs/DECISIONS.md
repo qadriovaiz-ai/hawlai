@@ -4433,3 +4433,59 @@ guard flags which do read like real copy — "a better way to unwind",
 Free", "mega grade". Several are probably deliberate counter-examples
 the comments describe as acceptable; telling which is which needs
 reading each comment, and that is an audit, not this item.
+
+---
+
+## 2026-11-22 — Hawlai's own website is never evidence, review or no review
+
+The claims guard checks copy against what the business says about
+itself, and `knownText()` includes the website — which
+`websiteBuilderAgent` wrote. Stage 2 excluded the machine's writing but
+**gated** the exclusion on `dealerships.claims_reviewed_at`, with the
+reasoning written in the code that excluding it earlier "would silently
+strip copy they have never been shown and cannot put back".
+
+**That trade was the wrong way round, and the owner reversed it.**
+Confirmed live the same day: this business has never completed the
+review, so the gate had never once closed, and "No synthetic
+shortcuts." has sat on its home page since 20 September backing itself.
+The cost of waiting is an unreviewed site vouching for its own invented
+claims, which is the failure `src/lib/claims` exists for. The cost of
+not waiting is a draft sentence the owner can ask for again.
+
+**Two no-ops were hiding behind that gate**, and closing it alone would
+have changed nothing for the very site that prompted it. Both are fixed
+in the same commit, and both are pinned behaviourally:
+
+1. `businessFacts` never **selected** `website_pages.content_source`, so
+   it could not pass it to `ownerWritten`. These blocks carry no
+   `_source` at all — they predate per-block marking — and without the
+   page's own mark, reading the block alone makes the copy the owner's.
+   `siteClaimsReview` has passed `content_source` all along.
+2. `ownerWritten` returned a **legacy** block (no `props` object) whole.
+   `blocksText` reads a legacy block's `headline` and `subheadline`
+   directly, so that text went back into the evidence set however the
+   page was marked — on any page the bulk block migration never
+   converted. The block is now kept and only its words dropped, because
+   every other reader of that function cares about structure.
+
+**It did not cause the "no shortcuts" slip, and this is recorded so the
+two are not conflated.** A probe the same day showed `"no shortcuts"` is
+flagged identically with and without the site as evidence:
+`CLAIM_SYNONYMS` has no shortcuts family, and `"no synthetic shortcuts"`
+does not contain `"no shortcuts"` as a substring. The loop is a separate
+real defect found while looking for that one.
+
+**An existing test asserted the opposite and was brought to the owner
+rather than bent** (rule 7). `siteClaimsReview.test.ts` held "WAITS for
+the owner: facts only drop generated copy once they have reviewed",
+pinning the two gate lines by source grep. Its subject is the decision
+that was reversed, so it now pins the new one — with positive anchors
+only, since a `not.toMatch` forbids one guessed spelling and a grep for
+`claims_reviewed_at` would now hit the comment explaining its removal.
+
+**`claims_reviewed_at` is now only a record that the list was read.**
+Nothing in the guard consults it. The owner-facing sentence said "From
+then on, Hawlai only treats your own words as proof", which told them
+finishing the list was what switched the rule on — false after this
+change, and corrected in the same commit.

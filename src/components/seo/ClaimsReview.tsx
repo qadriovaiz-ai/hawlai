@@ -296,8 +296,16 @@ export default function ClaimsReview() {
 
       {reviewedAt ? (
         <p className="text-[11px] text-slate-400">
-          You went through this on {new Date(reviewedAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}. From then on,
-          Hawlai only treats your own words as proof of a claim — not text it wrote itself.
+          {/* CORRECTED 22 NOVEMBER 2026. This said "From then on, Hawlai
+              only treats your own words as proof" — which told the owner
+              that finishing the list was what switched the rule on, and
+              so that before finishing it, text Hawlai wrote did count as
+              proof. That was true, and is the loop the exclusion was
+              gated behind. The gate is gone: the rule holds from the
+              start now, and this date is a record of going through the
+              list, not the moment anything changed. */}
+          You went through this on {new Date(reviewedAt).toLocaleDateString("en-IN", { dateStyle: "medium" })}. Hawlai only
+          ever treats your own words as proof of a claim — never text it wrote itself.
         </p>
       ) : (
         <div className="space-y-1.5 pt-1">

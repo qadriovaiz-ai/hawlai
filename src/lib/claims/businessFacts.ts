@@ -346,7 +346,27 @@ export function ownerWritten(sections: unknown, pageSource?: string | null): unk
     const hasKeptChildren = Array.isArray(children) && children.length > 0;
 
     if (!b.props || typeof b.props !== "object") {
-      return { ...b, ...(children ? { children } : {}) };
+      // A BLOCK FROM BEFORE THE BLOCK BUILDER — no props object, so no
+      // per-prop mark can exist on it.
+      //
+      // It used to be returned WHOLE, which made this whole function a
+      // no-op for any page the bulk block migration never converted:
+      // blocksText reads a legacy block's `headline` and `subheadline`
+      // directly (see its else branch), so that text went back into
+      // knownText as the business's own words however the page was
+      // marked. Found 22 November 2026 while closing the evidence gate.
+      //
+      // The page's own `content_source` is the only authority there is
+      // for these lines, which is exactly the fallback machineWroteProp
+      // applies per prop. Unmarked page: left alone, their own site,
+      // which they have lived with.
+      if (pageSource !== "generated") return { ...b, ...(children ? { children } : {}) };
+      // The block is KEPT and only its words are dropped, rather than
+      // returned as null: every other reader of this function cares
+      // about structure, and blocksText is the one that reads text.
+      const flat: Row = { ...b };
+      for (const key of [...LEGACY_HEADING_KEYS, ...LEGACY_TEXT_KEYS, ...LEGACY_BUTTON_KEYS]) delete flat[key];
+      return { ...flat, ...(children ? { children } : {}) };
     }
 
     // PER PROP, NOT PER BLOCK. This used to keep a whole block whose
@@ -477,25 +497,42 @@ export async function gatherBusinessFacts(supabase: any, dealershipId: string): 
   if (website?.id) {
     const rows = await read<Row[]>(
       "website pages",
-      supabase.from("website_pages").select("slug, title, page_type, meta_description, og_image_url, sections, order_index").eq("website_id", website.id).order("order_index", { ascending: true }),
+      supabase.from("website_pages").select("slug, title, page_type, meta_description, og_image_url, sections, order_index, content_source").eq("website_id", website.id).order("order_index", { ascending: true }),
       []
     );
-    // ONCE THE OWNER HAS REVIEWED THE CLAIMS ON THEIR SITE, the
-    // machine's own writing stops being evidence (Stage 2).
+    // THE MACHINE'S OWN WRITING IS NEVER EVIDENCE — not before the
+    // review, not after it.
     //
-    // The loop this closes: the claims guard checks copy against what the
-    // business says about itself, and that included its website — which
-    // websiteBuilderAgent wrote. So an invented line became the proof
-    // that approved the same line everywhere else. Excluding it is only
-    // safe after the owner has been through the review list, because
-    // before that it would silently strip copy they have never been
-    // shown and cannot put back.
-    const reviewed = Boolean(dealership?.claims_reviewed_at);
+    // The loop this closes: the claims guard checks copy against what
+    // the business says about itself, and that included its website —
+    // which websiteBuilderAgent wrote. So an invented line became the
+    // proof that approved the same line everywhere else.
+    //
+    // UNTIL 22 NOVEMBER 2026 this exclusion was GATED on
+    // dealerships.claims_reviewed_at, and the reasoning written here was
+    // that excluding it earlier "would silently strip copy they have
+    // never been shown and cannot put back". That trade was the wrong
+    // way round. The cost of waiting is that an unreviewed site keeps
+    // vouching for its own invented claims, which is the failure this
+    // whole directory exists for; the cost of not waiting is a draft
+    // sentence the owner can ask for again. Confirmed live the same day:
+    // this business has never completed the review, so the gate had
+    // never once closed, and "No synthetic shortcuts." has sat on its
+    // home page since 20 September backing itself.
+    //
+    // THE PAGE'S OWN MARK IS PASSED, and without it this change is a
+    // no-op for exactly the site that prompted it. These blocks predate
+    // per-block marking: they carry no `_source` at all, so reading the
+    // block alone makes the copy the owner's. website_pages
+    // .content_source is the authority Hawlai actually has for those
+    // rows — the same argument machineWroteProp records for 3 October,
+    // and siteClaimsReview has passed it all along while this reader
+    // did not.
     pages = rows.map((p) => ({
       slug: p.slug,
       title: p.title,
       pageType: p.page_type ?? null,
-      ...blocksText(reviewed ? ownerWritten(p.sections) : p.sections),
+      ...blocksText(ownerWritten(p.sections, p.content_source ?? null)),
       metaDescription: p.meta_description ?? null,
       hasShareImage: Boolean(p.og_image_url),
     }));
