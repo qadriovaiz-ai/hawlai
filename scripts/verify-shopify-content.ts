@@ -447,7 +447,7 @@ async function main(): Promise<number> {
       actionKey: "update_page_meta",
       targetRef: page.id,
       targetLabel: page.title,
-      requestedChanges: { metaTitle: `${beforeTitle} ${STAMP}`.trim() },
+      requestedChanges: { seoTitle: `${beforeTitle} ${STAMP}`.trim() },
     });
 
     const pv = await counted.preview(act);
@@ -510,7 +510,7 @@ async function main(): Promise<number> {
               dealershipId,
               actionKey: "update_page_meta",
               targetRef: page.id,
-              requestedChanges: { metaTitle: `${beforeTitle} ${STAMP} second` },
+              requestedChanges: { seoTitle: `${beforeTitle} ${STAMP} second` },
             })
           );
           if (stalePv.ok) {
@@ -540,7 +540,7 @@ async function main(): Promise<number> {
                 dealershipId,
                 actionKey: "update_page_meta",
                 targetRef: page.id,
-                requestedChanges: { metaTitle: `${beforeTitle} ${STAMP} second` },
+                requestedChanges: { seoTitle: `${beforeTitle} ${STAMP} second` },
                 preview: stalePv.preview,
                 previewedAt: new Date().toISOString(),
               })

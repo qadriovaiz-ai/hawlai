@@ -4702,3 +4702,49 @@ both branches, so two mutations survived with the strings they removed
 still present elsewhere inside it. Caught by mutating, not review;
 anchored on the full declaration now, with an upper bound on the slice
 length so an anchor that drifts fails loudly.
+
+---
+
+## 2026-11-22 — the live run, and the producer half of the payload contract
+
+`scripts/verify-shopify-content.ts --write` was run against
+`hawlaitest.myshopify.com`. **`articleUpdate` matched the documentation
+exactly** — the mutation, `ArticleUpdateInput` and `isPublished` were
+accepted as written, and step 2b passed end to end: draft created
+unpublished, taken live (`isPublished=true`, `publishedAt` set by
+Shopify, which this code never sends), re-read, put back through the
+adapter's own `undo()`, and confirmed a draft that still exists. Four
+mutations in this adapter have now been confirmed against a real store
+and this is the first that needed no correction.
+
+**The run found a different bug, and it was in the verification script
+itself.** Step 1 failed with *"No search title or description was
+given."* The adapter was realigned from `metaTitle` to `seoTitle` on
+20 November and `tests/publishPayloadContract.test.ts` was written to
+pin it — but that test covered the **adapters** and not the
+**producers**, and the script was still building `metaTitle` in three
+places. So step 1 had been silently refused at preview ever since: the
+only script that checks the page-SEO path against a real store had
+never once exercised it.
+
+**That is the same silent shape the contract test's own header
+describes, one layer out.** A platform reading the wrong key sees
+`undefined`, which is indistinguishable from "the owner didn't ask for a
+title" — and a producer writing the wrong key is indistinguishable from
+a producer that asked for nothing.
+
+So the fix is both halves: the three keys, and **an assertion that every
+producer writes `seoTitle`**, swept over files rather than over a
+hand-maintained list so a producer added later is covered without being
+added here. It matches `metaTitle` only as a KEY (`metaTitle:`), because
+the word in a comment is this codebase's record of why it must not be
+used. Verified by reverting the script's key: the suite fails.
+
+**What the re-run then proved, having never run before:** the
+description survives a title-only write (the assertion the whole
+metafield design exists for), staleness holds against a real store, and
+`undo()` restores the page exactly. 32 passed, 0 failed.
+
+Two disposable drafts and two files are left on the test store from the
+two runs, reported with their ids by the script — a creation is still
+one-way, which is the whole reason the second step exists.

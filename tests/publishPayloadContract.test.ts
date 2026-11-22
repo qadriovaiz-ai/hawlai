@@ -95,6 +95,34 @@ describe("one ActionKey means one payload shape, whichever platform runs it", ()
     expect(seoKeys).not.toContain("metaTitle");
   });
 
+  it("AND SO DOES EVERY PRODUCER, which is the half that rotted", () => {
+    // THIS TEST COVERED THE ADAPTERS AND NOT THE PRODUCERS, and the
+    // live run of 22 November 2026 found the cost:
+    // scripts/verify-shopify-content.ts was still building
+    // `metaTitle`, so step 1 of the only script that checks this path
+    // against a real store had been silently refused at preview —
+    // "No search title or description was given", for a payload that
+    // contained exactly that. The same silent shape this file's own
+    // header describes, one layer out.
+    //
+    // A PRODUCER IS ANYTHING THAT WRITES THE PAYLOAD, so the sweep is
+    // over files rather than over a list someone maintains: a new
+    // producer added next month is covered without being added here.
+    const producers = [
+      "src/lib/agents/masterBrainV2.ts",
+      "src/lib/publish/platforms/shopify.ts",
+      "src/lib/publish/platforms/hawlaiSite.ts",
+      "scripts/verify-shopify-content.ts",
+    ];
+    for (const file of producers) {
+      const src = code(file);
+      // The KEY being written, not a mention: `metaTitle:` with a value
+      // after it is a payload; the word in a comment is the record of
+      // why it must not be used, and this codebase keeps those.
+      expect(src, `${file} still writes metaTitle into a payload`).not.toMatch(/\bmetaTitle\s*:/);
+    }
+  });
+
   it("AN UNDO PROPOSES A PAYLOAD ITS OWN PREVIEW CAN READ", () => {
     // Shopify's undo built `metaTitle` while its preview read
     // `seoTitle`, so undoing a search title would have looked like "no
