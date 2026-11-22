@@ -5613,8 +5613,48 @@ export async function runMasterBrainChat(
       if (shown.length >= 10) break;
     }
     if (shown.length === 0) return "";
-    return `\n\n## What you have already shown in this conversation\nNewest first. This is YOUR OWN output from earlier turns, read back from the record — not a guess. When the owner points at something ("that one", "the image you made", "isi wali", "woh draft"), it is in this list: use it. Do NOT remake a thing that is already here, and do not tell him you cannot find it.\n${shown
-      .map((s) => `- ${s.kind}: "${s.label}"${s.url ? ` — ${s.url}` : ""}${s.approvalId ? ` (approval ${s.approvalId})` : ""}`)
+
+    // AND WHAT THOSE APPROVALS ACTUALLY PRODUCED — Phase 1 item 3.
+    //
+    // A card records what was OFFERED. `pending_approvals.result_details`
+    // (migration 237) records what came back: an image's URL, a page's
+    // slug, whether the publish verified. Without it the model can see
+    // that it offered to make a graphic and still not know one exists —
+    // which is how "upload isi image" bought a second generation.
+    //
+    // ONLY APPROVED ROWS. A pending card has produced nothing yet, and
+    // a rejected one never will; reading either as a result would be
+    // the model announcing work that did not happen.
+    //
+    // SCOPED TO THIS BUSINESS as well as to these ids. The ids come
+    // from this conversation's own messages, so the tenant clause is
+    // belt and braces — which is the only acceptable kind here.
+    const approvalIds = Array.from(new Set(shown.map((s) => s.approvalId).filter(Boolean))) as string[];
+    const produced = new Map<string, string>();
+    if (approvalIds.length > 0) {
+      const { data: decided } = await supabase
+        .from("pending_approvals")
+        .select("id, status, result_details")
+        .eq("dealership_id", ctx.id)
+        .in("id", approvalIds);
+      for (const row of (decided ?? []) as any[]) {
+        if (row.status !== "approved") continue;
+        const details = row.result_details;
+        if (!details || typeof details !== "object" || Array.isArray(details)) continue;
+        const pairs = Object.entries(details as Record<string, unknown>)
+          // Flattened to key=value rather than dumped: a raw jsonb blob
+          // of ten turns buries the one line that matters, which is the
+          // lesson the artifact list above already carries.
+          .map(([k, v]) => `${k}=${v && typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+          .join(", ");
+        if (pairs) produced.set(String(row.id), pairs);
+      }
+    }
+    return `\n\n## What you have already shown in this conversation\nNewest first. This is YOUR OWN output from earlier turns, read back from the record — not a guess. When the owner points at something ("that one", "the image you made", "isi wali", "woh draft"), it is in this list: use it. Do NOT remake a thing that is already here, and do not tell him you cannot find it. A line marked DONE has already been carried out and what it produced is real — use those values and never offer to do that work again. A line with no DONE mark was offered and not carried out, so do NOT tell him it is finished.\n${shown
+      .map((s) => {
+        const result = s.approvalId ? produced.get(s.approvalId) : undefined;
+        return `- ${s.kind}: "${s.label}"${s.url ? ` — ${s.url}` : ""}${s.approvalId ? ` (approval ${s.approvalId})` : ""}${result ? ` → DONE, it produced: ${result}` : ""}`;
+      })
       .join("\n")}`;
   })();
 

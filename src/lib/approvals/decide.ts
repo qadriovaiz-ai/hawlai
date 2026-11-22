@@ -36,7 +36,7 @@ import { adsTokenFor } from "@/lib/ads/metaToken";
 
 /**
  * WHO IS DECIDING, established by the caller before this is reached.
- *
+   *
  * H1. The decision below used to read the acting identity off a
  * Supabase session, which is the one thing a WhatsApp message does not
  * have — it has a verified phone number instead. So identity becomes a
@@ -118,8 +118,50 @@ export async function applyApprovalDecision(
    * back into the conversation after approval; the one approval whose
    * result IS an image did not. The department page is meant to be a
    * fallback, not the only way to see what you just agreed to.
+   *
+   * PHASE 1 ITEM 3 MADE THIS THE CONTRACT FOR EVERY BRANCH, not just
+   * the graphic one. An approval is the record of an action, so what the
+   * action produced belongs on it — `pending_approvals.result_details`,
+   * migration 237. The model reads it back on a later turn, which is why
+   * "upload isi image" cost a second generation and a second charge: the
+   * URL existed, in the browser, and nowhere the model could see.
+   *
+   * NOTHING SENSITIVE GOES IN HERE. It is read into an LLM prompt, so it
+   * holds subjects, ids and addresses of things the owner already has —
+   * never a token, never a key, and never a customer's email address or
+   * phone number. The send branches record WHAT was sent, not TO WHOM.
    */
-  let produced: { imageUrl: string; id?: string } | null = null;
+  let produced: Record<string, unknown> | null = null;
+
+  /** Merge in what a branch produced. Never the reason a branch failed. */
+  const record = (details: Record<string, unknown>) => {
+    produced = { ...(produced ?? {}), ...details };
+  };
+
+  /**
+   * Persist what has been produced so far.
+   *
+   * NEEDED BECAUSE THE PUBLISH PATH RETURNS EARLY. The row update below
+   * carries `result_details` for every branch that runs before it, but
+   * releaseApprovedAction runs after, and each of its outcomes returns
+   * its own response. Without a save there, the one path most chat
+   * approvals actually take would record nothing.
+   *
+   * Logged and never thrown: the owner's decision has already been
+   * carried out by the time this runs, and failing to describe it must
+   * not turn a completed action into an error. Never silent either —
+   * that is how ninety days of cost logging went missing.
+   */
+  const saveResult = async (details: Record<string, unknown>) => {
+    record(details);
+    const { error: resultError } = await service
+      .from("pending_approvals")
+      .update({ result_details: produced ?? {} })
+      .eq("id", id);
+    if (resultError) {
+      console.error(`[approvals] could not record what ${id} produced: ${resultError.message}`);
+    }
+  };
   const { data: approval } = await service.from("pending_approvals").select("*").eq("id", id).single();
   if (!approval) return NextResponse.json({ error: "Approval not found" }, { status: 404 });
 
@@ -203,6 +245,10 @@ export async function applyApprovalDecision(
         String(id)
       );
       if (!done.ok) return NextResponse.json({ error: done.error }, { status: done.status });
+      // ACCEPTED AND CONFIRMED ARE DIFFERENT, and the dispatcher is the
+      // only thing that knows which this was. Flattening them here
+      // would be the "couldn't confirm" bug the type comment records.
+      record({ note: done.note, verified: done.verified });
     }
   }
 
@@ -233,6 +279,7 @@ export async function applyApprovalDecision(
       }
 
       await service.from("ad_creatives").update({ daily_budget: details.new_budget }).eq("id", details.campaign_id);
+      record({ newDailyBudget: details.new_budget, campaignId: details.campaign_id });
     }
 
     if (approval?.action_type === "change_campaign_targeting") {
@@ -245,6 +292,10 @@ export async function applyApprovalDecision(
       if (!outcome.success) {
         return NextResponse.json({ error: outcome.error ?? "Couldn't apply the targeting change" }, { status: 500 });
       }
+      record({
+        campaignId: details.campaign_id,
+        targeting: { ageMin: details.age_min, ageMax: details.age_max, genders: details.genders ?? [] },
+      });
     }
 
     // P0 11b — same real-spend-activation Meta call as /api/ads/[id]/status,
@@ -305,6 +356,7 @@ export async function applyApprovalDecision(
       }
 
       await service.from("ad_creatives").update({ meta_status: "ACTIVE" }).eq("id", details.campaign_id);
+      record({ campaignId: details.campaign_id, campaignStatus: "ACTIVE" });
     }
 
     // ---- One-shot outbound actions raised from chat (Phase 2B) ------
@@ -353,6 +405,8 @@ export async function applyApprovalDecision(
         if (!sent.success) {
           return NextResponse.json({ error: sent.error ?? "The email didn't go out, so nothing was approved." }, { status: 500 });
         }
+        // THE SUBJECT, NOT THE ADDRESS. This is read into an LLM prompt.
+        record({ emailSent: true, emailSubject: d.subject, recipientKind: "team" });
       } else {
         const { sendApprovedEmail } = await import("@/lib/email/sendApprovedEmail");
         const sent = await sendApprovedEmail(service, approval.dealership_id, {
@@ -372,6 +426,7 @@ export async function applyApprovalDecision(
             { status: sent.status }
           );
         }
+        record({ emailSent: true, emailSubject: d.subject, recipientKind: d.recipient_kind ?? "customer" });
       }
     }
 
@@ -384,6 +439,7 @@ export async function applyApprovalDecision(
       const { setSitePublished } = await import("@/lib/website/setSitePublished");
       const done = await setSitePublished(service, approval.dealership_id, true);
       if (!done.ok) return NextResponse.json({ error: done.error }, { status: done.status });
+      record({ sitePublished: true });
     }
 
     if (approval?.action_type === "generate_graphic") {
@@ -442,6 +498,7 @@ export async function applyApprovalDecision(
         min_order_value: d.min_order_value ?? null,
       });
       if (codeError) return NextResponse.json({ error: codeError.message }, { status: 500 });
+      record({ discountCode: d.code, discountType: d.discount_type, discountValue: d.value });
     }
 
     if (approval?.action_type === "set_automation_toggle") {
@@ -465,6 +522,7 @@ export async function applyApprovalDecision(
         .update({ [field]: true })
         .eq("id", approval.dealership_id);
       if (toggleError) return NextResponse.json({ error: toggleError.message }, { status: 500 });
+      record({ toggle: d.toggle, enabled: true });
     }
 
     // GRANTING THE PRODUCT PERMISSION TO ACT ALONE — S7/P5.
@@ -543,6 +601,9 @@ export async function applyApprovalDecision(
         console.error(`[approvals] could not create the proposed page for ${approval.dealership_id}: ${pageError.message}`);
         return NextResponse.json({ error: "Could not create that page just now." }, { status: 500 });
       }
+      // UNPUBLISHED, and said so: a later turn must not tell him the
+      // page is live when it is a draft waiting for copy.
+      record({ pageSlug: slug, pageTitle: title, published: false });
     }
 
     if (approval?.action_type === "grant_autonomy") {
@@ -575,6 +636,7 @@ export async function applyApprovalDecision(
         { onConflict: "dealership_id,action_key" }
       );
       if (levelError) return NextResponse.json({ error: levelError.message }, { status: 500 });
+      record({ autonomyGranted: wanted, level: "L2" });
     }
   }
 
@@ -586,6 +648,11 @@ export async function applyApprovalDecision(
       reviewed_at: new Date().toISOString(),
       rejection_reason: status === "rejected" ? (rejection_reason ?? null) : null,
       modified_details: status === "approved" && hasValidModification && approval.action_type === "change_campaign_budget" ? { new_budget: modified_details.new_budget } : null,
+      // WHAT IT PRODUCED, written in the same update that records the
+      // decision. A rejection produces nothing, and `{}` rather than
+      // null for the reason migration 237 gives: null would merge
+      // "produced nothing" with "could not be read".
+      result_details: status === "approved" && produced ? produced : {},
     })
     .eq("id", id)
     .select()
@@ -692,6 +759,10 @@ export async function applyApprovalDecision(
     // work is broken, nothing will ever run, and the owner must be told
     // rather than congratulated.
     if (released.kind === "not_a_publish_action" && (approval?.action_details as any)?.publish_action_id) {
+      // The broken link between a decision and its work. Recorded, or a
+      // later turn reads an approval with nothing against it and has no
+      // way to tell this from an action that simply produced nothing.
+      await saveResult({ publish: { status: "failed", reason: "the change this approval belongs to could not be found" } });
       return NextResponse.json({
         ...data,
         publish: {
@@ -704,6 +775,21 @@ export async function applyApprovalDecision(
 
     if (released.kind === "ran") {
       const { outcome } = released;
+
+      // RECORDED BEFORE THE BRANCHING, so that every outcome below is
+      // on the row — stale and failed included. "Approved but not
+      // applied" is the thing a later turn most needs to know and the
+      // thing it is most likely to get wrong: the P5 failure was the
+      // chat saying "Applied." in green over a change that never ran.
+      // Narrowed rather than cast: platformResponse exists only on the
+      // executed variant, and `as any` here would have hidden that.
+      const sealed = outcome.status === "executed" ? ((outcome.platformResponse as any)?.verification ?? null) : null;
+      await saveResult({
+        publish: {
+          status: outcome.status,
+          ...(sealed ? { verified: Boolean(sealed.verified), url: sealed.url ?? null } : {}),
+        },
+      });
 
       if (outcome.status !== "executed") {
         return NextResponse.json({
