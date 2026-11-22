@@ -1349,10 +1349,18 @@ export async function executeTool(
       // Decision C: the guard governs what HAWLAI writes. Wording the
       // owner typed themselves is theirs to stand behind — it is kept
       // exactly, and the card warns instead of editing it.
-      const { guardGenerated } = await import("../claims/claimCheck");
+      //
+      // F-01, FIXED 22 NOVEMBER 2026. `!metaFacts` returned the value
+      // UNCHECKED and said nothing, so a failed records read put a
+      // search title in front of more strangers than any caption with
+      // no guard at all — the same surface the 29 September incident is
+      // about, failing the other way.
+      const { guardOrMark, publishCheckWording } = await import("../claims/factsGate");
       const metaFacts = await factsFor(supabase, ctx);
       const ownWords = new Set((Array.isArray(input.writtenByOwner) ? input.writtenByOwner : []).map((f: any) => String(f)));
       const claimWarnings: string[] = [];
+      /** Set once by checkedCopy, so the "nothing left" message below tells the truth about which state it is in. */
+      let metaUnread = false;
       // S7/P1: what the guard took out, and what was kept because the
       // owner wrote it himself. Two counts, because they mean opposite
       // things to the demotion rule — see migration 217's owner_words.
@@ -1360,20 +1368,35 @@ export async function executeTool(
       let metaKeptByOwner = 0;
 
       function checkedCopy(field: "title" | "metaDescription", value: string | undefined): string | undefined {
-        if (value === undefined || !metaFacts) return value;
-        const verdict = guardGenerated({ value }, metaFacts, "publish");
-        if (verdict.removed.length === 0) return value;
+        if (value === undefined) return value;
+        const verdict = guardOrMark({ value }, metaFacts ?? null, "publish");
+        const say = publishCheckWording(verdict.state, OWNER_WORDS_PATH);
         const what = field === "title" ? "search title" : "description";
+        // THE ABSENCE IS STATED ONCE, not per field: two fields through
+        // one failed read is one failed read, and saying it twice reads
+        // as two different problems.
+        if (verdict.state === "FACTS_UNAVAILABLE" && !metaUnread) {
+          metaUnread = true;
+          const unchecked = String((verdict.output as any)._claimsNote ?? "").trim();
+          if (unchecked) claimWarnings.push(unchecked);
+        }
+        if (verdict.removed.length === 0) {
+          // In the unreadable state the fact-independent rules may still
+          // have emptied it, so the guard's own output is returned rather
+          // than the input — `value` would put the stripped line back.
+          const checked = String((verdict.output as any).value ?? "").trim();
+          return checked || undefined;
+        }
         if (ownWords.has(field)) {
           // KEPT, UNSUPPORTED, AND HIS. Counted apart from `removed`
           // because the two mean opposite things to S7's demotion rule.
           metaKeptByOwner += verdict.removed.length;
-          claimWarnings.push(`Your own wording is saved exactly as you wrote it. Worth knowing: your Business Story doesn't back up ${verdict.removed.join("; ")} — you're the one standing behind that claim.`);
+          claimWarnings.push(say.keptByOwner(verdict.removed));
           return value;
         }
         const kept = String((verdict.output as any).value ?? "").trim();
         metaRemoved.push(...verdict.removed);
-        claimWarnings.push(`Taken out of the ${what}, because your Business Story doesn't support it: ${verdict.removed.join("; ")}.`);
+        claimWarnings.push(say.removed(verdict.removed, what));
         return kept || undefined;
       }
 
@@ -1382,10 +1405,12 @@ export async function executeTool(
       const safeTitle = checkedCopy("title", title);
       const safeDescription = checkedCopy("metaDescription", metaDescription);
       if (safeTitle === undefined && safeDescription === undefined && shareImageUrl === undefined) {
+        // metaUnread, not metaFacts: the question is what the check that
+        // actually ran was able to see, and checkedCopy is the only
+        // thing that knows.
         return {
-          error: "Everything in that was a claim this business can't back up yet, so there'd be nothing left to put on the page.",
+          ...publishCheckWording(metaUnread ? "FACTS_UNAVAILABLE" : "FACTS_AVAILABLE", OWNER_WORDS_PATH).nothingLeft("put on the page"),
           saved: false,
-          note: `Write it again from what the business can actually support, or ask the owner to add the missing fact to their Business Story first. Do not simply resend the same wording. ${OWNER_WORDS_PATH}`,
         };
       }
 
@@ -1710,33 +1735,42 @@ export async function executeTool(
       // other piece of copy Hawlai writes — and wording the owner
       // typed himself is his to stand behind, kept exactly, with the
       // card warning instead of editing it.
-      const { guardGenerated: guardCollection } = await import("../claims/claimCheck");
+      // F-01, FIXED 22 NOVEMBER 2026: guardOrMark, never
+      // `facts ? guard() : skip`. A failed records read is a state, not
+      // a way through — those are generateCopy's own words, and this
+      // call site was one of four here doing exactly what they forbid.
+      // With collFacts null the whole check was skipped and the owner
+      // was told nothing, so a transient read failure published a
+      // collection description unguarded and unmarked.
+      const { guardOrMark: guardCollection, publishCheckWording: collWording } = await import("../claims/factsGate");
       const collFacts = await factsFor(supabase, ctx);
       const collWarnings: string[] = [];
       const collRemoved: string[] = [];
       let collKeptByOwner = 0;
       let safeText = newText;
 
-      if (collFacts) {
-        const verdict = guardCollection({ value: newText }, collFacts, "publish");
+      {
+        const verdict = guardCollection({ value: newText }, collFacts ?? null, "publish");
+        const say = collWording(verdict.state, OWNER_WORDS_PATH);
+        // THE NOTE FIRES EVEN WITH NOTHING REMOVED. unverifiedNote's
+        // first sentence is unconditional on purpose: copy that came
+        // back clean from a check that never ran must not read as
+        // checked, which is what F-01's own tests pin.
+        if (verdict.state === "FACTS_UNAVAILABLE") {
+          const unchecked = String((verdict.output as any)._claimsNote ?? "").trim();
+          if (unchecked) collWarnings.push(unchecked);
+          safeText = String((verdict.output as any).value ?? "").trim() || newText;
+        }
         if (verdict.removed.length > 0) {
           if (input.writtenByOwner === true) {
             collKeptByOwner = verdict.removed.length;
-            collWarnings.push(
-              `Your own wording is saved exactly as you wrote it. Worth knowing: your Business Story doesn't back up ${verdict.removed.join("; ")} — you're the one standing behind that claim.`
-            );
+            collWarnings.push(say.keptByOwner(verdict.removed));
           } else {
             const kept = String((verdict.output as any).value ?? "").trim();
             collRemoved.push(...verdict.removed);
-            collWarnings.push(
-              `Taken out, because your Business Story doesn't support it: ${verdict.removed.join("; ")}.`
-            );
+            collWarnings.push(say.removed(verdict.removed));
             if (!kept) {
-              return {
-                error: "Everything in that was a claim this business can't back up yet, so there'd be nothing left to put on the page.",
-                saved: false,
-                note: `Write it again from what the business can actually support, or ask the owner to add the missing fact to their Business Story first. Do not simply resend the same wording. ${OWNER_WORDS_PATH}`,
-              };
+              return { ...say.nothingLeft("put on the page"), saved: false };
             }
             safeText = kept;
           }
@@ -1899,7 +1933,10 @@ export async function executeTool(
       // THE CLAIMS CHECK, on the headline and the body together. A
       // blog post is the longest piece of customer-facing prose this
       // product writes, so it is the last place to make an exception.
-      const { guardGenerated: guardPost } = await import("../claims/claimCheck");
+      // F-01, FIXED 22 NOVEMBER 2026. `if (postFacts)` meant a failed
+      // records read published the longest piece of customer-facing
+      // prose this product writes with no check and no note at all.
+      const { guardOrMark: guardPost, publishCheckWording: postWording } = await import("../claims/factsGate");
       const postFacts = await factsFor(supabase, ctx);
       const postWarnings: string[] = [];
       const postRemoved: string[] = [];
@@ -1907,28 +1944,28 @@ export async function executeTool(
       let safeTitleText = postTitle;
       let safeBody = postBody;
 
-      if (postFacts) {
-        const verdict = guardPost({ title: postTitle, body: postBody }, postFacts, "publish");
+      {
+        const verdict = guardPost({ title: postTitle, body: postBody }, postFacts ?? null, "publish");
+        const say = postWording(verdict.state, OWNER_WORDS_PATH);
+        if (verdict.state === "FACTS_UNAVAILABLE") {
+          const unchecked = String((verdict.output as any)._claimsNote ?? "").trim();
+          if (unchecked) postWarnings.push(unchecked);
+          const out = verdict.output as any;
+          safeTitleText = String(out.title ?? "").trim() || postTitle;
+          safeBody = String(out.body ?? "").trim() || postBody;
+        }
         if (verdict.removed.length > 0) {
           if (input.writtenByOwner === true) {
             postKeptByOwner = verdict.removed.length;
-            postWarnings.push(
-              `Your own wording is saved exactly as you wrote it. Worth knowing: your Business Story doesn't back up ${verdict.removed.join("; ")} — you're the one standing behind that claim.`
-            );
+            postWarnings.push(say.keptByOwner(verdict.removed));
           } else {
             const out = verdict.output as any;
             const keptTitle = String(out.title ?? "").trim();
             const keptBody = String(out.body ?? "").trim();
             postRemoved.push(...verdict.removed);
-            postWarnings.push(
-              `Taken out, because your Business Story doesn't support it: ${verdict.removed.join("; ")}.`
-            );
+            postWarnings.push(say.removed(verdict.removed));
             if (!keptTitle || !keptBody) {
-              return {
-                error: "Everything in that was a claim this business can't back up yet, so there'd be nothing left to post.",
-                saved: false,
-                note: `Write it again from what the business can actually support, or ask the owner to add the missing fact to their Business Story first. Do not simply resend the same wording. ${OWNER_WORDS_PATH}`,
-              };
+              return { ...say.nothingLeft("post"), saved: false };
             }
             safeTitleText = keptTitle;
             safeBody = keptBody;
@@ -3631,7 +3668,30 @@ Apply ONLY the change(s) implied by the instruction. Preserve every field you're
         return { error: `Not sent: the subject "${input.subject}" ${subjectProblem}. Give it a subject that says what the email is about and send again.` };
       }
       const facts = await factsFor(supabase, ctx);
-      if (facts) {
+      // F-01, FIXED 22 NOVEMBER 2026. This was `if (facts) { … }`, so a
+      // failed records read sent the email with the festive-wording and
+      // dead-link checks SKIPPED and nothing said about it.
+      //
+      // THE OTHER THREE SITES MARK AND CARRY ON; THIS ONE REFUSES, and
+      // the difference is deliberate. A page, a collection and a blog
+      // post can be edited after the fact, and guardOrMark's
+      // fact-independent subset still strips what is wrong whatever the
+      // records say. Neither applies here: both checks need the
+      // business's OWN records to mean anything — a link check with no
+      // record of the business's links cannot tell which links are its
+      // own, and `facts.season` is the only thing that knows which
+      // festival "the festive season" was supposed to be — and a sent
+      // email cannot be taken back. "Nobody checked" must never travel
+      // as "checked", and for an irreversible action it must not travel
+      // at all. That is the fail-closed direction F-01 states for a
+      // transient read error.
+      if (!facts) {
+        return {
+          error: "Not sent: Hawlai couldn't read this business's records just now, so the links and the wording in that email could not be checked. An email can't be taken back, so nothing was sent.",
+          note: "Say the records could not be read and offer to send it again in a moment. Do not describe anything as wrong with the email — nothing was found wrong with it, it was not checked.",
+        };
+      }
+      {
         const { vagueFestiveWording } = await import("../expertise/seasonalCalendar");
         const vague = vagueFestiveWording([input.subject, input.headline, input.intro, input.body].filter(Boolean).join("\n"), facts.season);
         if (vague) {

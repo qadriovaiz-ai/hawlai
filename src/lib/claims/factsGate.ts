@@ -256,6 +256,55 @@ export function unverifiedNote(removed: string[], unverifiable: string[]): strin
   return parts.join(" ");
 }
 
+/**
+ * What a PUBLISH surface tells the owner about its own check.
+ *
+ * FOUR CALL SITES IN masterBrainV2 each wrote `facts ? guard() : skip`
+ * — page meta, collection description, blog post, email — so each had
+ * wording for one state and SILENCE for the other. Fixed 22 November
+ * 2026, and the wording is shared rather than copied four times
+ * because the sentence that goes wrong is always the same sentence:
+ *
+ *   "your Business Story doesn't back this up"
+ *
+ * is a claim ABOUT THE RECORDS. With the records unread it is false,
+ * and worse than false — it tells the owner their own business is
+ * missing a fact when what actually happened is that a read failed.
+ * The second half matters as much: "do not simply resend the same
+ * wording" is right when a claim is unsupported and wrong when a
+ * retry in a moment would check it properly.
+ */
+export function publishCheckWording(state: FactsState, ownerWordsPath: string) {
+  const unread = state !== "FACTS_AVAILABLE";
+  const list = (removed: string[]) => `${removed.join("; ")}`;
+  return {
+    // `what` names the surface ("search title", "description"). Taken as
+    // an argument rather than patched into the returned sentence by the
+    // caller: a .replace() on this wording breaks silently the day the
+    // wording is reworded, and the caller would still read as correct.
+    removed: (removed: string[], what?: string) => {
+      const where = what ? ` of the ${what}` : "";
+      return unread
+        ? `Taken out${where}, because Hawlai couldn't read your store records to check it: ${list(removed)}. Try again in a moment and it will be checked properly.`
+        : `Taken out${where}, because your Business Story doesn't support it: ${list(removed)}.`;
+    },
+    keptByOwner: (removed: string[]) =>
+      unread
+        ? `Your own wording is saved exactly as you wrote it. Worth knowing: Hawlai couldn't read your store records just now, so ${list(removed)} went out unchecked — you're the one standing behind that claim.`
+        : `Your own wording is saved exactly as you wrote it. Worth knowing: your Business Story doesn't back up ${list(removed)} — you're the one standing behind that claim.`,
+    nothingLeft: (thing: string) =>
+      unread
+        ? {
+            error: `Hawlai couldn't read your store records, and without them every line in that reads as an unsupported claim — so there'd be nothing left to ${thing}.`,
+            note: "Nothing is wrong with the wording as far as anyone knows: the records could not be read. Say so, and offer to try again in a moment.",
+          }
+        : {
+            error: `Everything in that was a claim this business can't back up yet, so there'd be nothing left to ${thing}.`,
+            note: `Write it again from what the business can actually support, or ask the owner to add the missing fact to their Business Story first. Do not simply resend the same wording. ${ownerWordsPath}`,
+          },
+  };
+}
+
 /** Whether this output is safe to put in front of a customer without the owner reading it first. */
 export function safeToAutoPublish(output: unknown): boolean {
   if (!output || typeof output !== "object") return false;

@@ -58,10 +58,43 @@ describe("1. there is ONE statement of the path, and every refusal carries it", 
     const pushes = [
       /Do NOT retry with the same name[^`]*\$\{OWNER_WORDS_PATH\}/,
       /add the missing fact to their Business Story first[^`]*\$\{OWNER_WORDS_PATH\}/,
-      /ask the owner to add the missing fact[^`]*\$\{OWNER_WORDS_PATH\}/,
       /ask them to record the missing fact first[^`]*\$\{OWNER_WORDS_PATH\}/,
     ];
     for (const re of pushes) expect(BRAIN).toMatch(re);
+
+    // THE FOURTH ONE MOVED, 22 November 2026, and is asserted in two
+    // halves rather than dropped. "ask the owner to add the missing
+    // fact … ${OWNER_WORDS_PATH}" was written out at three publish call
+    // sites, and in the records-unreadable state all three said the
+    // business could not back the claim up — false, since nothing read
+    // the records. publishCheckWording (factsGate) owns both wordings
+    // now, and the path reaches it as an argument.
+    //
+    // BOTH HALVES, because either alone is satisfiable while the
+    // property is false: a helper that interpolates a path nobody
+    // passes, or a caller that passes a path the helper ignores.
+    const gate = code("src/lib/claims/factsGate.ts");
+    expect(gate, "the helper no longer names the owner-words path").toMatch(
+      /ask the owner to add the missing fact[^`]*\$\{ownerWordsPath\}/
+    );
+    // THE ALIASES ARE FOLLOWED, not assumed away. Every case in this
+    // switch shares one block scope, so each one imports the helper
+    // under its own name (`publishCheckWording: collWording`) — and a
+    // regex for `publishCheckWording(` therefore finds two of the four
+    // call sites and reports the other two as absent. It did exactly
+    // that before this was written.
+    const localNames = new Set<string>(["publishCheckWording"]);
+    for (const m of BRAIN.matchAll(/publishCheckWording: (\w+)/g)) localNames.add(m[1]);
+    expect(localNames.size, "the helper is imported under no name at all").toBeGreaterThanOrEqual(3);
+
+    const callers: string[] = [];
+    for (const name of localNames) {
+      for (const m of BRAIN.matchAll(new RegExp(`\\b${name}\\(([^)]*)\\)`, "g"))) callers.push(`${name}(${m[1]})`);
+    }
+    expect(callers.length, "nothing calls the helper any more").toBeGreaterThanOrEqual(3);
+    for (const call of callers) {
+      expect(call, `a caller passes no owner-words path: ${call}`).toMatch(/OWNER_WORDS_PATH/);
+    }
   });
 
   it("AND NO REFUSAL NOTE SAYS 'DO NOT RESEND' WITHOUT IT", () => {

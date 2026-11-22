@@ -98,8 +98,19 @@ describe("3. CUSTOMER-FACING COPY GOES THROUGH THE CLAIMS LAYER", () => {
     // Nothing customer-facing bypasses src/lib/claims. A collection
     // description and a blog post are both prose a stranger reads.
     const body = caseBody(name);
-    expect(body).toMatch(/guardGenerated/);
-    expect(body).toMatch(/claims\/claimCheck/);
+    // WAS `guardGenerated` / `claims/claimCheck`, CHANGED 22 NOVEMBER
+    // 2026. Both tools now call guardOrMark from claims/factsGate,
+    // because `if (facts) { guardGenerated(...) }` skipped the whole
+    // check when a records read failed — F-01, which generateCopy
+    // forbids in its own words. guardOrMark runs guardGenerated when
+    // the records are readable and the fact-independent subset when
+    // they are not, so this is the same guard plus a second state.
+    //
+    // `?? null` is part of the assertion: it is what makes the call
+    // unconditional, and a reintroduced `if (facts)` would show up here
+    // as the argument reverting to the bare variable.
+    expect(body).toMatch(/guard\w*\(\s*\{[^}]*\},\s*\w+ \?\? null,\s*"publish"\)/);
+    expect(body).toMatch(/claims\/factsGate/);
     expect(body).toMatch(/claimCheck: claimCheckField/);
   });
 
@@ -111,7 +122,15 @@ describe("3. CUSTOMER-FACING COPY GOES THROUGH THE CLAIMS LAYER", () => {
       // anything for it, which is why the two counts are separate.
       const body = caseBody(name);
       expect(body).toMatch(/writtenByOwner === true/);
-      expect(body).toMatch(/you're the one standing behind that claim/);
+      // THE SENTENCE MOVED, THE INVARIANT DID NOT — 22 November 2026.
+      // "you're the one standing behind that claim" was written out at
+      // four call sites, and in the unreadable state all four said
+      // "your Business Story doesn't back up X", which is a claim ABOUT
+      // THE RECORDS and false when the records were never read. One
+      // helper now owns both wordings, so this asserts the call and
+      // tests/publishGuardWithoutFacts.test.ts asserts what it says.
+      expect(body).toMatch(/\.keptByOwner\(verdict\.removed\)/);
+      expect(body).toMatch(/publishCheckWording/);
       expect(body).toMatch(/ownerWords:/);
       expect(body).toMatch(/keptUnsupported:/);
     }
@@ -123,8 +142,21 @@ describe("3. CUSTOMER-FACING COPY GOES THROUGH THE CLAIMS LAYER", () => {
       // When the guard removes everything, there is nothing left to
       // publish — and resending the same wording is not the fix.
       const body = caseBody(name);
-      expect(body).toMatch(/nothing left to/);
-      expect(body).toMatch(/Do not simply resend the same wording/);
+      // THE REFUSAL IS STILL HERE, its wording moved — 22 November 2026.
+      // Both sentences now live in publishCheckWording (factsGate),
+      // because in the unreadable state all four call sites said
+      // "this business can't back it up", which is false when the
+      // records were never read. The call is asserted here and the
+      // sentences below, so neither half can go missing on its own.
+      expect(body).toMatch(/\.nothingLeft\("[^"]+"\)/);
+      expect(body).toMatch(/saved: false/);
+      const gate = code("src/lib/claims/factsGate.ts");
+      expect(gate).toMatch(/nothing left to/);
+      expect(gate).toMatch(/Do not simply resend the same wording/);
+      // AND IT IS SAID ONLY WHERE IT IS TRUE: with the records unread a
+      // retry in a moment WOULD check it properly, so that advice must
+      // not be the one the owner gets. Pinned in both directions in
+      // tests/publishGuardWithoutFacts.test.ts.
     }
   );
 

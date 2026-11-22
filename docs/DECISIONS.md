@@ -4489,3 +4489,53 @@ Nothing in the guard consults it. The owner-facing sentence said "From
 then on, Hawlai only treats your own words as proof", which told them
 finishing the list was what switched the rule on — false after this
 change, and corrected in the same commit.
+
+---
+
+## 2026-11-22 — F-01 at the four publish surfaces that still skipped the guard
+
+`generateCopy.ts` states the rule above its own call: *"F-01:
+guardOrMark, never `facts ? guard() : skip`. A failed records read is a
+state, not a way through."* `masterBrainV2.ts` had four call sites doing
+exactly what that forbids, all four on publish or send paths —
+`propose_page_meta`, `edit_collection_text`, `publish_blog_post`,
+`send_email`. Each silently passed when `gatherBusinessFactsSafely`
+returned null: no strip, no warning, no `_factsState` mark.
+
+**Three mark and carry on, one refuses.** A page, a collection and a
+blog post can be edited afterwards, and `guardOrMark`'s
+fact-independent subset still strips what is wrong whatever the records
+say — so those three follow F-01's existing shape: check what can be
+checked, and say plainly that nothing was checked against the records.
+`send_email` refuses. Both of its checks need the business's **own**
+records to mean anything — a link check with no record of the
+business's links cannot tell which links are its own, and `facts.season`
+is the only thing that knows which festival "the festive season" was —
+and a sent email cannot be taken back. For an irreversible action,
+"nobody checked" must not travel at all.
+
+**The wording is shared because the same sentence was wrong at all four
+sites.** "Your Business Story doesn't support it" is a claim *about the
+records*; with the records unread it is false, and worse than false — it
+tells the owner their own business is missing a fact when what happened
+was a read failure. `publishCheckWording(state, ownerWordsPath)` owns
+both wordings. The second half matters as much: *"do not simply resend
+the same wording"* is right advice for an unsupported claim and wrong
+advice when a retry in a moment would check it properly.
+
+**The surface label is an argument, not a `.replace()`.**
+`propose_page_meta` patched "Taken out," into "Taken out of the search
+title," on the returned sentence. That breaks silently the day the
+sentence is reworded, and the call site still reads as correct.
+
+**Nine existing assertions in three files failed, and were brought here
+rather than bent** (rule 7). Every one was a source grep for a literal
+that moved into the helper — none was a behavioural failure, and nothing
+was actually broken. Each now asserts the same invariant in two halves,
+the call at the site and the sentence in the helper, so neither half can
+go missing alone. All four files were re-verified by mutation
+afterwards. `ownerWordsPath.test.ts` needed one further fix of its own:
+its new assertion searched for `publishCheckWording(` and found two of
+the four call sites, because each `case` in that switch shares one block
+scope and so imports the helper under its own alias. It follows the
+aliases now.

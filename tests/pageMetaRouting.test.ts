@@ -37,7 +37,18 @@ describe("1. THE CLAIMS GUARD RUNS BEFORE THE ROUTING", () => {
     // remembered to update. Asserted by POSITION, which is the only
     // way to state it.
     const b = body();
-    const guard = b.indexOf("guardGenerated");
+    // ANCHORED ON THE CALL, not the bare name — the name also appears in
+    // this case's own `await import(...)` destructuring, which sits
+    // above everything and would make this ordering assertion pass
+    // whatever happened to the guard. That is the exact miss recorded
+    // for 12 November.
+    //
+    // WAS "guardGenerated", CHANGED 22 NOVEMBER 2026: this call site
+    // skipped the check entirely when a records read failed, so it now
+    // goes through guardOrMark, which runs guardGenerated when the
+    // records are readable and the fact-independent subset when they
+    // are not.
+    const guard = b.indexOf("guardOrMark({");
     const route = b.indexOf("wantsShopify");
     expect(guard, "the guard is missing entirely").toBeGreaterThan(-1);
     expect(route, "the routing is missing entirely").toBeGreaterThan(-1);
@@ -46,7 +57,9 @@ describe("1. THE CLAIMS GUARD RUNS BEFORE THE ROUTING", () => {
 
   it("and there is only ONE call to it", () => {
     const b = body();
-    expect(b.match(/guardGenerated\(/g) ?? []).toHaveLength(1);
+    // A count is right here, because the claim IS about the count:
+    // exactly one call, so Decision C cannot exist in two copies.
+    expect(b.match(/guardOrMark\(/g) ?? []).toHaveLength(1);
   });
 });
 
