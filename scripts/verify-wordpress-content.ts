@@ -485,6 +485,52 @@ async function main(): Promise<number> {
     record("a WooCommerce action is refused by the WordPress adapter", !unsupported.ok, !unsupported.ok ? unsupported.reason : "it accepted one");
   }
 
+  // ================================================================
+  // 5. The resolver — "my about page" into a reference
+  // ================================================================
+  console.log("\n5. resolving what the owner names\n");
+  {
+    const { listWordPressResources, resolveWordPressResource } = await import("../src/lib/publish/platforms/wordpressResources");
+    const all = await listWordPressResources(creds, "page");
+    if (!all) {
+      record("list the site's pages", false, "could not read them");
+    } else {
+      record("list the site's pages", all.length > 0, all.map((r) => `${r.handle} (${r.title})`).join(", "));
+      // DRAFTS ARE INCLUDED, and this site has one. Without them a
+      // page sitting in the owner's own editor answers "nothing on
+      // this site is called that".
+      const statuses = await wordpressRequest<any[]>(creds, "/wp/v2/pages?per_page=100&status=publish,draft,pending,private");
+      const drafts = statuses.ok ? statuses.data.filter((p: any) => p.status !== "publish") : [];
+      record(
+        drafts.length ? "UNPUBLISHED PAGES ARE RESOLVABLE TOO" : "every page on this site is published, so drafts are untested here",
+        drafts.length ? all.some((r) => r.id === `page:${drafts[0].id}`) : true,
+        drafts.length ? `${drafts[0].slug} is ${drafts[0].status} and is in the list` : ""
+      );
+      // THE REFERENCE IS QUALIFIED. A bare id is not a reference to
+      // anything, because posts and pages share an id space.
+      record(
+        "every reference carries its kind",
+        all.every((r) => /^page:\d+$/.test(r.id)),
+        all.map((r) => r.id).join(", ")
+      );
+
+      const exact = await resolveWordPressResource(creds, "page", all[0].handle);
+      record("an exact slug resolves", exact.ok && exact.resource.id === all[0].id, exact.ok ? `${exact.resource.id} by ${exact.matchType}` : exact.message);
+
+      // A LOOSE MATCH IS OFFERED, NEVER APPLIED.
+      const partial = all[0].handle.slice(0, Math.max(3, all[0].handle.length - 3));
+      const loose = await resolveWordPressResource(creds, "page", partial);
+      record(
+        "A PARTIAL NAME ASKS RATHER THAN PICKING",
+        !loose.ok && (loose.reason === "needs_confirmation" || loose.reason === "ambiguous"),
+        !loose.ok ? `"${partial}" → ${loose.reason}: ${loose.message}` : "it picked one"
+      );
+
+      const missing = await resolveWordPressResource(creds, "page", "a page that does not exist anywhere");
+      record("a name that matches nothing is refused with the list", !missing.ok && missing.candidates.length > 0, !missing.ok ? missing.message : "it found one");
+    }
+  }
+
   console.log(`\n${"-".repeat(60)}\n${passed} passed, ${failed} failed`);
   if (failures.length) {
     console.log("\nFailed:");
