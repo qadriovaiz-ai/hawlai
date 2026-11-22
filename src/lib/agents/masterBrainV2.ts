@@ -297,7 +297,22 @@ function malformedToolError(result: { _fallback?: boolean; _aiFailure?: unknown;
 const OWNER_WORDS_PATH =
   "If these are THEIR OWN exact words, dictated by them, say so and set writtenByOwner on that edit — then it is saved verbatim, with a warning that they are the one standing behind the claim. Never set it for anything you wrote yourself, including a draft they approved.";
 
-export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: string, input: any, groundingContext: string): Promise<any> {
+export async function executeTool(
+  supabase: any,
+  ctx: DealershipCtx,
+  toolName: string,
+  input: any,
+  groundingContext: string,
+  /**
+   * The conversation this tool call belongs to, when there is one.
+   *
+   * Carried so that a resolver which EXACTLY matched what the owner
+   * named can record it — see settledSlots. Optional for the same
+   * reason the recall section is: a WhatsApp turn has no chat
+   * conversation row, and every existing caller passes five arguments.
+   */
+  conversationId?: string | null
+): Promise<any> {
   const gatedFeature: GatedFeatureKey | undefined =
     toolName === "manage_watch" && input?.kind === "competitor" ? "competitorIntel" : TOOL_FEATURE_MAP[toolName];
   if (gatedFeature) {
@@ -818,6 +833,16 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
           });
         }
 
+        // THE OWNER NAMED IT AND THE PLATFORM CONFIRMED IT, so write
+        // it down — settledSlots.ts carries the turn-two failure this
+        // prevents. Only on an exact handle or title match: "the only
+        // one there is" is a target WE chose, not an answer he gave,
+        // and a slot he never set must never skip a question.
+        if (textHit.matchType !== "only_one") {
+          const { settleSlot: settlePageSlot } = await import("../chat/settledSlots");
+          await settlePageSlot(supabase, conversationId, "page", textHit.resource.handle, textHit.resource.title);
+        }
+
         const liveRead = await textGraphQL<{ page: { id: string; title: string; handle: string; body: string | null; isPublished: boolean } | null }>(
           shopText.shop,
           shopText.accessToken,
@@ -1060,6 +1085,18 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
           source: "your Hawlai website",
           candidates: sitePages.map((p) => ({ key: String(p.slug), title: String(p.title ?? p.slug) })),
         });
+      }
+
+      // EXACT MATCH ONLY, and here it has to be re-derived: the
+      // resolution above falls back to the first page when the owner
+      // asked for "home", which is a page WE picked. Settling that
+      // would let a later turn treat our fallback as his answer.
+      if (
+        String(target.slug ?? "").toLowerCase() === askedFor ||
+        String(target.title ?? "").toLowerCase() === askedFor
+      ) {
+        const { settleSlot: settleSitePageSlot } = await import("../chat/settledSlots");
+        await settleSitePageSlot(supabase, conversationId, "page", String(target.slug), String(target.title ?? target.slug));
       }
 
       // The tree as it stands. Replaced by the converted one below when
@@ -1446,6 +1483,16 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
           });
         }
 
+        // THE OWNER NAMED IT AND THE PLATFORM CONFIRMED IT, so write
+        // it down — settledSlots.ts carries the turn-two failure this
+        // prevents. Only on an exact handle or title match: "the only
+        // one there is" is a target WE chose, not an answer he gave,
+        // and a slot he never set must never skip a question.
+        if (pageHit.matchType !== "only_one") {
+          const { settleSlot: settleMetaPageSlot } = await import("../chat/settledSlots");
+          await settleMetaPageSlot(supabase, conversationId, "page", pageHit.resource.handle, pageHit.resource.title);
+        }
+
         const shopMetaService = makeSiteService();
         const shopCreated = await createMetaAction(
           shopMetaService,
@@ -1538,6 +1585,16 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
           source: "your Hawlai website",
           candidates: allPages.map((p) => ({ key: String(p.slug), title: String(p.title ?? p.slug) })),
         });
+      }
+
+      // EXACT MATCH ONLY — same fallback-to-first-page reasoning as the
+      // page-text tool above.
+      if (
+        page.slug.toLowerCase() === asked ||
+        String(page.title ?? "").toLowerCase() === asked
+      ) {
+        const { settleSlot: settleSiteMetaSlot } = await import("../chat/settledSlots");
+        await settleSiteMetaSlot(supabase, conversationId, "page", page.slug, String(page.title ?? page.slug));
       }
 
       const siteService = makeSiteService();
@@ -1723,6 +1780,16 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
         });
       }
 
+      // THE OWNER NAMED IT AND THE PLATFORM CONFIRMED IT, so write
+      // it down — settledSlots.ts carries the turn-two failure this
+      // prevents. Only on an exact handle or title match: "the only
+      // one there is" is a target WE chose, not an answer he gave,
+      // and a slot he never set must never skip a question.
+      if (resolved.matchType !== "only_one") {
+        const { settleSlot: settleCollectionSlot } = await import("../chat/settledSlots");
+        await settleCollectionSlot(supabase, conversationId, "collection", resolved.resource.handle, resolved.resource.title);
+      }
+
       const collService = makeCollectionService();
       const collCreated = await createCollectionAction(
         collService,
@@ -1888,6 +1955,16 @@ export async function executeTool(supabase: any, ctx: DealershipCtx, toolName: s
           candidates: blogHit.candidates.map((b) => ({ key: b.handle, title: b.title })),
           confirmMessage: blogHit.reason === "needs_confirmation" ? blogHit.message : null,
         });
+      }
+
+      // THE OWNER NAMED IT AND THE PLATFORM CONFIRMED IT, so write
+      // it down — settledSlots.ts carries the turn-two failure this
+      // prevents. Only on an exact handle or title match: "the only
+      // one there is" is a target WE chose, not an answer he gave,
+      // and a slot he never set must never skip a question.
+      if (blogHit.matchType !== "only_one") {
+        const { settleSlot: settleBlogSlot } = await import("../chat/settledSlots");
+        await settleBlogSlot(supabase, conversationId, "blog", blogHit.resource.handle, blogHit.resource.title);
       }
 
       const postService = makePostService();
@@ -5541,6 +5618,16 @@ export async function runMasterBrainChat(
       .join("\n")}`;
   })();
 
+  // WHAT THE OWNER HAS ALREADY ANSWERED. Written when a resolver
+  // exactly matched something he named; read back here so an answered
+  // question cannot be re-litigated two turns later. The section says
+  // in its own words that it informs rather than acts — a settled slot
+  // never fills a tool argument. See src/lib/chat/settledSlots.ts.
+  const settledSlotsSection = await (async () => {
+    const { readSettledSlots, settledSection } = await import("../chat/settledSlots");
+    return settledSection(await readSettledSlots(supabase, conversationId));
+  })();
+
   const relevantKnowledge = await retrieveRelevantKnowledge(supabase, message);
   const knowledgeSection = relevantKnowledge.length > 0
     ? `\n\n## Relevant marketing knowledge for this request\nDrawn from a curated knowledge base — use this to inform your thinking, don't just repeat it verbatim or cite it like a textbook:\n${relevantKnowledge.map((k) => `- **${k.title}**: ${k.content}`).join("\n")}`
@@ -5643,7 +5730,7 @@ ${soundRule(normaliseLanguage(storeFacts?.brand?.language), ctx.toneOfVoice ?? s
 ## Email and WhatsApp — rules for anything you write or send, and how to answer questions about them
 ${CHANNEL_POLICY_FOR_CHAT}`;
 
-  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}${recentImagesSection}${recallSection}${soundSection}${channelPolicySection}
+  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}${recentImagesSection}${recallSection}${settledSlotsSection}${soundSection}${channelPolicySection}
 
 ## How you think, not just what you generate
 
@@ -5717,7 +5804,7 @@ A junior marketer takes a request literally and produces the thing asked for. A 
       toolsUsed.push(block.name);
       let result;
       try {
-        result = await executeTool(supabase, ctx, block.name, block.input, groundingContext);
+        result = await executeTool(supabase, ctx, block.name, block.input, groundingContext, conversationId);
       } catch (err: any) {
         result = { error: err.message };
       }
