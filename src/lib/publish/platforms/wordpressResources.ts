@@ -74,6 +74,86 @@ export async function listWordPressResources(
   }));
 }
 
+/** The kind a qualified reference names, or null if it is not one. */
+export function kindOfRef(ref: string): WordPressResourceKind | null {
+  const m = /^(post|page):\d+$/.exec(String(ref ?? "").trim());
+  return m ? (m[1] as WordPressResourceKind) : null;
+}
+
+/**
+ * Which piece of CONTENT the owner meant — post or page, not one or
+ * the other.
+ *
+ * ADDED 23 NOVEMBER 2026, after the live site settled an argument.
+ * `propose_page_meta` resolved pages only on WordPress, and pages are
+ * the one content type Yoast 28.9 will not expose to the REST API: it
+ * registers `_yoast_wpseo_title` for `post` and not for `page`,
+ * measured on the item's meta and on the route's OPTIONS schema, and
+ * the content-type toggles do not change it. So a pages-only search
+ * listing on WordPress was a feature that could never work, while the
+ * surface most WordPress businesses actually rank with — their posts —
+ * was unreachable.
+ *
+ * IT DOES NOT ASK THE OWNER WHICH KIND, and that is the point. "Set
+ * the search title on my about page" is a sentence about a thing, not
+ * about a WordPress taxonomy, and making them say "post" or "page"
+ * would be this product asking them to know its plumbing. Both lists
+ * are read and matched as one, so an unambiguous name resolves
+ * whatever it turns out to be.
+ *
+ * A TIE STILL ASKS, and the candidates carry their qualified
+ * references, so the answer comes back as "page:3" and resolves here
+ * exactly. That closes a loop the Shopify path does not have: a post
+ * and a page can share a slug, so answering with a handle alone could
+ * be ambiguous a second time.
+ */
+export async function resolveWordPressContent(
+  creds: WordPressCreds,
+  asked: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<ResolveResult> {
+  const [pages, posts] = await Promise.all([
+    listWordPressResources(creds, "page", fetchImpl),
+    listWordPressResources(creds, "post", fetchImpl),
+  ]);
+
+  // UNREADABLE ONLY IF BOTH FAILED. One kind answering and the other
+  // not is a partial read, and reporting "couldn't reach the site"
+  // over a list we actually have would be false — but so would
+  // silently matching against half the site, so it says which half.
+  if (pages === null && posts === null) {
+    return {
+      ok: false,
+      reason: "unreadable",
+      message: "Couldn't read this site's pages or posts from WordPress, so I don't know which one you mean.",
+      candidates: [],
+    };
+  }
+
+  const all = [...(pages ?? []), ...(posts ?? [])];
+
+  // A QUALIFIED REFERENCE IS ALREADY AN ANSWER. It is what the clarify
+  // card hands back, and treating it as a name to fuzzy-match would
+  // turn a decision the owner already made into another question.
+  if (kindOfRef(asked)) {
+    const hit = all.find((r) => r.id === asked.trim());
+    if (hit) return { ok: true, resource: hit, matchType: "handle" };
+  }
+
+  const matched = matchResource(asked, all, "site");
+  if (!matched.ok && matched.reason === "none_exist") {
+    return { ...matched, message: "This site has no pages or posts yet." };
+  }
+  if (!matched.ok && (pages === null || posts === null)) {
+    // Said plainly rather than left as a shorter list. "Nothing is
+    // called that" is a different claim from "I could only see half
+    // of it", and the owner can act on the second.
+    const unread = pages === null ? "pages" : "posts";
+    return { ...matched, message: `${matched.message} I couldn't read this site's ${unread}, so that half wasn't searched.` };
+  }
+  return matched;
+}
+
 /**
  * List and match in one call — what a producer actually wants.
  *

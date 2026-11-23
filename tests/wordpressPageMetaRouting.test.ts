@@ -140,7 +140,33 @@ describe("3. THE WORDPRESS BRANCH, and what it refuses to guess", () => {
     const wp = branch.slice(branch.indexOf("if (wantsWordPress) {"), branch.indexOf("if (wantsShopify) {"));
     expect(wp).toMatch(/wpHit\.reason === "unreadable"/);
     expect(wp).toMatch(/wpHit\.reason === "none_exist"/);
-    expect(wp).toMatch(/has no pages yet/);
+    // "pages or posts" since 23 November 2026: the resolver reads both
+    // content types, so a site with posts and no pages is not empty.
+    expect(wp).toMatch(/has no pages or posts yet/);
+  });
+
+  it("POSTS AND PAGES ARE RESOLVED TOGETHER, and the owner is not asked which", () => {
+    // Yoast 28.9 does not expose its SEO fields for `page` through the
+    // REST API, so a pages-only version of this could never work —
+    // and posts are the surface most WordPress businesses rank with.
+    // "Set the search title on my about page" is a sentence about a
+    // thing, not about a WordPress taxonomy.
+    const b = metaCase();
+    const wp = b.slice(b.indexOf("if (wantsWordPress) {"), b.indexOf("if (wantsShopify) {"));
+    expect(wp).toMatch(/resolveWordPressContent\(wpFor, askedWpPage\)/);
+    expect(wp, "it still resolves only one content type").not.toMatch(/resolveWordPressResource\(/);
+  });
+
+  it("A TIE HANDS BACK THE QUALIFIED REFERENCE, not a bare slug", () => {
+    // A post and a page can share a slug, so answering with a handle
+    // alone could be ambiguous a second time — and "About us, About
+    // us" is not a question anyone can answer.
+    const b = metaCase();
+    const wp = b.slice(b.indexOf("if (wantsWordPress) {"), b.indexOf("if (wantsShopify) {"));
+    expect(wp).toMatch(/key: c\.id,/);
+    expect(wp).toMatch(/\$\{kindOfRef\(c\.id\) \?\? "item"\}/);
+    // And what is remembered is the reference too, for the same reason.
+    expect(wp).toMatch(/settleWpPageSlot\(supabase, conversationId, "page", wpHit\.resource\.id,/);
   });
 
   it("A FAILED CREATE SAYS NOTHING WAS SAVED, in those words", () => {

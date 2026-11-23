@@ -537,6 +537,42 @@ async function main(): Promise<number> {
 
       const missing = await resolveWordPressResource(creds, "page", "a page that does not exist anywhere");
       record("a name that matches nothing is refused with the list", !missing.ok && missing.candidates.length > 0, !missing.ok ? missing.message : "it found one");
+
+      // ---- posts and pages as one thing ------------------------
+      //
+      // The surface that can actually be written: Yoast 28.9 exposes
+      // its SEO fields for `post` and not for `page` on this site, so
+      // a pages-only resolver put the whole feature out of reach.
+      const { resolveWordPressContent, kindOfRef } = await import("../src/lib/publish/platforms/wordpressResources");
+      const posts = await wordpressRequest<any[]>(creds, "/wp/v2/posts?per_page=1");
+      const firstPost = posts.ok ? posts.data[0] : null;
+      if (!firstPost) {
+        record("resolve a post by name", false, "this site has no posts");
+      } else {
+        const byName = await resolveWordPressContent(creds, firstPost.slug);
+        record(
+          "A POST RESOLVES WITHOUT ANYONE NAMING A CONTENT TYPE",
+          byName.ok && byName.resource.id === `post:${firstPost.id}`,
+          byName.ok ? `${firstPost.slug} -> ${byName.resource.id}` : byName.message
+        );
+        const byRef = await resolveWordPressContent(creds, `post:${firstPost.id}`);
+        record(
+          "and a qualified reference is an answer, not another question",
+          byRef.ok && byRef.resource.id === `post:${firstPost.id}`,
+          byRef.ok ? byRef.resource.id : byRef.message
+        );
+        record(
+          "the kind travels with the reference",
+          kindOfRef(`post:${firstPost.id}`) === "post",
+          `kindOfRef -> ${kindOfRef(`post:${firstPost.id}`)}`
+        );
+      }
+      const pageByName = await resolveWordPressContent(creds, all[0].handle);
+      record(
+        "and a page still resolves from the same call",
+        pageByName.ok && pageByName.resource.id === all[0].id,
+        pageByName.ok ? `${all[0].handle} -> ${pageByName.resource.id}` : pageByName.message
+      );
     }
   }
 

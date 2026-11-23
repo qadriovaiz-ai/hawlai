@@ -1530,32 +1530,53 @@ export async function executeTool(
           };
         }
 
-        const { resolveWordPressResource } = await import("../publish/platforms/wordpressResources");
+        // POSTS AND PAGES TOGETHER — 23 November 2026, at the owner's
+        // decision, after the live site proved a pages-only version
+        // could never work: Yoast 28.9 does not expose its SEO fields
+        // for `page` through the REST API, and posts are the surface
+        // most WordPress businesses actually rank with.
+        //
+        // The owner is NOT asked which kind. "Set the search title on
+        // my about page" is a sentence about a thing, not about a
+        // WordPress taxonomy.
+        const { resolveWordPressContent, kindOfRef } = await import("../publish/platforms/wordpressResources");
         const { createWordPressPlatform } = await import("../publish/platforms/wordpress");
         const askedWpPage = typeof input.page === "string" ? input.page : "";
-        const wpHit = await resolveWordPressResource(wpFor, "page", askedWpPage);
+        const wpHit = await resolveWordPressContent(wpFor, askedWpPage);
         if (!wpHit.ok) {
           if (wpHit.reason === "unreadable") return { error: wpHit.message, saved: false };
           if (wpHit.reason === "none_exist") {
-            return { error: "This WordPress site has no pages yet, so there's nothing to set a search title on." };
+            return { error: "This WordPress site has no pages or posts yet, so there's nothing to set a search title on." };
           }
           const { clarifyChoice: clarifyWpPage } = await import("../chat/clarify");
           return clarifyWpPage({
-            noun: "page",
+            noun: "page or post",
             keyName: "page",
             source: "this WordPress site",
-            candidates: wpHit.candidates.map((c) => ({ key: c.handle, title: c.title })),
+            // THE KEY IS THE QUALIFIED REFERENCE, not the slug, and
+            // the kind is in the title. A post and a page can share a
+            // slug, so answering with a handle alone could be
+            // ambiguous a second time — and "About us, About us" is
+            // not a question anyone can answer.
+            candidates: wpHit.candidates.map((c) => ({
+              key: c.id,
+              title: `${c.title} (${kindOfRef(c.id) ?? "item"})`,
+            })),
             confirmMessage: wpHit.reason === "needs_confirmation" ? wpHit.message : null,
           });
         }
+        const wpKind = kindOfRef(wpHit.resource.id) ?? "page";
 
         // THE OWNER NAMED IT AND THE PLATFORM CONFIRMED IT, so write it
         // down — settledSlots.ts carries the turn-two failure this
         // prevents. Only on an exact match: "the only one there is" is
         // a target WE chose, not an answer he gave.
         if (wpHit.matchType !== "only_one") {
+          // THE QUALIFIED REFERENCE IS WHAT IS REMEMBERED, not the
+          // slug. A later turn passing back a bare handle would be
+          // ambiguous again the moment a post and a page share one.
           const { settleSlot: settleWpPageSlot } = await import("../chat/settledSlots");
-          await settleWpPageSlot(supabase, conversationId, "page", wpHit.resource.handle, wpHit.resource.title);
+          await settleWpPageSlot(supabase, conversationId, "page", wpHit.resource.id, `${wpHit.resource.title} (${wpKind})`);
         }
 
         const wpMetaService = makeSiteService();
@@ -1567,7 +1588,7 @@ export async function executeTool(
             platform: "wordpress",
             actionKey: "update_page_meta",
             targetRef: wpHit.resource.id,
-            targetLabel: `${wpHit.resource.title} (/${wpHit.resource.handle})`,
+            targetLabel: `${wpHit.resource.title} (${wpKind} /${wpHit.resource.handle})`,
             // THE SAME KEYS AS THE OTHER TWO SURFACES. One ActionKey,
             // one payload shape — what publishPayloadContract.test.ts
             // exists to keep true after shopify.ts spent a day reading
@@ -1611,6 +1632,9 @@ export async function executeTool(
           surface: "wordpress",
           page: wpHit.resource.handle,
           page_label: wpHit.resource.title,
+          // WHICH KIND IT LANDED ON, so the reply can say "your About
+          // page" or "your post" rather than guessing from the name.
+          content_type: wpKind,
           summary: wpCreated.preview.summary,
           warnings: [...wpCreated.preview.warnings, ...claimWarnings],
           lengths: [

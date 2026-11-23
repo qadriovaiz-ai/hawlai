@@ -111,7 +111,7 @@ export const TOOLS = [
     input_schema: {
       type: "object",
       properties: {
-        page: { type: "string", description: "Which page — the slug, e.g. \"home\", \"about\", \"products\". Defaults to the homepage of their Hawlai site. If unsure which they mean, the tool returns the list to choose from." },
+        page: { type: "string", description: "Which page — the slug, e.g. \"home\", \"about\", \"products\". Defaults to the homepage of their Hawlai site. If unsure which they mean, the tool returns the list to choose from. ON WORDPRESS this also finds blog posts: name the thing the way they did and the tool works out whether it is a post or a page — never ask them which. If it comes back asking, pass the exact value it listed (it looks like \"post:12\"), not the title." },
         surface: {
           type: "string",
           enum: ["hawlai", "shopify", "wordpress"],

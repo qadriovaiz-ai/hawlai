@@ -177,3 +177,123 @@ describe("6. rule 3 — no business, product or trade is named", () => {
     expect(code("src/lib/publish/resolveResource.ts")).not.toMatch(/candle|qaaf|kurta|salon|bakery/i);
   });
 });
+
+// ---------------------------------------------------------------------
+// POSTS AND PAGES AS ONE THING — resolveWordPressContent.
+// ---------------------------------------------------------------------
+// ADDED 23 NOVEMBER 2026, at the owner's decision, after the live site
+// settled it: Yoast 28.9 registers _yoast_wpseo_title for `post` and
+// NOT for `page` — measured on the item's meta and on the route's
+// OPTIONS schema, after the content-type toggles were turned on and
+// changed nothing. A pages-only search listing on WordPress was a
+// feature that could never work, while the surface most WordPress
+// businesses actually rank with was unreachable.
+describe("7. ONE QUESTION ABOUT CONTENT, NOT TWO ABOUT TAXONOMY", () => {
+  const POSTS = [{ id: 11, slug: "hello-world", status: "publish", title: { raw: "Hello world!" } }];
+
+  /** Pages first, then posts — the order resolveWordPressContent reads them. */
+  function twoLists(pages: unknown, posts: unknown) {
+    const sent: string[] = [];
+    let i = 0;
+    const impl = (async (url: any) => {
+      sent.push(String(url));
+      const body = String(url).includes("/pages") ? pages : posts;
+      i += 1;
+      if (body === null) return { ok: false, status: 500, text: async () => "{}" };
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+    }) as unknown as typeof fetch;
+    return { impl, sent };
+  }
+
+  it("THE LOAD-BEARING ONE: a name that is a POST resolves, without anyone naming a type", async () => {
+    const { impl } = twoLists(PAGES, POSTS);
+    const { resolveWordPressContent } = await import("@/lib/publish/platforms/wordpressResources");
+    const r = await resolveWordPressContent(CREDS, "hello-world", impl);
+    expect(r.ok, !r.ok ? r.message : "").toBe(true);
+    expect(r.ok && r.resource.id).toBe("post:11");
+  });
+
+  it("and a name that is a PAGE still resolves from the same call", async () => {
+    const { impl } = twoLists(PAGES, POSTS);
+    const { resolveWordPressContent } = await import("@/lib/publish/platforms/wordpressResources");
+    const r = await resolveWordPressContent(CREDS, "privacy-policy", impl);
+    expect(r.ok && r.resource.id).toBe("page:3");
+  });
+
+  it("A SHARED SLUG IS A QUESTION, and the candidates carry their kind", async () => {
+    // The case a bare handle cannot answer twice: a post and a page
+    // called the same thing.
+    const clash = [{ id: 4, slug: "about", status: "publish", title: { raw: "About" } }];
+    const clashPost = [{ id: 12, slug: "about", status: "publish", title: { raw: "About" } }];
+    const { impl } = twoLists(clash, clashPost);
+    const { resolveWordPressContent } = await import("@/lib/publish/platforms/wordpressResources");
+    const r = await resolveWordPressContent(CREDS, "about", impl);
+    expect(r.ok, "it picked one of two things called About").toBe(false);
+    expect(!r.ok && r.candidates.map((c) => c.id).sort()).toEqual(["page:4", "post:12"]);
+  });
+
+  it("A QUALIFIED REFERENCE IS ALREADY AN ANSWER, not another question", async () => {
+    // It is what the clarify card hands back. Fuzzy-matching it would
+    // turn a decision the owner already made into another question.
+    const clash = [{ id: 4, slug: "about", status: "publish", title: { raw: "About" } }];
+    const clashPost = [{ id: 12, slug: "about", status: "publish", title: { raw: "About" } }];
+    const { impl } = twoLists(clash, clashPost);
+    const { resolveWordPressContent } = await import("@/lib/publish/platforms/wordpressResources");
+    const r = await resolveWordPressContent(CREDS, "post:12", impl);
+    expect(r.ok && r.resource.id).toBe("post:12");
+  });
+
+  it("a reference to something that is gone is NOT treated as a name", async () => {
+    const { impl } = twoLists(PAGES, POSTS);
+    const { resolveWordPressContent } = await import("@/lib/publish/platforms/wordpressResources");
+    const r = await resolveWordPressContent(CREDS, "page:999", impl);
+    expect(r.ok).toBe(false);
+  });
+
+  it("ONE KIND UNREADABLE IS NOT 'nothing is called that'", async () => {
+    // Matching against half the site and reporting it as the whole
+    // site is the silent-wrong-answer shape. It says which half.
+    const { impl } = twoLists(null, POSTS);
+    const { resolveWordPressContent } = await import("@/lib/publish/platforms/wordpressResources");
+    const r = await resolveWordPressContent(CREDS, "privacy-policy", impl);
+    expect(r.ok).toBe(false);
+    // THE PHRASE THAT ONLY THE PARTIAL CASE PRODUCES. `/couldn't read
+    // this site's pages/` was too loose: the BOTH-unreadable message
+    // says "pages or posts", which contains it, so a mutation turning
+    // a partial read into a hard failure SURVIVED.
+    expect(!r.ok && r.message).toMatch(/that half wasn't searched/i);
+    expect(!r.ok && r.reason, "a partial read is not an unreadable site").not.toBe("unreadable");
+  });
+
+  it("BOTH UNREADABLE IS unreadable, not empty", async () => {
+    const { impl } = twoLists(null, null);
+    const { resolveWordPressContent } = await import("@/lib/publish/platforms/wordpressResources");
+    const r = await resolveWordPressContent(CREDS, "about", impl);
+    expect(!r.ok && r.reason).toBe("unreadable");
+  });
+
+  it("a site with neither says so, naming both", async () => {
+    const { impl } = twoLists([], []);
+    const { resolveWordPressContent } = await import("@/lib/publish/platforms/wordpressResources");
+    const r = await resolveWordPressContent(CREDS, "about", impl);
+    expect(!r.ok && r.reason).toBe("none_exist");
+    expect(!r.ok && r.message).toMatch(/no pages or posts yet/i);
+  });
+
+  it("kindOfRef reads a reference and refuses anything else", async () => {
+    const { kindOfRef } = await import("@/lib/publish/platforms/wordpressResources");
+    expect(kindOfRef("post:1")).toBe("post");
+    expect(kindOfRef("page:22")).toBe("page");
+    for (const bad of ["1", "product:1", "page:", "page:x", "", "page:-1", "pages:1"]) {
+      expect(kindOfRef(bad), bad).toBeNull();
+    }
+    // SURROUNDING WHITESPACE IS FORGIVEN, deliberately and in step with
+    // the lookup, which trims before comparing. A reference arriving
+    // from a model's JSON with a stray space is the same reference,
+    // and refusing it would ask the owner the question again for a
+    // character nobody typed. My first version of this test asserted
+    // the opposite and was simply wrong about the code.
+    expect(kindOfRef("page:1 ")).toBe("page");
+    expect(kindOfRef(" post:2")).toBe("post");
+  });
+});
