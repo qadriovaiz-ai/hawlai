@@ -28,6 +28,7 @@
 
 import { getActionPolicy, type RiskLevel } from "@/lib/executionPolicy";
 import { dispatcherFor } from "@/lib/dispatch/registry";
+import { emitEvent } from "@/lib/events/emitEvent";
 
 export type ApprovalRequest = {
   /** A key in ACTION_POLICIES. Refused if it isn't. */
@@ -137,6 +138,51 @@ export async function requestApproval(
   if (error || !data?.id) {
     return { error: `Couldn't create the approval, so nothing was done: ${error?.message ?? "no row returned"}` };
   }
+
+  // ─────────────────────────────────────────────────────────────────
+  // H3-a — TELL HIM, AND DO IT FROM SOMEWHERE ELSE
+  // ─────────────────────────────────────────────────────────────────
+  //
+  // Until now an approval appeared on the dashboard and nowhere else,
+  // which is the screen he is trying not to open. A card nobody knows
+  // about is a card nobody answers.
+  //
+  // AN EVENT, NOT A CALL, and that is the whole design. The first
+  // attempt at H3 called the notifier from right here and
+  // s6ExitTest failed — "a send cannot be reached from its tool at
+  // all", walked with every door open. This function is on every
+  // approval-raising tool's path, so anything it can reach, a tool can
+  // reach. The guard is right.
+  //
+  // THE BRANCH'S OWN PLAN DID NOT WORK EITHER. Its note said to wire
+  // this up "when the template lands", sending from the webhook — the
+  // one permitted WhatsApp sender. But the walk does not care which
+  // file the sender lives in: a call from here that ends at a sender
+  // is reachable from the tool wherever it lands.
+  //
+  // So nothing is sent on this path. A row goes in `event_queue`, and
+  // /api/events/dispatch — pg_cron every two minutes, outside any
+  // tool's reach — reads it and does the sending. The notice arrives
+  // within a couple of minutes instead of instantly, which is the
+  // price, and it is the right price: "instantly" was never the
+  // requirement, "he finds out" was.
+  //
+  // AFTER THE GUARD ABOVE, DELIBERATELY. The row exists and the
+  // dashboard already has it before anything is queued, so a failure
+  // here is a worse day and not a lost decision. `emitEvent` swallows
+  // its own errors for the same reason and returns nothing, so there
+  // is no answer to accidentally branch on.
+  //
+  // ONLY THE ID TRAVELS. Putting `confirm` in the payload would make a
+  // second copy of the sentence stored on the row, and
+  // notifyOwner.ts's own header is about those two not drifting. The
+  // handler re-reads the row — which also lets it stay quiet about an
+  // approval he has already decided in those two minutes.
+  await emitEvent(supabase, {
+    dealershipId,
+    eventType: "approval_raised",
+    payload: { approvalId: data.id },
+  });
 
   // The more severe of the two, so an override can raise the level and
   // never quietly lower it.

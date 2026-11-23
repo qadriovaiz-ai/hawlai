@@ -279,10 +279,19 @@ describe("EVERY approval card stores the words it showed", () => {
     const { requestApproval } = await import("@/lib/chat/requestApproval");
     const { DISPATCHERS } = await import("@/lib/dispatch/registry");
     let stored: any = null;
+    // TABLE-AWARE, since 23 November 2026, and that is a strengthening.
+    //
+    // This fake ignored the table and kept whichever insert came LAST.
+    // H3-a added a second one — requestApproval now queues an
+    // `approval_raised` event after the row — so `stored` silently
+    // became the event_queue payload and `stored.action_details` was
+    // undefined. The assertions below are untouched; what changed is
+    // that the fake can no longer confuse one table's row for
+    // another's, which is the thing it exists to inspect.
     const supabase = {
-      from: () => ({
+      from: (table: string) => ({
         insert: (row: any) => {
-          stored = row;
+          if (table === "pending_approvals") stored = row;
           return { select: () => ({ single: async () => ({ data: { id: "ap-1" }, error: null }) }) };
         },
       }),

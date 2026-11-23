@@ -4864,3 +4864,81 @@ are now 57, and about a dozen (`auto_reply`, `claim_extraction`,
 `content_revision`, `positioning_write`, `video_script` and others)
 already fall into "Other". That predates this change and is a separate
 piece of work.
+
+---
+
+## 2026-11-23 — H3-a ships, and the parked branch's own plan would not have worked
+
+The owner confirmed all six sizing decisions from
+`docs/RESEARCH-WHATSAPP-PROACTIVE.md`: ship H3-a now by email, submit
+the template in parallel, **reach only** (never act), push three
+findings and leave three in the daily email, skip per-subsystem
+frequency, stay on Hobby.
+
+**The branch's resume note was wrong, and that is the finding.**
+`hawl-h3-deferred` said: un-skip the two tests, and the call arrives
+"when the template lands", sending from the webhook — already the one
+permitted WhatsApp sender. Both skipped tests asserted that
+`requestApproval` **calls** `notifyOwnerOfApproval`.
+
+That could never have passed. `tests/s6ExitTest.test.ts` walks from a
+chat tool's case body with every door open and asserts a send is not
+reachable at all; the walk **resolves by name and does not care which
+file the sender lives in**. `requestApproval` sits on every
+approval-raising tool's path, so a call from there that ends at a
+sender is reachable from a tool whether the sender sits in the webhook,
+a dispatcher or anywhere else. Un-skipping those two as written would
+have required exactly the design the guard forbids — the same wall the
+first attempt hit, reached a second way.
+
+**So the notice is an event.** `requestApproval` writes an
+`approval_raised` row to `event_queue` after the approval row is
+confirmed; `EVENT_HANDLERS.approval_raised` sends the email from
+`/api/events/dispatch`, which `pg_cron` calls every two minutes and no
+tool can walk to. The cost is that the notice arrives within a couple
+of minutes rather than instantly, and that is the right price:
+"instantly" was never the requirement, "he finds out" was.
+
+**The two skipped tests were rewritten, not deleted or weakened.** Both
+properties are unchanged — it is raised after the row exists, and its
+outcome cannot touch the approval — read off the mechanism that
+shipped. A third property is now assertable rather than hoped for: the
+walk from `requestApproval` reaches no sender with every door open, and
+the same walk pointed at the handler **does** reach one, so a green
+result cannot come from a blind measure.
+
+**The handler re-reads the row rather than trusting the payload**, and
+the second reason is the better one: `confirm` already lives on the
+row, so a copy in the payload would be the drift `notifyOwner.ts`'s
+header is about — and up to two minutes pass before the handler runs,
+so he may already have decided it on the dashboard. Emailing "this
+needs your OK" about something already approved is worse than silence.
+It is also scoped to the event's own business, because the dispatcher
+loops every tenant's events in one pass.
+
+**TWO EXISTING TESTS FAILED ON THE FULL SUITE, and both were right.**
+
+1. `tests/signupPlaceholder.test.ts` — *"NOBODY HAS HARDCODED IT
+   SOMEWHERE NEW"*. The parked file typed `"Your business"` as a
+   literal, which is `PLACEHOLDER_BUSINESS_NAME`. Fixed in the code,
+   not the allowlist: the constant is imported, exactly as
+   `monthlyReview.ts` already does. The words are right for a subject
+   line addressed to the owner; there is one definition of them.
+2. `tests/sitePublishGuard.test.ts` — its fake ignored the table name
+   and kept whichever insert came last, so the new `event_queue` write
+   became `stored` and `stored.action_details` was undefined. The fake
+   is now table-aware. **Its assertions are untouched**, and the change
+   is a strengthening: it can no longer confuse one table's row for
+   another's, which is the only thing it exists to inspect. Verified by
+   mutation — dropping `confirm` from `action_details` still fails it.
+
+Mutation-verified from a green baseline (90 passed): 11 of 12 killed,
+the 12th a control. **Mutation 1 is the one the owner asked for** —
+restoring the direct call from `requestApproval` — and it is killed by
+`tests/s6ExitTest.test.ts` itself, which is the proof that the guard
+that stopped the first attempt still stops that design.
+
+Not done, and not code: the Utility template is the owner's to submit.
+`sendWhatsAppTemplate` does not exist yet (H3-b) and `channelRules`
+has not been touched (H3-c) — its one-sender assertion is still exactly
+as it was, and a test in `approvalNotice` pins that.
