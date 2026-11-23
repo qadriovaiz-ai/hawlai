@@ -261,10 +261,16 @@ describe("WhatsApp stays tap-to-send", () => {
     // webhook send templates and the notice send free-form. Separate
     // lists say the true thing about each.
     //
-    // EMPTY TODAY, ON PURPOSE. H3-b added the transport; nothing is
-    // allowed to call it yet. Wiring the notice (H3-e) means adding
-    // ONE path here, deliberately, which a reviewer reads — the same
-    // reason TRANSPORTS is a hand-written list and not a folder glob.
+    // ONE PATH, ADDED DELIBERATELY — H3-e, 23 November 2026. It was
+    // empty for exactly one commit: H3-b added the transport and
+    // nothing was allowed to call it. The approval notice is now the
+    // single permitted template sender, and that is the whole point of
+    // a hand-written list — a reviewer reads the line that let it in,
+    // the same reason TRANSPORTS is not a folder glob.
+    //
+    // It is NOT the webhook, and that asymmetry is the rule: the
+    // webhook may send free-form because it can know somebody just
+    // messaged; the notice may send a template because it cannot.
     const templateSenders = all
       .map((f) => ({
         path: f.path,
@@ -272,7 +278,19 @@ describe("WhatsApp stays tap-to-send", () => {
       }))
       .filter((f) => /\bsendWhatsAppTemplate\s*\(/.test(f.text))
       .map((f) => f.path);
-    expect(templateSenders).toEqual([]);
+    expect(templateSenders).toEqual(["lib/approvals/whatsappNotice.ts"]);
+  });
+
+  it("AND THE NOTICE SENDS NO FREE-FORM MESSAGE, which is the other half", () => {
+    // The two lists only mean something together. The notice is allowed
+    // a template precisely BECAUSE it cannot know the window is open —
+    // so it must not be able to send the shape that is illegal when
+    // that guess is wrong.
+    const notice = all.find((f) => f.path === "lib/approvals/whatsappNotice.ts");
+    expect(notice, "the approval notice is gone").toBeTruthy();
+    expect(notice!.text, "the notice learned to send free-form WhatsApp").not.toMatch(
+      /\bsendWhatsApp(?:Text|Image)\s*\(/
+    );
   });
 
   it("AND THE MEASURE WOULD SEE A TEMPLATE SENDER IF THERE WERE ONE", () => {

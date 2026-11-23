@@ -210,3 +210,166 @@ describe("4. THE SWITCH STAYS THE ONE PLACE THAT CHOOSES", () => {
     expect(src).not.toMatch(/graph\.facebook\.com|api\.gupshup\.io/);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────
+// H3-e — WHEN THE NOTICE GOES TO WHATSAPP AT ALL
+//
+// Split out of notifyOwner.ts rather than added to it: an assertion
+// there has held since H3's branch that the file contains no
+// `sendWhatsApp` at all, and relaxing it would have been a test edited
+// to fit a change. The code moved instead — the third time in this
+// feature, and the same answer each time.
+// ──────────────────────────────────────────────────────────────────
+
+import { freeFormStillAllowed, approvalTemplateName, whatsappApprovalNotice } from "@/lib/approvals/whatsappNotice";
+
+const VERIFIED = {
+  dealership_name: "candle_by_qaaf",
+  owner_whatsapp_number: "918115015907",
+  owner_whatsapp_verified: true,
+};
+
+/** A client that answers the session read and nothing else. */
+const sessionAt = (updated_at: string | null) => ({
+  from: () => {
+    const api: any = {
+      select: () => api,
+      eq: () => api,
+      maybeSingle: async () => ({ data: updated_at === null ? null : { updated_at }, error: null }),
+    };
+    return api;
+  },
+});
+
+describe("5. THE SESSION WINDOW, AND WHICH WAY IT IS ALLOWED TO BE WRONG", () => {
+  const now = Date.UTC(2026, 10, 23, 20, 0, 0);
+  const hoursAgo = (h: number) => new Date(now - h * 3600_000).toISOString();
+
+  it("A RECENT EXCHANGE MEANS FREE-FORM IS STILL LEGAL", () => {
+    expect(freeFormStillAllowed(hoursAgo(1), now)).toBe(true);
+    expect(freeFormStillAllowed(hoursAgo(23.9), now)).toBe(true);
+  });
+
+  it("AND PAST 24 HOURS IT IS NOT", () => {
+    expect(freeFormStillAllowed(hoursAgo(24.1), now)).toBe(false);
+    expect(freeFormStillAllowed(hoursAgo(72), now)).toBe(false);
+  });
+
+  it("NO RECORD AND AN UNREADABLE ONE BOTH READ AS CLOSED", () => {
+    // THE DIRECTION IS THE POINT. Unknown must never read as "open":
+    // free-form outside the window is refused by the provider, and the
+    // refusal arrives where nobody can be told about it.
+    for (const bad of [null, undefined, "", "not a date", "0000-13-45"]) {
+      expect(freeFormStillAllowed(bad as any, now), JSON.stringify(bad)).toBe(false);
+    }
+  });
+});
+
+describe("6. THE WHATSAPP LEG IS OFF UNTIL A TEMPLATE IS NAMED", () => {
+  beforeEach(() => {
+    delete process.env.WHATSAPP_APPROVAL_TEMPLATE;
+    // THE CHOOSER IS IN THE PATH HERE, unlike section 2 which calls the
+    // Meta client directly. whatsappApprovalNotice goes through
+    // client.ts, which refuses when WHATSAPP_PROVIDER is unset — the
+    // fail-closed behaviour that dropped the first two live deliveries
+    // in M4. So the provider is declared, as a deploy would.
+    process.env.WHATSAPP_PROVIDER = "meta";
+  });
+  afterEach(() => {
+    delete process.env.WHATSAPP_APPROVAL_TEMPLATE;
+    delete process.env.WHATSAPP_PROVIDER;
+  });
+
+  it("NO TEMPLATE NAMED, NOTHING SENT — which is today's state", async () => {
+    // THE LOAD-BEARING ONE WHILE approval_waiting_v2 IS PENDING.
+    // Sending against an unapproved template fails every time, and
+    // that failure cannot reach the owner.
+    metaAnswers();
+    expect(approvalTemplateName()).toBeNull();
+    expect(await whatsappApprovalNotice(sessionAt(null), VERIFIED, "a3f29c10-1111", "Send it.")).toBe(false);
+    expect(sent.length).toBe(0);
+  });
+
+  it("AN UNVERIFIED NUMBER IS NEVER MESSAGED", async () => {
+    // The same check the inbound webhook makes before acting as the
+    // owner. Messaging an unverified number is that hole from the
+    // other side.
+    process.env.WHATSAPP_APPROVAL_TEMPLATE = "approval_waiting_v2";
+    metaAnswers();
+    for (const business of [
+      { ...VERIFIED, owner_whatsapp_verified: false },
+      { ...VERIFIED, owner_whatsapp_verified: null },
+      { ...VERIFIED, owner_whatsapp_number: "" },
+      { ...VERIFIED, owner_whatsapp_number: null },
+    ]) {
+      expect(await whatsappApprovalNotice(sessionAt(null), business as any, "a3f29c10-1111", "Send it.")).toBe(false);
+    }
+    expect(sent.length).toBe(0);
+  });
+
+  it("WITH A TEMPLATE NAMED AND A VERIFIED NUMBER, IT SENDS — in the approved order", async () => {
+    process.env.WHATSAPP_APPROVAL_TEMPLATE = "approval_waiting_v2";
+    metaAnswers();
+    expect(
+      await whatsappApprovalNotice(sessionAt(null), VERIFIED, "a3f29c10-1111-2222-3333-444444444444", "Send the Diwali email to 40 customers.")
+    ).toBe(true);
+    expect(sent.length).toBe(1);
+    expect(sent[0].body.template.name).toBe("approval_waiting_v2");
+    expect(sent[0].body.template.components[0].parameters.map((p: any) => p.text)).toEqual([
+      // The handle becomes words — businessDisplayName, not the raw
+      // signup handle, which is what a customer-facing name would be.
+      "Candle by Qaaf",
+      "Send the Diwali email to 40 customers.",
+      "A3F2",
+    ]);
+  });
+
+  it("AND A TEMPLATE IS SENT INSIDE THE WINDOW TOO, not free-form", async () => {
+    // channelRules permits free-form from the webhook ONLY, because
+    // that is the file that can know somebody just messaged. This one
+    // has a proxy, and a proxy is not a basis for choosing the shape
+    // that is illegal when it guesses wrong.
+    process.env.WHATSAPP_APPROVAL_TEMPLATE = "approval_waiting_v2";
+    metaAnswers();
+    await whatsappApprovalNotice(sessionAt(new Date().toISOString()), VERIFIED, "a3f29c10-1111", "Send it.");
+    expect(sent.length).toBe(1);
+    expect(sent[0].body.type, "a free-form message was sent inside the window").toBe("template");
+  });
+
+  it("AND `verified` IS CHECKED STRICTLY, not for truthiness", async () => {
+    // FOUND BY MUTATION. The falsy cases above (false, null) pass
+    // either guard, so `!verified` survived — the difference only
+    // shows for a TRUTHY NON-TRUE value, which is what a boolean
+    // arriving as a string looks like. Same class as Shopify's
+    // publish state having to be strictly boolean.
+    process.env.WHATSAPP_APPROVAL_TEMPLATE = "approval_waiting_v2";
+    metaAnswers();
+    for (const verified of ["false", "no", 0 as any, 1 as any, "true"]) {
+      expect(
+        await whatsappApprovalNotice(sessionAt(null), { ...VERIFIED, owner_whatsapp_verified: verified } as any, "a3f29c10-1111", "Send it."),
+        JSON.stringify(verified)
+      ).toBe(false);
+    }
+    expect(sent.length, "a number whose verified flag was not literally true was messaged").toBe(0);
+  });
+
+  it("AND THE NAME COMES FROM THE ENV, not from a literal in the code", async () => {
+    // FOUND BY MUTATION. Every test above happened to use the real
+    // name, so hardcoding `approval_waiting_v2` survived — and a
+    // hardcoded name is how a second template, or a renamed one, sends
+    // against something Meta never approved.
+    process.env.WHATSAPP_APPROVAL_TEMPLATE = "some_other_template_v9";
+    metaAnswers();
+    await whatsappApprovalNotice(sessionAt(null), VERIFIED, "a3f29c10-1111", "Send it.");
+    expect(sent[0].body.template.name).toBe("some_other_template_v9");
+  });
+
+  it("the code in the message is the code H2 resolves", async () => {
+    process.env.WHATSAPP_APPROVAL_TEMPLATE = "t";
+    metaAnswers();
+    const id = "bd7e0000-1111-2222-3333-444444444444";
+    await whatsappApprovalNotice(sessionAt(null), VERIFIED, id, "Do it.");
+    const { approvalCode } = await import("@/lib/whatsapp/approvalReply");
+    expect(sent[0].body.template.components[0].parameters[2].text).toBe(approvalCode(id));
+  });
+});

@@ -105,9 +105,19 @@ export async function notifyOwnerOfApproval(
 
     const { data: dealership } = await supabase
       .from("dealerships")
-      .select("dealership_name, owner_id")
+      .select("dealership_name, owner_id, owner_whatsapp_number, owner_whatsapp_verified")
       .eq("id", dealershipId)
       .maybeSingle();
+
+    // WHATSAPP FIRST, AND ITS FAILURE CANNOT STOP THE EMAIL. Caught
+    // here rather than at the outer catch, which would take the email
+    // down with it — and the email is the leg that has actually run.
+    try {
+      const { whatsappApprovalNotice } = await import("@/lib/approvals/whatsappNotice");
+      await whatsappApprovalNotice(supabase, dealership ?? {}, approvalId, confirm);
+    } catch (e: any) {
+      console.error(`[approval-notice] WhatsApp leg failed for ${approvalId}: ${e?.message ?? e}`);
+    }
 
     const to = await ownerEmail(dealership?.owner_id ?? null);
     if (!to) return false;

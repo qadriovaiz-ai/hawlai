@@ -172,6 +172,47 @@ describe("2. IT NEVER COSTS THE APPROVAL", () => {
     expect(src, "requestApproval learned how to send").not.toMatch(/notifyOwnerOfApproval|sendDealerEmail|sendWhatsApp/);
   });
 
+  it("A FAILING WHATSAPP LEG STILL SENDS THE EMAIL", async () => {
+    // FOUND BY MUTATION — H3-e. Nothing exercised this, so removing
+    // the inner try/catch around the WhatsApp send survived, and with
+    // it the one failure mode that matters: the template is PENDING,
+    // every send against it fails, and the owner would then get
+    // NOTHING at all because the WhatsApp error reply travels the same
+    // broken sender.
+    //
+    // WHATSAPP_PROVIDER is left unset on purpose. That is exactly how
+    // the leg fails on a real deploy — fail-closed, the same refusal
+    // that dropped the first two live deliveries in M4.
+    sentMail.length = 0;
+    process.env.WHATSAPP_APPROVAL_TEMPLATE = "approval_waiting_v2";
+    delete process.env.WHATSAPP_PROVIDER;
+    try {
+      const client = {
+        from: () => {
+          const api: any = {
+            select: () => api,
+            eq: () => api,
+            maybeSingle: async () => ({
+              data: {
+                dealership_name: "Candle by Qaaf",
+                owner_id: "u1",
+                owner_whatsapp_number: "918115015907",
+                owner_whatsapp_verified: true,
+              },
+              error: null,
+            }),
+          };
+          return api;
+        },
+      };
+      expect(await notifyOwnerOfApproval(client, "d1", ID, "Send the Diwali email to 40 customers.")).toBe(true);
+      expect(sentMail.length, "the WhatsApp failure took the email down with it").toBe(1);
+      expect(sentMail[0].body).toContain("Send the Diwali email to 40 customers.");
+    } finally {
+      delete process.env.WHATSAPP_APPROVAL_TEMPLATE;
+    }
+  });
+
   it("ONE EMAIL PER APPROVAL, EVEN IF THIS RUNS TWICE", () => {
     // A retried request must not ask him twice to make one decision.
     const src = code("src/lib/approvals/notifyOwner.ts");
