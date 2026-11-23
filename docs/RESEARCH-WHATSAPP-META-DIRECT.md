@@ -195,6 +195,18 @@ calibration that held: probe first, build second.
 existing one; M2 and M3 are branches in an existing webhook; M0 adds a
 handler to an existing route.
 
+### 4.1 Status, 23 November 2026 — all five closed
+
+| | Piece | Shipped | Verified against live Meta traffic |
+|---|---|---|---|
+| **M0** | sender verification | `ceaf553a` | **yes** — §7 |
+| **M1** | Meta client | `f94c2427` | **yes** — §7 |
+| **M2** | inbound read by provider | `629934cc` | **partly** — §7.3 names which traps did and did not meet real traffic |
+| **M3** | provider switch | `f94c2427` | **yes** — §7 |
+| **M4** | the live run | — | **this is §7** |
+
+H5, open since the H-series, is closed with M4.
+
 ---
 
 ## 5. What is needed before M4, and who can get it
@@ -206,7 +218,22 @@ handler to an existing route.
 | `WHATSAPP_ACCESS_TOKEN` | a permanent token from a System User, not the 24-hour test token |
 | `WHATSAPP_VERIFY_TOKEN` | any string the owner chooses; it goes in both places |
 | `WHATSAPP_APP_SECRET` | for `X-Hub-Signature-256` |
+| `WHATSAPP_PROVIDER` | **set to `meta`** — added to this list 23 November 2026, see below |
 | The callback URL registered | points at `/api/webhooks/whatsapp` |
+| The `messages` field **subscribed** | a verified callback URL is not a subscription |
+| The recipient on the allow-list | a Meta **test** number only sends to numbers added under "To" |
+
+**`WHATSAPP_PROVIDER` was missing from this list, and that omission is
+what cost the first two live attempts.** The list was written while
+M0–M3 were still unbuilt, so it named the credentials Meta hands out
+and not the switch M3 later added. Both of the first real deliveries
+passed signature verification, were accepted with a 200, and were then
+dropped by `activeProvider()` throwing — which is the fail-closed
+behaviour M3 was built for, working exactly as designed, on a deploy
+where the variable had simply never been set.
+
+A checklist that is written before the build is a checklist that
+describes the provider's requirements rather than the product's.
 
 **The 24-hour test token is a trap worth stating once.** Meta's setup
 screen hands out a token that expires the next day; a System User token
@@ -233,3 +260,121 @@ stopped working" rather than "the token expired".
 - **H3 is still parked.** It was deferred for the session-window
   reason, which does not change with the provider: a notification
   raised outside the window needs a template.
+
+---
+
+## 7. M4 — the live run, 23 November 2026
+
+One real message in, one real reply out. Sender `918115015907`, Meta
+test number as the business, business `candle_by_qaaf`
+(`ba79191a-0a50-474f-9326-1ac0b461befb`), WABA `1889708125540674`.
+
+**H5 is closed.** The payload shape is no longer a guess.
+
+### 7.1 Every delivery, and what each one proved
+
+| Time (UTC) | Method | Status | What it settled |
+|---|---|---|---|
+| 19:00:28 | GET | **403** | the GET challenge refuses a wrong `hub.verify_token` |
+| 19:12:53 | GET | **200** | `whatsappChallenge` answers Meta's real handshake |
+| 19:53:57 | POST | 200 | Meta signs its **test-button** deliveries too — signature passed |
+| 20:18:11 | POST | 200 | the first real message. Signature passed, `WHATSAPP_PROVIDER` unset, dropped and recorded |
+| 20:30:32 | POST | **200** | **the run.** Message parsed, Master Chat answered, reply delivered |
+| 20:30:48 ×2 | POST | 200 | **delivery statuses for that reply** — trap #2, in real traffic |
+
+Between 20:18 and 20:30: `WHATSAPP_PROVIDER=meta` added to Production
+and the deployment redeployed (`dpl_C8iNCqnHycER…`, aliased to
+`hawlai.online`). Nothing else changed.
+
+### 7.2 How a silent route was read
+
+Nothing logs on the happy path, by design, so the 20:30 requests
+produced **no runtime log lines at all**. The evidence is therefore
+indirect, and each piece is stated with what it rests on:
+
+- **M0.** A failed signature returns **401**. The 20:30 POSTs returned
+  200, and the `WHATSAPP_PROVIDER` error at 20:18 is logged *after*
+  `JSON.parse`. So the raw body was read, HMAC-SHA256 over those exact
+  bytes matched `WHATSAPP_APP_SECRET`, and the body parsed.
+- **M3.** The `WHATSAPP_PROVIDER isn't set` line is absent at 20:30 and
+  present on every earlier POST. And a reply arrived: `sendWhatsAppText`
+  resolves through `PROVIDERS[activeProvider()]`, so `gupshup` would
+  have thrown on missing credentials and logged `handling failed`.
+- **M1.** The reply is on the owner's phone, and no
+  `Meta refused the message` line exists. Graph accepted a `type: text`
+  send with `preview_url: false`.
+- **M2, the text path.** `fromMeta` has exactly one route to a message
+  and no fallback: `entry[] → changes[] → field === "messages" →
+  value.messages[] → type === "text" → from + text.body`. A reply is
+  impossible unless every step matched, and
+  `normalizePhoneNumber(from)` must have produced `918115015907` or the
+  dealership lookup would have answered "this number isn't connected".
+  **The documented shape is confirmed by being the only shape that
+  works, not by having been read.** The route deliberately never logs
+  the payload — it contains the message body.
+
+Database, the same run: one `whatsapp_chat_sessions` row with two
+turns, `daily_message_usage.message_count` incremented by one, one
+`api_usage_logs` row (`anthropic` / `master_chat`), and **no**
+`webhook_deliveries` row — success writes nothing, which is §7.5.
+
+### 7.3 Which of M2's three traps met real traffic
+
+M2 was built for three Meta behaviours. Only one of them actually
+happened, and saying which matters more than the green suite does.
+
+| Trap | Live? |
+|---|---|
+| **#2 statuses on the same endpoint** | **YES.** The two 20:30:48 deliveries were `delivery status`, skipped, and recorded as `nothing_to_reply_to` with that reason |
+| **#1 `messages` is an array** | **no.** Every real delivery carried exactly one message. The batching branch has never run outside tests |
+| **#3 non-`messages` change fields** | **no.** Both status deliveries arrive with `field: "messages"` and a `value.statuses[]`, so the field guard was never the thing that skipped them |
+
+Also still unverified live: non-text skipping (no image was ever sent
+in), `sendWhatsAppImage`, the 24-hour window expiring, and the entire
+Gupshup path — which the owner chose to keep as a fallback and which
+has never met live traffic under either provider.
+
+### 7.4 The reconciliation that looked like a bug
+
+`daily_message_usage.message_count` read **2** for one WhatsApp
+message. It was not a double increment:
+
+- `checkAndRecordMessageUsage` has exactly **two** call sites —
+  `/api/master-brain` and this webhook. `masterBrainV2` never counts,
+  and `checkUsage(…, "message")` has **zero** callers.
+- Its upsert is `message_count: usedToday + 1`, a read-then-write, so
+  concurrency can only **under**-count. 2 cannot come from one message.
+
+The second count was that day's web chat. It was invisible at first
+only because the diagnostic query was scoped to 30 minutes while
+`usage_date` is a **UTC** day — which runs 05:30 IST to 05:30 IST and
+so contains the whole Indian working day.
+
+A third `master_chat` cost row the same day came from a script calling
+the agent directly; a script bypasses both routes and so increments
+nothing. **Three agent calls and a count of two reconcile only if
+exactly one of them bypassed a route** — worth re-checking if that
+arithmetic ever fails to close, because the counter increments *before*
+the model call, so a failure in between leaves a count with no cost row.
+
+### 7.5 What this run exposed, not fixed
+
+- **Success writes nothing.** `webhook_deliveries` records only
+  refusals, so silence there means "handled" *or* "never called" — the
+  exact ambiguity migration 226 exists to remove, one level up. Here
+  only Vercel's request log could tell the two apart, and on the Hobby
+  plan **runtime logs are retained 30 minutes** while request records
+  last 6 hours. A `handled` record would close this.
+- **Web and WhatsApp are indistinguishable in the cost log.** Both log
+  `operation: "master_chat"` (`masterBrainV2.ts:6139`). The owner
+  approved a later, separate commit to carry a surface through so it
+  reads `master_chat:whatsapp`.
+- **One business number serves every tenant.** `PHONE_NUMBER_ID` is a
+  single env var and no table maps it, unlike `dealerships.vapi_phone_number_id`.
+  Owner identification is by the *sender's* number, which is correct
+  and sufficient today. It is not sufficient for a customer messaging a
+  *business* — that needs a per-business column, and no real business
+  exists yet.
+- **`candle_by_qaaf` is on `basic` in production** so the plan gate
+  would pass. See `DECISIONS.md` — the admin Spend page now reports
+  ₹1,999 of revenue that does not exist.

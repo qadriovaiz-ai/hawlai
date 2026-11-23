@@ -4748,3 +4748,53 @@ metafield design exists for), staleness holds against a real store, and
 Two disposable drafts and two files are left on the test store from the
 two runs, reported with their ids by the script — a creation is still
 one-way, which is the whole reason the second step exists.
+
+---
+
+## 2026-11-23 — a test business put on a paid plan, and the revenue number that is now wrong
+
+M4 needed `candle_by_qaaf` to pass the WhatsApp plan gate, so
+`dealerships.plan` went from `free` to `basic` in production
+(`ba79191a-0a50-474f-9326-1ac0b461befb`). Asked what else billing
+needed, the answer was **nothing** — and that answer is the problem.
+
+`dealerships.plan` is a plain text label. No FK, no constraint, and
+`grep 'update({ plan'` over `src/` returns **zero**: nothing in this
+product has ever written that column. Migration 068 said as much when
+it added it — *"for now this is a manual label… not yet enforced by a
+real payment/subscription flow"*. So `billing_profiles`, `invoices` and
+`billing_events` are all optional, and `plan_changed` is a declared
+`event_type` that has never once been written.
+
+**What that label is wired to, though, is revenue.**
+`/api/admin/spend` computes:
+
+```ts
+subscriptionRevenueInr = allDealerships.reduce(
+  (sum, d) => sum + (priceByPlan.get(d.plan ?? "free") ?? 0), 0)
+```
+
+Every business's current plan price, summed. So the admin Spend page
+now reports **₹1,999 that nobody paid**, and `grossProfitInr` and
+`grossMarginPct` both derive from it. `candle_by_qaaf` is test data —
+that ₹1,999 will never become real.
+
+This is the same shape as the misleading-zeros finding: a number that
+looks clean and is false.
+
+**What was deliberately not done.** No `billing_events` row was
+written. It would have been that table's first-ever row, for a plan
+with no payment behind it — starting a money trail with a fiction.
+Offered to the owner and declined on that reasoning.
+
+**What was rejected outright.** Setting `plan_limits.basic.price_inr`
+to 0 would have made the figure correct and broken pricing for every
+business.
+
+**The honest fix is a flag the Spend route can exclude**, which needs a
+column and a code change and is not part of M4. Until then the ₹1,999
+is known, written down here, and visible to exactly one person.
+
+The plan change itself was a one-row data edit, so **no migration file
+exists for it** — nothing in the repo changed and there is no new drift
+between `supabase/migrations/` and production.
