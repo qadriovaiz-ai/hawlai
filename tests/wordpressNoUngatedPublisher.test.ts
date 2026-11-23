@@ -76,23 +76,47 @@ describe("1. THE AGENT CANNOT WRITE TO A WORDPRESS SITE", () => {
 });
 
 describe("2. NOTHING ANYWHERE ELSE WRITES TO WORDPRESS EITHER", () => {
-  it("THE LOAD-BEARING ONE: wordpress has no entry in the platform registry", () => {
-    // The registry is the only route to a write, and its own comment
-    // says why wordpress is absent: "a stub would make the executor
-    // claim success on a publish that never happened".
+  it("THE LOAD-BEARING ONE: the only route to a WordPress write is the registry", () => {
+    // THIS ASSERTED THE OPPOSITE UNTIL 22 NOVEMBER 2026 — that
+    // wordpress had NO registry entry — and that was right while there
+    // was no adapter: a registry entry with no producer is unreachable
+    // code that looks wired.
+    //
+    // What this file protects has not changed. It was never "WordPress
+    // must not be reachable"; it was "WordPress must not be writable
+    // WITHOUT an approval". A registry entry is the gated route — the
+    // executor only reaches it through an approved publish_action, with
+    // a preview, a staleness re-read and an undo. The deleted function
+    // was the ungated one.
+    //
+    // So the assertion moves from "no entry" to "the entry is the ONLY
+    // way", which is the property that actually matters.
     const registry = code("src/lib/publish/registry.ts");
     const body = registry.slice(registry.indexOf("return {"), registry.indexOf("};", registry.indexOf("return {")));
     expect(body.length).toBeGreaterThan(50);
-    expect(body).not.toMatch(/\bwordpress\s*:/);
+    expect(body, "wordpress must be registered, or a producer reaches approval and then dies in the executor").toMatch(
+      /\bwordpress:\s*createWordPressPlatform\(/
+    );
+    // woocommerce still has no adapter and no producer.
     expect(body).not.toMatch(/\bwoocommerce\s*:/);
   });
 
-  it("and no producer creates a wordpress action", () => {
-    // createPublishAction with "wordpress" would reach approval and
-    // then die in the executor, AFTER the owner had said yes. That is
-    // the failure the registry comment records for "meta".
+  it("and every WordPress write goes through an approval, never a direct call", () => {
+    // createPublishAction is the gate: it writes the publish_action
+    // row the owner approves. A producer that called the adapter's
+    // execute() directly would skip the card entirely, which is what
+    // the deleted publishWordPressPost did in spirit.
     const src = code("src/lib/agents/masterBrainV2.ts");
-    expect(src).not.toMatch(/platform:\s*["']wordpress["']/);
+    const wordpressActions = [...src.matchAll(/platform:\s*"wordpress"/g)];
+    expect(wordpressActions.length, "nothing produces a WordPress action any more").toBeGreaterThan(0);
+
+    // THE ADAPTER IS ONLY EVER HANDED TO createPublishAction, never
+    // driven by the chat itself. `createWordPressPlatform(` appearing
+    // beside an `.execute(` or `.preview(` in this file would mean the
+    // chat had started performing writes on its own.
+    expect(src, "the chat calls the WordPress adapter directly").not.toMatch(
+      /createWordPressPlatform\([^)]*\)\s*\.\s*(execute|preview)\(/
+    );
   });
 });
 

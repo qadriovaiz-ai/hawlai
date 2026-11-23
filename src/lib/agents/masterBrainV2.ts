@@ -1434,12 +1434,18 @@ export async function executeTool(
       // credentials up front broke every existing test of this tool and
       // deserved to: it decrypts a secret to decide a branch that may
       // not need one.
+      //
+      // WORDPRESS IS A THIRD SURFACE, added 22 November 2026, and it
+      // reads from the same row for the same reason: answering "does
+      // this business have a WordPress site at all" needs a URL, not a
+      // decrypted application password.
       const { data: metaShopRow } = await supabase
         .from("dealerships")
-        .select("shopify_store_url")
+        .select("shopify_store_url, wordpress_site_url")
         .eq("id", ctx.id)
         .maybeSingle();
       const hasShopify = Boolean((metaShopRow as any)?.shopify_store_url);
+      const hasWordPress = Boolean((metaShopRow as any)?.wordpress_site_url);
 
       // ONE READ OF `websites`, reused below. Reading it twice was the
       // other half of the breakage, and a second round trip for a row
@@ -1451,18 +1457,169 @@ export async function executeTool(
         .maybeSingle();
 
       const askedSurface = typeof input.surface === "string" ? input.surface.toLowerCase() : "";
-      const wantsShopify = askedSurface === "shopify" || (!askedSurface && hasShopify && !site);
-      const bothExist = hasShopify && Boolean(site);
 
-      if (bothExist && !askedSurface) {
+      // WHICH SURFACES THIS BUSINESS ACTUALLY HAS, built as a list
+      // rather than as a pair of booleans — 22 November 2026, when
+      // WordPress became the third. The old shape asked "do BOTH
+      // exist?", which has no honest answer once there are three, and
+      // a fourth surface would have needed the question rewritten
+      // again. The rule it encodes is unchanged and is the one the
+      // page resolver below records: more than one candidate is a
+      // QUESTION, never a pick, because the predecessor fell through
+      // and reported success.
+      const surfaces = [
+        site ? { surface: "hawlai", title: "Your Hawlai website" } : null,
+        hasShopify ? { surface: "shopify", title: `Your Shopify store (${(metaShopRow as any).shopify_store_url})` } : null,
+        hasWordPress ? { surface: "wordpress", title: `Your WordPress site (${(metaShopRow as any).wordpress_site_url})` } : null,
+      ].filter(Boolean) as { surface: string; title: string }[];
+
+      // ONLY ONE SURFACE AND NOBODY NAMED IT is not ambiguous, so it is
+      // not a question. That is what `!askedSurface && hasShopify &&
+      // !site` used to say for two.
+      const theOnlyOne = surfaces.length === 1 ? surfaces[0].surface : "";
+      const chosenSurface = askedSurface || theOnlyOne;
+      const wantsShopify = chosenSurface === "shopify";
+      const wantsWordPress = chosenSurface === "wordpress";
+
+      if (surfaces.length > 1 && !askedSurface) {
         return {
           needs_clarification: true,
-          question: "Which site — your Hawlai website, or your Shopify store?",
-          candidates: [
-            { surface: "hawlai", title: "Your Hawlai website" },
-            { surface: "shopify", title: `Your Shopify store (${(metaShopRow as any).shopify_store_url})` },
-          ],
-          note: "Ask which one, then call this tool again with `surface` set. Do not guess — the two have different pages.",
+          question:
+            surfaces.length === 2
+              ? `Which site — ${surfaces[0].title.toLowerCase()}, or ${surfaces[1].title.toLowerCase()}?`
+              : "Which site did you mean?",
+          candidates: surfaces,
+          note: "Ask which one, then call this tool again with `surface` set. Do not guess — they have different pages.",
+        };
+      }
+
+      // A SURFACE THEY NAMED BUT DO NOT HAVE is refused rather than
+      // quietly falling through to the Hawlai site, which is where an
+      // unrecognised value used to land.
+      if (askedSurface && !surfaces.some((s) => s.surface === askedSurface)) {
+        return {
+          error: `This business has no ${askedSurface} site connected, so there are no ${askedSurface} pages to set a search title on.`,
+          note: surfaces.length
+            ? `What they do have: ${surfaces.map((s) => s.surface).join(", ")}. Offer one of those.`
+            : "They have no website connected at all. Nothing can be set until one is.",
+        };
+      }
+
+      if (wantsWordPress) {
+        // ONLY NOW is the application password resolved and decrypted,
+        // the same rule the Shopify branch below follows: the branch is
+        // taken, so the secret is actually needed.
+        const { wordpressCredentialsAdapter: wpCreds } = await import("../publish/platforms/wordpressCredentials");
+        const wpFor = await wpCreds(ctx.id);
+        if (!wpFor) {
+          return {
+            error: "This business has no usable WordPress connection, so there are no WordPress pages to set these on.",
+            note: "If the site was connected before, the application password may have been revoked — it can be reconnected from Settings.",
+          };
+        }
+        // A WORDPRESS PAGE HAS NO SHARE IMAGE FIELD of its own. The
+        // open-graph image Yoast emits comes from the featured image or
+        // a site-wide default, neither of which is this tool's to set.
+        // Refused rather than dropped silently, for the reason the
+        // Shopify branch records: an owner who asked for a share image
+        // and got no warning would believe it was set.
+        if (shareImageUrl !== undefined) {
+          return {
+            error: "A WordPress page has no share-image field I can set directly — Yoast takes that from the page's featured image.",
+            note: "The search title and description can both be set. Offer those, and say the featured image is set in WordPress itself.",
+          };
+        }
+
+        const { resolveWordPressResource } = await import("../publish/platforms/wordpressResources");
+        const { createWordPressPlatform } = await import("../publish/platforms/wordpress");
+        const askedWpPage = typeof input.page === "string" ? input.page : "";
+        const wpHit = await resolveWordPressResource(wpFor, "page", askedWpPage);
+        if (!wpHit.ok) {
+          if (wpHit.reason === "unreadable") return { error: wpHit.message, saved: false };
+          if (wpHit.reason === "none_exist") {
+            return { error: "This WordPress site has no pages yet, so there's nothing to set a search title on." };
+          }
+          const { clarifyChoice: clarifyWpPage } = await import("../chat/clarify");
+          return clarifyWpPage({
+            noun: "page",
+            keyName: "page",
+            source: "this WordPress site",
+            candidates: wpHit.candidates.map((c) => ({ key: c.handle, title: c.title })),
+            confirmMessage: wpHit.reason === "needs_confirmation" ? wpHit.message : null,
+          });
+        }
+
+        // THE OWNER NAMED IT AND THE PLATFORM CONFIRMED IT, so write it
+        // down — settledSlots.ts carries the turn-two failure this
+        // prevents. Only on an exact match: "the only one there is" is
+        // a target WE chose, not an answer he gave.
+        if (wpHit.matchType !== "only_one") {
+          const { settleSlot: settleWpPageSlot } = await import("../chat/settledSlots");
+          await settleWpPageSlot(supabase, conversationId, "page", wpHit.resource.handle, wpHit.resource.title);
+        }
+
+        const wpMetaService = makeSiteService();
+        const wpCreated = await createMetaAction(
+          wpMetaService,
+          createWordPressPlatform({ getCredentials: async () => wpFor }),
+          {
+            dealershipId: ctx.id,
+            platform: "wordpress",
+            actionKey: "update_page_meta",
+            targetRef: wpHit.resource.id,
+            targetLabel: `${wpHit.resource.title} (/${wpHit.resource.handle})`,
+            // THE SAME KEYS AS THE OTHER TWO SURFACES. One ActionKey,
+            // one payload shape — what publishPayloadContract.test.ts
+            // exists to keep true after shopify.ts spent a day reading
+            // `metaTitle` while hawlaiSite read `seoTitle`.
+            requestedChanges: {
+              seoTitle: safeTitle,
+              metaDescription: safeDescription,
+              claimWarnings,
+              claimCheck: claimCheckField({
+                text: [safeTitle, safeDescription].filter(Boolean).join(" — "),
+                removed: metaRemoved,
+                keptUnsupported: metaKeptByOwner,
+                ownerWords: metaKeptByOwner > 0,
+              }),
+            },
+            requestedBy: null,
+            resolutionPath: wpHit.matchType === "only_one" ? "direct" : "exact",
+            resolutionDetail: {
+              query: askedWpPage,
+              candidateCount: 1,
+              matchType: wpHit.matchType === "only_one" ? "direct" : "exact",
+              chosenRef: wpHit.resource.id,
+            },
+          }
+        );
+        if (!wpCreated.ok) {
+          return {
+            error: wpCreated.reason,
+            saved: false,
+            note:
+              "Nothing was saved anywhere — this failed before any record was written, so there is no draft, no queue and no retry waiting. " +
+              "Do NOT tell them their wording is being held or that you will apply it later. Say plainly that it did not go through.",
+          };
+        }
+
+        return {
+          success: true,
+          already_pending: wpCreated.alreadyPending ?? false,
+          approval_id: wpCreated.approvalId,
+          action_id: wpCreated.actionId,
+          surface: "wordpress",
+          page: wpHit.resource.handle,
+          page_label: wpHit.resource.title,
+          summary: wpCreated.preview.summary,
+          warnings: [...wpCreated.preview.warnings, ...claimWarnings],
+          lengths: [
+            safeTitle !== undefined ? `Title ${safeTitle.length}/60` : null,
+            safeDescription !== undefined ? `Description ${safeDescription.length}/160` : null,
+          ].filter(Boolean).join(" · "),
+          note: wpCreated.alreadyPending
+            ? "You already asked for this exact change — here it is again, still waiting on your approval."
+            : "Ready for your approval below. Nothing changes on the live site until you approve it.",
         };
       }
 

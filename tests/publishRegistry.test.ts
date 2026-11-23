@@ -19,6 +19,7 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "child_process";
 import { createPlatformRegistry } from "@/lib/publish/registry";
+import { code } from "./helpers/source";
 
 process.env.MARKETING_ENCRYPTION_KEY = process.env.MARKETING_ENCRYPTION_KEY ?? "e".repeat(64);
 
@@ -26,9 +27,23 @@ function committed(file: string): string {
   return execFileSync("git", ["show", `HEAD:${file}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
 }
 
-/** Platforms any caller actually passes to createPublishAction. */
+/**
+ * Platforms any caller actually passes to createPublishAction.
+ *
+ * THE WORKING TREE, NOT HEAD — changed 22 November 2026, and it is a
+ * correction rather than a preference. This read `git show HEAD:` and
+ * therefore validated the LAST COMMIT: a producer and its registry
+ * entry added together passed only because neither was visible yet,
+ * and the mismatch this file exists to catch would have been caught
+ * one commit late, which is after the approve click it is about.
+ *
+ * AND THROUGH `code()`, so comments do not count as producers. The old
+ * form would have read `platform: "woocommerce"` inside a comment
+ * explaining why woocommerce has no producer as proof that it has one
+ * — rule 8, in the one place that would have been quietly reassuring.
+ */
 function producedPlatforms(): string[] {
-  const brain = committed("src/lib/agents/masterBrainV2.ts");
+  const brain = code("src/lib/agents/masterBrainV2.ts");
   const found = new Set<string>();
   for (const m of brain.matchAll(/platform:\s*"([a-z_]+)"/g)) found.add(m[1]);
   return [...found];
@@ -37,8 +52,11 @@ function producedPlatforms(): string[] {
 describe("the registry is complete", () => {
   const registry = createPlatformRegistry({} as any);
 
-  it("RUNTIME: registers shopify, meta and the business's own storefront and website", () => {
-    expect(Object.keys(registry).sort()).toEqual(["hawlai_shop", "hawlai_site", "meta", "shopify"]);
+  it("RUNTIME: registers shopify, meta, the business's own storefront and website, and WordPress", () => {
+    // wordpress joined on 22 November 2026, in the same commit as its
+    // first producer — see the registry's own comment for why that
+    // ordering is a rule rather than a preference.
+    expect(Object.keys(registry).sort()).toEqual(["hawlai_shop", "hawlai_site", "meta", "shopify", "wordpress"]);
   });
 
   it("RUNTIME: every registered module declares what it supports", () => {
@@ -62,10 +80,27 @@ describe("the registry is complete", () => {
   });
 
   it("does NOT stub platforms that have no producer", () => {
-    // wordpress and woocommerce are declared in PlatformId and have no
-    // caller. A stub would make the executor claim success on a publish
-    // that never happened, which is worse than the honest error.
-    expect(registry).not.toHaveProperty("wordpress");
+    // A stub would make the executor claim success on a publish that
+    // never happened, which is worse than the honest error.
+    //
+    // DERIVED, NOT A LIST — rewritten 22 November 2026 when wordpress
+    // gained a producer and had to come off the hard-coded side. The
+    // old form named the two platforms, so it had to be edited by hand
+    // every time one of them graduated, and a PlatformId added later
+    // would never have been covered at all. Together with the
+    // assertion above — every platform a caller can propose IS
+    // registered — this now pins both directions for every platform
+    // that exists, including ones nobody has thought of yet.
+    const produced = new Set(producedPlatforms());
+    const stubbed = Object.keys(registry).filter((id) => !produced.has(id));
+    expect(
+      stubbed,
+      `these are registered but nothing produces them, so the entry is unreachable code that looks wired:\n  ${stubbed.join("\n  ")}`
+    ).toEqual([]);
+
+    // NOT VACUOUS: woocommerce is the one still waiting, and it must
+    // stay out until it has a producer of its own.
+    expect(produced.has("woocommerce"), "woocommerce gained a producer — it needs a registry entry too").toBe(false);
     expect(registry).not.toHaveProperty("woocommerce");
   });
 

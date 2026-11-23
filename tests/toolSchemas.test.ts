@@ -84,7 +84,7 @@ import { code, sourceWithComments } from "./helpers/source";
 // and the real URL was produced inside the approval and sent only to
 // the browser. upload_store_image now points at the context list that
 // carries them, and says outright not to generate first.
-const FINGERPRINT = "f051acb02322a545918c9d5aa2cb5b7c7811ded448cc6bbea22c622b938407e6";
+const FINGERPRINT = "12ef3897f334700604b45155b958626fd0405343bc6628ea980c68d5d138ab82";
 const TOOL_COUNT = 63;
 
 describe("1. ONE DEFINITION, IN ONE PLACE, IN ONE ORDER", () => {

@@ -22,6 +22,8 @@ import { shopifyCredentialsAdapter } from "./platforms/shopifyCredentials";
 import { createMetaPlatform } from "./platforms/meta";
 import { createHawlaiShopPlatform } from "./platforms/hawlaiShop";
 import { createHawlaiSitePlatform } from "./platforms/hawlaiSite";
+import { createWordPressPlatform } from "./platforms/wordpress";
+import { wordpressCredentialsAdapter } from "./platforms/wordpressCredentials";
 
 export function createPlatformRegistry(supabase: any): Partial<Record<PlatformId, PublishPlatform>> {
   return {
@@ -33,10 +35,24 @@ export function createPlatformRegistry(supabase: any): Partial<Record<PlatformId
     // The business's own website (website_pages) — the title and
     // description a stranger reads in a search result.
     hawlai_site: createHawlaiSitePlatform({ supabase }),
-    // wordpress and woocommerce are declared in PlatformId but have no
-    // producer — nothing calls createPublishAction with either, so no
-    // card can reach approval for them. Deliberately ABSENT rather than
-    // stubbed: a stub would make the executor claim success on a
-    // publish that never happened, which is worse than the error.
+    // The merchant's own WordPress site — posts, pages, and Yoast's
+    // two search-result lines. Registered 22 November 2026, in the SAME
+    // commit as its first producer and not before.
+    //
+    // THAT ORDERING IS THE RULE, not a preference. An entry added
+    // early is unreachable code that looks wired; a producer added
+    // early reaches approval and then dies in the executor AFTER the
+    // human has said yes, which is the failure the header records for
+    // "meta". The two tests in publishRegistry.test.ts enforce both
+    // directions, and the adapter was verified against a real site
+    // before either landed.
+    wordpress: createWordPressPlatform({ getCredentials: wordpressCredentialsAdapter }),
+    // woocommerce is declared in PlatformId and has no producer —
+    // nothing calls createPublishAction with it, so no card can reach
+    // approval. Deliberately ABSENT rather than stubbed: a stub would
+    // make the executor claim success on a publish that never
+    // happened, which is worse than the error. Its API is a separate
+    // namespace with its own credential and its own phase — see
+    // docs/RESEARCH-WOO-WP.md.
   };
 }

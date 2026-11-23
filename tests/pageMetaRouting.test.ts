@@ -76,12 +76,35 @@ describe("2. WHICH SURFACE — it asks when it cannot know", () => {
     // branch's own condition is what it reads. That is the ceiling of
     // a source-grep test and it is worth naming rather than working
     // around.
-    expect(b).toMatch(/if \(bothExist && !askedSurface\) \{/);
+    //
+    // `bothExist` BECAME `surfaces.length > 1` ON 22 NOVEMBER 2026,
+    // when WordPress became a third surface. "Do both exist?" has no
+    // honest answer once there are three, and a fourth would have
+    // needed the question rewritten again. The rule is unchanged and
+    // is now stated for any number: more than one candidate is a
+    // question.
+    expect(b).toMatch(/if \(surfaces\.length > 1 && !askedSurface\) \{/);
     expect(b).toMatch(/needs_clarification: true/);
     expect(b).toMatch(/Which site/);
-    // It offers both, by name, so the answer is one word.
+    // It offers each one by name, so the answer is one word.
     expect(b).toMatch(/surface: "hawlai"/);
     expect(b).toMatch(/surface: "shopify"/);
+    expect(b).toMatch(/surface: "wordpress"/);
+    // AND ONE SURFACE IS NOT A QUESTION. Without this the clarify
+    // branch could be widened to fire always, which reads as cautious
+    // and is just a tool that never does anything.
+    expect(b).toMatch(/surfaces\.length === 1 \? surfaces\[0\]\.surface : ""/);
+  });
+
+  it("A SURFACE THEY NAMED BUT DO NOT HAVE IS REFUSED, not quietly redirected", () => {
+    // Added with WordPress. Before three surfaces, an unrecognised
+    // `surface` value fell through to the Hawlai site — so asking for
+    // "wordpress" on a business without one would have set the title
+    // on a different website entirely, and the card would have said so
+    // only in passing.
+    const b = body();
+    expect(b).toMatch(/if \(askedSurface && !surfaces\.some\(\(s\) => s\.surface === askedSurface\)\) \{/);
+    expect(b).toMatch(/has no \$\{askedSurface\} site connected/);
   });
 
   it("the question names the actual store, not merely the word Shopify", () => {
@@ -178,10 +201,25 @@ describe("4. the schema tells the model not to guess", () => {
     const schema = (TOOLS as any[]).find((t) => t.name === "propose_page_meta")!;
     const surface = schema.input_schema.properties.surface;
     expect(surface).toBeDefined();
-    expect(surface.enum).toEqual(["hawlai", "shopify"]);
+    // wordpress joined on 22 November 2026. The enum is asserted
+    // EXACTLY rather than with toContain, because a value the routing
+    // cannot handle is worse than a missing one: the model would pass
+    // it confidently and the tool would refuse every time.
+    expect(surface.enum).toEqual(["hawlai", "shopify", "wordpress"]);
     expect(schema.input_schema.required ?? []).not.toContain("surface");
     // The model must know it is NOT its job to pick.
     expect(surface.description).toMatch(/ASKS/);
+  });
+
+  it("AND THE OTHER TWO page tools DO NOT claim WordPress, because they are not wired for it", () => {
+    // read_page and edit_page_text route between hawlai and shopify
+    // only. Listing a third value they cannot handle would have the
+    // model pass it and the tool fall through to the Hawlai site —
+    // reading, or editing, an entirely different website.
+    for (const name of ["read_page", "edit_page_text"]) {
+      const schema = (TOOLS as any[]).find((t) => t.name === name)!;
+      expect(schema.input_schema.properties.surface.enum, name).toEqual(["hawlai", "shopify"]);
+    }
   });
 
   it("the reason the guard sits above the routing is written down", () => {
