@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { sendWhatsAppText, sendWhatsAppImage, normalizePhoneNumber } from "@/lib/whatsapp/gupshupClient";
+import { sendWhatsAppText, sendWhatsAppImage, normalizePhoneNumber } from "@/lib/whatsapp/client";
 import { runMasterBrainChat } from "@/lib/agents/masterBrainV2";
 import { checkAndRecordMessageUsage } from "@/lib/usage/messageLimits";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";

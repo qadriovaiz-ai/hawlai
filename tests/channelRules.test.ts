@@ -198,16 +198,72 @@ describe("WhatsApp stays tap-to-send", () => {
     });
   const all = files(SRC).map((p) => ({ path: relative(SRC, p).replace(/\\/g, "/"), text: readFileSync(p, "utf-8") }));
 
+  /**
+   * The transport layer: the files allowed to know how a message
+   * physically leaves. Two providers, because the owner kept Gupshup
+   * when WhatsApp went direct to Meta on 23 November 2026.
+   *
+   * Listed rather than pattern-matched on the folder, so adding a
+   * third is a line somebody writes here and a reviewer reads — not
+   * something a new file in `lib/whatsapp/` inherits by being there.
+   */
+  const TRANSPORTS = ["lib/whatsapp/gupshupClient.ts", "lib/whatsapp/metaClient.ts"];
+
   it("only the inbound webhook — replying to someone who just messaged Hawlai — can send a WhatsApp message", () => {
-    const senders = all.filter((f) => /\bsendWhatsApp(Text|Image)\b/.test(f.text) && f.path !== "lib/whatsapp/gupshupClient.ts").map((f) => f.path);
+    // A CALL, NOT A MENTION — changed 23 November 2026, and it is a
+    // strengthening rather than an accommodation.
+    //
+    // This matched the sender NAMES anywhere in a file and exempted
+    // gupshupClient by path, so the exemption was really "the file
+    // that declares them". Once there were two transports and a
+    // provider switch, three files declared or referenced the names
+    // and all three looked like senders.
+    //
+    // The property was never "these words appear here". It is that
+    // nothing outside the webhook CALLS one. So declarations are
+    // stripped and a call is what is counted — which also catches a
+    // call hiding INSIDE a transport module, something the old path
+    // exemption waved through.
+    const senders = all
+      .map((f) => ({
+        path: f.path,
+        text: f.text.replace(/export\s+(?:async\s+)?function\s+sendWhatsApp(?:Text|Image)\s*\(/g, "«declaration»("),
+      }))
+      .filter((f) => /\bsendWhatsApp(?:Text|Image)\s*\(/.test(f.text))
+      .map((f) => f.path);
     expect(senders).toEqual(["app/api/webhooks/whatsapp/route.ts"]);
   });
 
   it("nothing calls a WhatsApp sending API directly", () => {
     const direct = all
-      .filter((f) => f.path !== "lib/whatsapp/gupshupClient.ts")
+      .filter((f) => !TRANSPORTS.includes(f.path))
+      // THE `whatsapp` QUALIFIER ON THE GRAPH URL IS LOAD-BEARING and
+      // was nearly dropped on 23 November 2026 while widening this for
+      // the Meta client. graph.facebook.com/<v>/<id>/messages is also
+      // how Messenger and Instagram are sent, so without it
+      // lib/webhooks/autoReplyHandler.ts is flagged for doing its job.
+      // The Meta WhatsApp client is caught by `messaging_product`
+      // instead, which is required on every Cloud API send and appears
+      // nowhere else.
       .filter((f) => /api\.gupshup\.io|messaging_product["']?\s*:\s*["']whatsapp|graph\.facebook\.com\/[^`"']*\/messages[^`"']*whatsapp/i.test(f.text))
       .map((f) => f.path);
     expect(direct).toEqual([]);
+  });
+
+  it("AND THE TRANSPORT LIST IS NOT A BACK DOOR", () => {
+    // An exemption list earns its keep only if it is checked. Each
+    // named file must actually exist and actually be a transport —
+    // otherwise a stale entry quietly exempts nothing, or a renamed
+    // file exempts a path that no longer means what it did.
+    for (const path of TRANSPORTS) {
+      const file = all.find((f) => f.path === path);
+      expect(file, `${path} is exempted but does not exist`).toBeTruthy();
+      expect(file!.text, `${path} is exempted but sends nothing`).toMatch(/graph\.facebook\.com|api\.gupshup\.io/);
+    }
+    // And the exemption does not reach the provider switch, which must
+    // stay a chooser rather than become a third place that sends.
+    const chooser = all.find((f) => f.path === "lib/whatsapp/client.ts");
+    expect(chooser, "the provider switch is gone").toBeTruthy();
+    expect(chooser!.text, "the switch learned how to talk to an API").not.toMatch(/graph\.facebook\.com|api\.gupshup\.io/);
   });
 });

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { normalizePhoneNumber } from "@/lib/whatsapp/gupshupClient";
+import { normalizePhoneNumber } from "@/lib/whatsapp/client";
 import { requireFeature } from "@/lib/featureGate";
 import { NextResponse } from "next/server";
 
