@@ -162,8 +162,23 @@ describe("3. YOAST — active, exposed, or neither, and they are different answe
     const { impl } = sequence([item({ meta: { footnotes: "" } })]);
     const r = await platform(impl).preview(action({ actionKey: "update_page_meta", requestedChanges: { seoTitle: "A title" } }));
     expect(r.ok).toBe(false);
-    expect(!r.ok && r.reason, "it blamed a missing plugin for a content-type setting").toMatch(/Content types/i);
-    expect(!r.ok && r.reason).not.toMatch(/doesn't have Yoast SEO active/i);
+    expect(!r.ok && r.reason, "it blamed a missing plugin").not.toMatch(/doesn't have Yoast SEO active/i);
+    // IT SAYS WHAT IS POSSIBLE INSTEAD. A refusal with no way forward
+    // reads as a bug, and on this platform there is a real way
+    // forward: the other content type.
+    expect(!r.ok && r.reason).toMatch(/can set them on posts/i);
+
+    // AND IT DOES NOT PRESCRIBE THE TOGGLE, because that advice was
+    // wrong. This message used to say "Turn it on in Yoast SEO →
+    // Settings → Content types". The owner did exactly that on
+    // 23 November 2026 — both "Show pages in search results" and
+    // "Enable SEO controls and assessments" — and Yoast 28.9 still
+    // registered _yoast_wpseo_title for `post` and not for `page`,
+    // measured on the item's meta AND on the route's OPTIONS schema.
+    // A refusal that prescribes a fix which does not fix it costs the
+    // owner a trip into a settings screen and leaves them where they
+    // started.
+    expect(!r.ok && r.reason, "it sends the owner back to a toggle that does not help").not.toMatch(/Content types/i);
   });
 
   it("AND A SITE WITHOUT YOAST GETS THE OTHER ANSWER", async () => {

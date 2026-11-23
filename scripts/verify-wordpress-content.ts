@@ -359,9 +359,18 @@ async function main(): Promise<number> {
       // The refusal must name the real cause. The first version said
       // "Yoast isn't active", which was untrue and would have sent the
       // owner to reinstall a running plugin.
+      // IT NAMES WHAT IS POSSIBLE, AND PRESCRIBES NOTHING THAT DOES
+      // NOT WORK. This checked for "Content types" until 23 November
+      // 2026, when the owner turned both of those toggles on and
+      // nothing changed — Yoast 28.9 registers _yoast_wpseo_title for
+      // `post` and not for `page`, on the OPTIONS schema as well as on
+      // the item. The advice was wrong, so the assertion is now that
+      // it is absent.
       record(
-        "and the refusal names the CONTENT TYPE, not a missing plugin",
-        /Content types/i.test(refused.reason) && !/doesn't have Yoast SEO active/i.test(refused.reason),
+        "the refusal offers the other content type, and prescribes no non-fix",
+        /can set them on posts/i.test(refused.reason) &&
+          !/Content types/i.test(refused.reason) &&
+          !/doesn't have Yoast SEO active/i.test(refused.reason),
         refused.reason
       );
     }

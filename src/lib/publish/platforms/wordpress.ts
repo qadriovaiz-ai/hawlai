@@ -118,7 +118,23 @@ function yoastState(item: WpItem): YoastState {
 function yoastRefusal(state: Exclude<YoastState, "ready">, kind: WpKind): string {
   return state === "absent"
     ? "This WordPress site doesn't have Yoast SEO active, and WordPress itself has no search title or description to set. Activate Yoast and ask again."
-    : `Yoast SEO is active on this site but isn't set up to edit the search listing for ${kind}s, so there is nothing Hawlai can write. Turn it on in Yoast SEO → Settings → Content types → ${kind === "page" ? "Pages" : "Posts"}, then ask again.`;
+    : // NOT "turn on a setting", BECAUSE THAT ADVICE WAS WRONG.
+      //
+      // This sentence used to say "Turn it on in Yoast SEO → Settings
+      // → Content types". The owner did exactly that on 23 November
+      // 2026 — both "Show pages in search results" and "Enable SEO
+      // controls and assessments" — and nothing changed: Yoast 28.9
+      // still registered _yoast_wpseo_title for `post` and not for
+      // `page`, measured twice, on the item's own `meta` and on the
+      // route's OPTIONS schema, which is post-type level and not about
+      // any one item.
+      //
+      // So those toggles govern the editor and indexability, not the
+      // REST registration, and sending the owner back to them is
+      // sending them to do something that cannot work. A refusal that
+      // prescribes a fix which does not fix it is worse than one that
+      // says plainly what is possible instead.
+      `Yoast SEO is active here, but it doesn't expose the search title and description for ${kind}s through the API that Hawlai uses, so there is nothing to write. Hawlai can set them on ${kind === "page" ? "posts" : "pages"} on this site. This is not a setting in Yoast — the content-type toggles do not change it.`;
 }
 
 /**
