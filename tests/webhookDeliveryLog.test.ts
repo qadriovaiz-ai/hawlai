@@ -407,7 +407,28 @@ describe("6. THE MIGRATION", () => {
     // itself the thing that silently records nothing.
     const allowed = (migration().match(/'([a-z_]+)'/g) ?? []).map((s) => s.replace(/'/g, ""));
     const written = code("src/lib/webhooks/deliveryLog.ts");
-    const declared = (written.match(/\| "([a-z_]+)"/g) ?? []).map((s) => s.replace(/\| "|"/g, ""));
+
+    // SLICED TO THE OUTCOME UNION, not swept from the whole file.
+    //
+    // This read every `| "..."` in the module, and passed only by
+    // accident: the one other union is `source`, whose values all
+    // contained a HYPHEN — "meta-leads", "meta-messaging" — which
+    // `[a-z_]+` happens not to match. Adding "whatsapp" as a source on
+    // 23 November 2026 broke it instantly, and the failure said the
+    // outcome constraint forbids "whatsapp", which was never an
+    // outcome at all.
+    //
+    // A test that reports the wrong union is worse than one that
+    // misses a value: it sends the next reader to edit a migration
+    // that was already correct.
+    const start = written.indexOf("export type DeliveryOutcome");
+    expect(start, "the DeliveryOutcome union is gone").toBeGreaterThan(-1);
+    const end = written.indexOf(";", start);
+    expect(end).toBeGreaterThan(start);
+    const union = written.slice(start, end);
+    expect(union.length, "the sliced union is implausibly large — check the anchor").toBeLessThan(600);
+
+    const declared = (union.match(/"([a-z_]+)"/g) ?? []).map((s) => s.replace(/"/g, ""));
     expect(declared.length).toBeGreaterThan(5);
     for (const outcome of declared) {
       expect(allowed, `the code can write "${outcome}" but the constraint forbids it`).toContain(outcome);

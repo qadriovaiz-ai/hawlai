@@ -30,7 +30,16 @@ export type DeliveryOutcome =
   | "handled";
 
 export type DeliveryRecord = {
-  source: "meta-leads" | "meta-messaging";
+  /**
+   * "whatsapp" joined on 23 November 2026, when that webhook finally
+   * got sender verification. NO MIGRATION WAS NEEDED: the column is
+   * `source text not null` with no CHECK (226), so widening this union
+   * is the whole change — confirmed by reading the migration rather
+   * than assumed, because a CHECK would have rejected every insert at
+   * runtime and only on the rejection path, which is the one nobody
+   * exercises until it matters.
+   */
+  source: "meta-leads" | "meta-messaging" | "whatsapp";
   outcome: DeliveryOutcome;
   /** The Page or Instagram Business id Meta named, when the payload had one. */
   entryId?: string | null;

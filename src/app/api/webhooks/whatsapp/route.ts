@@ -8,6 +8,8 @@ import { describeApproval } from "@/lib/whatsapp/approvalReply";
 import { parseDecision, resolvePending, cannotTell, type Pending } from "@/lib/whatsapp/pendingReply";
 import { pendingSuggestionRows, applySuggestionDecision } from "@/lib/whatsapp/suggestionReply";
 import { pendingSuggestions } from "@/lib/onboarding/suggestions";
+import { verifyWhatsAppSender, describeWhatsAppRejection, whatsappChallenge } from "@/lib/whatsapp/verifySender";
+import { recordDeliveryStandalone } from "@/lib/webhooks/deliveryLog";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 300; // Master Chat's tool loop can take a while, same reasoning as the web route
@@ -32,12 +34,56 @@ function extractIncoming(body: any): { phone: string; text: string } | null {
   return { phone: normalizePhoneNumber(phone), text: text.trim() };
 }
 
+/**
+ * Meta's subscription handshake.
+ *
+ * It calls the callback URL once with `hub.mode=subscribe` and the
+ * token the owner typed into both places, and will not deliver
+ * anything until the challenge comes back as plain text. This route
+ * exported POST only until 23 November 2026, so a Meta webhook could
+ * never have been registered against it.
+ */
+export async function GET(request: Request) {
+  const result = whatsappChallenge(request.url);
+  if (!result.ok) {
+    console.error("[whatsapp] verification handshake refused:", result.detail);
+    return NextResponse.json({ error: "Verification failed" }, { status: 403 });
+  }
+  return new NextResponse(result.challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
+}
+
 export async function POST(request: Request) {
+  // THE RAW BODY, AND THE ORDER IS THE POINT.
+  //
+  // Meta's digest is over the exact bytes it sent, so `request.json()`
+  // would both consume the stream and make the signature unmatchable —
+  // different key order, different whitespace, different bytes. Same
+  // reasoning as meta-leads and meta-messaging.
+  //
+  // And the check happens BEFORE anything is parsed. Until today this
+  // route read `phone` straight out of an unauthenticated body and
+  // acted on it, so a forged payload reached Master Chat as the owner
+  // and `APPROVE n` on their pending actions. The phone number was the
+  // only thing identifying the caller, and the caller wrote it.
+  const rawBody = await request.text();
+
+  const sender = verifyWhatsAppSender(rawBody, request.headers);
+  if (!sender.ok) {
+    const why = describeWhatsAppRejection(sender);
+    console.error("[whatsapp]", why);
+    // RECORDED, NOT ONLY LOGGED (migration 226). A console line in
+    // Vercel is invisible to the owner, and "no secret is set",
+    // rejecting every delivery, looks identical from outside to the
+    // provider never calling at all.
+    await recordDeliveryStandalone({ source: "whatsapp", outcome: "signature_rejected", detail: why });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let body: any;
   try {
-    body = await request.json();
+    body = JSON.parse(rawBody);
   } catch {
-    return NextResponse.json({ ok: true }); // Gupshup also posts non-message events (delivery receipts, etc.) — always 200 so it doesn't retry-storm us
+    return NextResponse.json({ ok: true }); // Providers also post non-message events (delivery receipts, etc.) — always 200 so they don't retry-storm us
   }
 
   const incoming = extractIncoming(body);

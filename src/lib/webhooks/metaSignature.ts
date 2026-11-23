@@ -47,8 +47,27 @@ export type SignatureResult =
  * match" are very different operational events, and collapsing them
  * makes a misconfiguration look like an attack.
  */
-export function verifyMetaSignature(rawBody: string, signatureHeader: string | null): SignatureResult {
-  const appSecret = process.env.FACEBOOK_APP_SECRET;
+export function verifyMetaSignature(
+  rawBody: string,
+  signatureHeader: string | null,
+  /**
+   * The secret to key the digest with. Defaults to FACEBOOK_APP_SECRET,
+   * which is what meta-leads and meta-messaging use.
+   *
+   * WHY IT IS AN ARGUMENT NOW, 23 November 2026. WhatsApp went direct
+   * to Meta Cloud API, and its product may sit on a DIFFERENT Meta app
+   * from the lead-ads one — in which case it has a different app
+   * secret, and verifying against the wrong one rejects every genuine
+   * delivery while looking exactly like an attack.
+   *
+   * Passing it in rather than reading a second env var here keeps this
+   * function ignorant of which caller it is serving, so a third
+   * webhook cannot quietly inherit WhatsApp's secret by being added to
+   * an `??` chain nobody reads.
+   */
+  secretOverride?: string | null
+): SignatureResult {
+  const appSecret = secretOverride ?? process.env.FACEBOOK_APP_SECRET;
   if (!appSecret) return { valid: false, reason: "not_configured" };
   if (!signatureHeader) return { valid: false, reason: "missing_header" };
 
