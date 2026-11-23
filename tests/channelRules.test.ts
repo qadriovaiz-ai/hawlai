@@ -234,6 +234,78 @@ describe("WhatsApp stays tap-to-send", () => {
     expect(senders).toEqual(["app/api/webhooks/whatsapp/route.ts"]);
   });
 
+  it("AND A TEMPLATE IS HELD TO ITS OWN LIST, which is empty", () => {
+    // ───────────────────────────────────────────────────────────────
+    // H3-c, 23 November 2026 — AN EXTENSION, AND STRICTLY STRONGER.
+    // ───────────────────────────────────────────────────────────────
+    //
+    // THE HOLE THIS CLOSES, found while writing H3-b. The assertion
+    // above names `sendWhatsAppText` and `sendWhatsAppImage` by hand.
+    // `sendWhatsAppTemplate` is a third way a message physically
+    // leaves, and it was INVISIBLE to that regex — so adding the
+    // transport without this test would have left a send that the
+    // one-sender rule did not constrain at all. Not loosened: simply
+    // not covered, which is worse, because it looks covered.
+    //
+    // WHY A SEPARATE LIST RATHER THAN ONE LIST OF THREE. The two rules
+    // are genuinely different, and collapsing them would weaken both:
+    //
+    //   free-form   only INSIDE the 24-hour window, so only a reply to
+    //               someone who just messaged — the webhook, and
+    //               nothing else, ever.
+    //   template    only OUTSIDE it, and it is what makes an
+    //               unprompted notice legal at all. Its permitted
+    //               caller is therefore NOT the webhook.
+    //
+    // A single list would have to allow the union, which would let the
+    // webhook send templates and the notice send free-form. Separate
+    // lists say the true thing about each.
+    //
+    // EMPTY TODAY, ON PURPOSE. H3-b added the transport; nothing is
+    // allowed to call it yet. Wiring the notice (H3-e) means adding
+    // ONE path here, deliberately, which a reviewer reads — the same
+    // reason TRANSPORTS is a hand-written list and not a folder glob.
+    const templateSenders = all
+      .map((f) => ({
+        path: f.path,
+        text: f.text.replace(/export\s+(?:async\s+)?function\s+sendWhatsAppTemplate\s*\(/g, "«declaration»("),
+      }))
+      .filter((f) => /\bsendWhatsAppTemplate\s*\(/.test(f.text))
+      .map((f) => f.path);
+    expect(templateSenders).toEqual([]);
+  });
+
+  it("AND THE MEASURE WOULD SEE A TEMPLATE SENDER IF THERE WERE ONE", () => {
+    // An empty expected list is the one shape that passes when the
+    // instrument is broken — a typo in the name above would report []
+    // forever. So: the same filter, over text that definitely contains
+    // a call, must find it.
+    const probe = [
+      { path: "fake/caller.ts", text: "await sendWhatsAppTemplate(phone, { name: 'x', variables: [] });" },
+      { path: "fake/declarer.ts", text: "export async function sendWhatsAppTemplate(destination: string) {}" },
+    ];
+    const found = probe
+      .map((f) => ({
+        path: f.path,
+        text: f.text.replace(/export\s+(?:async\s+)?function\s+sendWhatsAppTemplate\s*\(/g, "«declaration»("),
+      }))
+      .filter((f) => /\bsendWhatsAppTemplate\s*\(/.test(f.text))
+      .map((f) => f.path);
+    // The caller is caught; the declaration is not mistaken for one.
+    expect(found).toEqual(["fake/caller.ts"]);
+  });
+
+  it("and the transport really does declare it, so the empty list means something", () => {
+    // If `sendWhatsAppTemplate` did not exist, the list above would
+    // also be empty — and would stay green while the whole template
+    // path was missing.
+    const transport = all.find((f) => f.path === "lib/whatsapp/metaClient.ts");
+    expect(transport, "the Meta transport is gone").toBeTruthy();
+    expect(transport!.text, "nothing declares sendWhatsAppTemplate any more").toMatch(
+      /export async function sendWhatsAppTemplate\s*\(/
+    );
+  });
+
   it("nothing calls a WhatsApp sending API directly", () => {
     const direct = all
       .filter((f) => !TRANSPORTS.includes(f.path))

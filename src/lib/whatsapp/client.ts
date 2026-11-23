@@ -28,9 +28,28 @@ import * as meta from "./metaClient";
 
 export type WhatsAppProvider = "meta" | "gupshup";
 
-const PROVIDERS: Record<WhatsAppProvider, { sendText: typeof gupshup.sendWhatsAppText; sendImage: typeof gupshup.sendWhatsAppImage }> = {
-  meta: { sendText: meta.sendWhatsAppText, sendImage: meta.sendWhatsAppImage },
-  gupshup: { sendText: gupshup.sendWhatsAppText, sendImage: gupshup.sendWhatsAppImage },
+const PROVIDERS: Record<
+  WhatsAppProvider,
+  {
+    sendText: typeof gupshup.sendWhatsAppText;
+    sendImage: typeof gupshup.sendWhatsAppImage;
+    sendTemplate: typeof meta.sendWhatsAppTemplate;
+  }
+> = {
+  meta: { sendText: meta.sendWhatsAppText, sendImage: meta.sendWhatsAppImage, sendTemplate: meta.sendWhatsAppTemplate },
+  gupshup: {
+    sendText: gupshup.sendWhatsAppText,
+    sendImage: gupshup.sendWhatsAppImage,
+    // NOT IMPLEMENTED, AND SAID SO RATHER THAN FALLING BACK TO TEXT.
+    // A template exists because the 24-hour window has closed; sending
+    // free-form text instead would be refused by the provider anyway,
+    // and in the meantime the code would read as though the notice went
+    // out. Gupshup has its own template API and nobody has built it —
+    // so this throws, loudly, in the one deployment that would need it.
+    sendTemplate: async () => {
+      throw new Error("WhatsApp templates aren't implemented for Gupshup — only Meta Cloud API.");
+    },
+  },
 };
 
 /**
@@ -55,6 +74,19 @@ export async function sendWhatsAppText(destination: string, text: string) {
 
 export async function sendWhatsAppImage(destination: string, imageUrl: string, caption?: string) {
   return PROVIDERS[activeProvider()].sendImage(destination, imageUrl, caption);
+}
+
+/**
+ * A template — the only shape Meta accepts outside the 24-hour window.
+ *
+ * Through the same chooser as the other two, so there is still one
+ * place that decides whose number a message leaves from.
+ */
+export async function sendWhatsAppTemplate(
+  destination: string,
+  template: { name: string; language?: string; variables: string[] }
+) {
+  return PROVIDERS[activeProvider()].sendTemplate(destination, template);
 }
 
 /**
