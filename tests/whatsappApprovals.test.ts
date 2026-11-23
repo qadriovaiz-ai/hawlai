@@ -205,7 +205,20 @@ describe("4. THE WEBHOOK DECIDES THROUGH THE ONE SHARED FUNCTION", () => {
     const block = s.slice(start, s.indexOf("applyApprovalDecision("));
     expect(block).toMatch(/if \(!found\.ok\)/);
     expect(block).toMatch(/cannotTell\(found\.reason/);
-    expect(block).toMatch(/return NextResponse\.json\(\{ ok: true \}\)/);
+    // THE EXIT, NOT ITS SPELLING. This asserted
+    // `return NextResponse.json({ ok: true })`, which stopped being
+    // the shape on 23 November 2026: the per-message flow moved into
+    // handleOneMessage so a batch of Meta messages could each be
+    // handled, and every exit inside it became a bare return — "done
+    // with THIS message", not "done with the request".
+    //
+    // The property is unchanged and is the one worth keeping: an
+    // unresolved message replies and LEAVES, reaching no decision.
+    // Asserted as both halves, because a return with no exit before
+    // applyApprovalDecision would be a fall-through that decides
+    // something nobody named.
+    expect(block).toMatch(/return;/);
+    expect(block, "an unresolved message reached the decision").not.toMatch(/applyApprovalDecision/);
   });
 });
 

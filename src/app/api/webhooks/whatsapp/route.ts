@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { sendWhatsAppText, sendWhatsAppImage, normalizePhoneNumber } from "@/lib/whatsapp/client";
+import { sendWhatsAppText, sendWhatsAppImage, activeProvider, type WhatsAppProvider } from "@/lib/whatsapp/client";
+import { readInbound } from "@/lib/whatsapp/inbound";
 import { runMasterBrainChat } from "@/lib/agents/masterBrainV2";
 import { checkAndRecordMessageUsage } from "@/lib/usage/messageLimits";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
@@ -14,84 +15,33 @@ import { NextResponse } from "next/server";
 
 export const maxDuration = 300; // Master Chat's tool loop can take a while, same reasoning as the web route
 
-// NOTE ON PAYLOAD SHAPE: built against Gupshup's documented v2
-// inbound webhook format (payload.payload.type === "text" with the
-// message under payload.payload.payload.text, sender number under
-// payload.payload.sender.phone). This has NOT been exercised against
-// live Gupshup traffic yet — the defensive fallback parsing below
-// tries a couple of plausible field paths, but the first real
-// incoming message should be checked against actual logs to confirm
-// the exact shape, same as any integration built ahead of having
-// live credentials to test against.
-function extractIncoming(body: any): { phone: string; text: string } | null {
-  const payload = body?.payload ?? body;
-  const type = payload?.type;
-  if (type && type !== "text") return null; // only handle plain text messages in this first pass — media/buttons are a real follow-up, not silently mishandled
-
-  const phone = payload?.sender?.phone ?? payload?.source ?? body?.source;
-  const text = payload?.payload?.text ?? payload?.text ?? body?.text;
-  if (!phone || typeof text !== "string") return null;
-  return { phone: normalizePhoneNumber(phone), text: text.trim() };
-}
+// WHERE THE PAYLOAD SHAPE LIVES NOW: src/lib/whatsapp/inbound.ts.
+//
+// `extractIncoming` used to sit here — built against Gupshup's
+// documented v2 format, with its own comment admitting it had never
+// met live traffic and tried "a couple of plausible field paths". That
+// is a reasonable way to ship ahead of credentials and a bad way to
+// keep running once there are two providers whose shapes overlap.
+//
+// It moved out on 23 November 2026 so it could be tested: nothing
+// executes this route's POST, and a pure function is the only part of
+// this file that can be checked exhaustively.
 
 /**
- * Meta's subscription handshake.
+ * One message, start to finish.
  *
- * It calls the callback URL once with `hub.mode=subscribe` and the
- * token the owner typed into both places, and will not deliver
- * anything until the challenge comes back as plain text. This route
- * exported POST only until 23 November 2026, so a Meta webhook could
- * never have been registered against it.
+ * EXTRACTED 23 NOVEMBER 2026, because Meta batches: `messages` is an
+ * array, and the version of this route that read [0] would have
+ * dropped the rest — possibly the "APPROVE 2" that mattered.
+ *
+ * Every exit here is "done with THIS message", not "done with the
+ * request", which is why they are bare returns. The conversion was
+ * checked by the compiler rather than by eye: a missed
+ * `return NextResponse.json(...)` is a NextResponse where void is
+ * expected, and nothing in this file is covered by a test that
+ * executes it.
  */
-export async function GET(request: Request) {
-  const result = whatsappChallenge(request.url);
-  if (!result.ok) {
-    console.error("[whatsapp] verification handshake refused:", result.detail);
-    return NextResponse.json({ error: "Verification failed" }, { status: 403 });
-  }
-  return new NextResponse(result.challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
-}
-
-export async function POST(request: Request) {
-  // THE RAW BODY, AND THE ORDER IS THE POINT.
-  //
-  // Meta's digest is over the exact bytes it sent, so `request.json()`
-  // would both consume the stream and make the signature unmatchable —
-  // different key order, different whitespace, different bytes. Same
-  // reasoning as meta-leads and meta-messaging.
-  //
-  // And the check happens BEFORE anything is parsed. Until today this
-  // route read `phone` straight out of an unauthenticated body and
-  // acted on it, so a forged payload reached Master Chat as the owner
-  // and `APPROVE n` on their pending actions. The phone number was the
-  // only thing identifying the caller, and the caller wrote it.
-  const rawBody = await request.text();
-
-  const sender = verifyWhatsAppSender(rawBody, request.headers);
-  if (!sender.ok) {
-    const why = describeWhatsAppRejection(sender);
-    console.error("[whatsapp]", why);
-    // RECORDED, NOT ONLY LOGGED (migration 226). A console line in
-    // Vercel is invisible to the owner, and "no secret is set",
-    // rejecting every delivery, looks identical from outside to the
-    // provider never calling at all.
-    await recordDeliveryStandalone({ source: "whatsapp", outcome: "signature_rejected", detail: why });
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  let body: any;
-  try {
-    body = JSON.parse(rawBody);
-  } catch {
-    return NextResponse.json({ ok: true }); // Providers also post non-message events (delivery receipts, etc.) — always 200 so they don't retry-storm us
-  }
-
-  const incoming = extractIncoming(body);
-  if (!incoming) return NextResponse.json({ ok: true });
-
-  const { phone, text } = incoming;
-  const supabase = createServiceClient();
-
+async function handleOneMessage(phone: string, text: string, supabase: ReturnType<typeof createServiceClient>): Promise<void> {
   try {
     // ---------- Verification flow ----------
     if (text.toUpperCase() === "CONNECT") {
@@ -107,13 +57,13 @@ export async function POST(request: Request) {
 
       if (!pending) {
         await sendWhatsAppText(phone, "This number isn't waiting on a Hawlai connection right now — start the connection from the Hawlai dashboard first (Business → Integrations → Connect WhatsApp), then send CONNECT again.");
-        return NextResponse.json({ ok: true });
+        return;
       }
 
       const code = String(Math.floor(100000 + Math.random() * 900000));
       await supabase.from("whatsapp_verification_codes").update({ code }).eq("id", pending.id);
       await sendWhatsAppText(phone, `Your Hawlai connection code: ${code}\n\nEnter this on the dashboard to finish connecting.`);
-      return NextResponse.json({ ok: true });
+      return;
     }
 
     // ---------- Identify who's messaging ----------
@@ -126,7 +76,7 @@ export async function POST(request: Request) {
       const limits = await getDealershipPlanLimits(supabase, dealership.id);
       if (!hasFeature(limits, "whatsappAutomation")) {
         await sendWhatsAppText(phone, "WhatsApp automation isn't included in your current plan anymore — upgrade from the Hawlai dashboard to keep controlling Hawlai from WhatsApp.");
-        return NextResponse.json({ ok: true });
+        return;
       }
     }
 
@@ -135,7 +85,7 @@ export async function POST(request: Request) {
       const { data: member } = await supabase.from("team_members").select("id, dealership_id, role").eq("whatsapp_number", phone).eq("whatsapp_verified", true).eq("status", "active").maybeSingle();
       if (!member) {
         await sendWhatsAppText(phone, "This number isn't connected to a Hawlai account. Connect it first from the Hawlai dashboard.");
-        return NextResponse.json({ ok: true });
+        return;
       }
       // Team members get a deliberately narrow, safe surface over
       // WhatsApp — their own tasks only, matching the same
@@ -144,7 +94,7 @@ export async function POST(request: Request) {
       const { data: tasks } = await supabase.from("tasks").select("title, status").eq("assigned_to", member.id).neq("status", "done").order("created_at", { ascending: false }).limit(10);
       const list = (tasks ?? []).map((t) => `• ${t.title} (${t.status})`).join("\n");
       await sendWhatsAppText(phone, list ? `Your open tasks:\n\n${list}` : "You have no open tasks right now.");
-      return NextResponse.json({ ok: true });
+      return;
     }
 
     // ---------- Owner: approving from the phone — H2 ----------
@@ -198,7 +148,7 @@ export async function POST(request: Request) {
         // costs him one message; guessing costs him whatever the wrong
         // one did.
         await sendWhatsAppText(phone, cannotTell(found.reason, pending));
-        return NextResponse.json({ ok: true });
+        return;
       }
 
       if (found.row.kind === "suggestion") {
@@ -212,17 +162,17 @@ export async function POST(request: Request) {
         );
         if (!match) {
           await sendWhatsAppText(phone, "That one isn't waiting any more.");
-          return NextResponse.json({ ok: true });
+          return;
         }
         const outcome = await applySuggestionDecision(service, dealership.id, match, reply.decision, answers ?? []);
         await sendWhatsAppText(phone, outcome.said);
-        return NextResponse.json({ ok: true });
+        return;
       }
 
       const approval = (approvals ?? []).find((a: any) => String(a.id) === found.row.id);
       if (!approval) {
         await sendWhatsAppText(phone, "That one isn't waiting any more.");
-        return NextResponse.json({ ok: true });
+        return;
       }
 
       // THE OWNER'S OWN auth.users ID, which is truthful: he really is
@@ -239,7 +189,7 @@ export async function POST(request: Request) {
       const said = describeApproval(approval);
       if (!outcome.ok) {
         await sendWhatsAppText(phone, `Couldn't do that one (${said}): ${result?.error ?? "something went wrong"}`);
-        return NextResponse.json({ ok: true });
+        return;
       }
       await sendWhatsAppText(
         phone,
@@ -249,7 +199,7 @@ export async function POST(request: Request) {
 ${result.publish.message}` : ""}`
           : `Rejected ${said}. Nothing was done.`
       );
-      return NextResponse.json({ ok: true });
+      return;
     }
 
     // ---------- Owner: normal Master Chat turn ----------
@@ -263,7 +213,7 @@ ${result.publish.message}` : ""}`
     const limitCheck = await checkAndRecordMessageUsage(dealership.id);
     if (!limitCheck.allowed) {
       await sendWhatsAppText(phone, `You've hit today's message limit (${limitCheck.messagesPerDay}/day) for your plan. Upgrade from the Hawlai dashboard for more, or try again tomorrow.`);
-      return NextResponse.json({ ok: true });
+      return;
     }
 
     const { data: session } = await supabase.from("whatsapp_chat_sessions").select("id, history").eq("phone_number", phone).maybeSingle();
@@ -278,12 +228,93 @@ ${result.publish.message}` : ""}`
       if (artifact.type === "image" && artifact.url) await sendWhatsAppImage(phone, artifact.url, artifact.label);
     }
 
-    return NextResponse.json({ ok: true });
+    return;
   } catch (err: any) {
-    // Never let a webhook exception surface as a 500 that makes
-    // Gupshup retry-storm us — log the intent, reply with something
-    // useful to the person if possible, and always 200 back to Gupshup.
+    // Never let a webhook exception surface as a 500 that makes the
+    // provider retry-storm us — log the intent, reply with something
+    // useful to the person if possible, and always 200 back.
+    console.error("[whatsapp] handling failed:", err?.message ?? err);
     try { await sendWhatsAppText(phone, "Something went wrong on my end — try again in a moment."); } catch {}
+    return;
+  }
+}
+
+export async function GET(request: Request) {
+  const result = whatsappChallenge(request.url);
+  if (!result.ok) {
+    console.error("[whatsapp] verification handshake refused:", result.detail);
+    return NextResponse.json({ error: "Verification failed" }, { status: 403 });
+  }
+  return new NextResponse(result.challenge, { status: 200, headers: { "Content-Type": "text/plain" } });
+}
+
+export async function POST(request: Request) {
+  // THE RAW BODY, AND THE ORDER IS THE POINT.
+  //
+  // Meta's digest is over the exact bytes it sent, so `request.json()`
+  // would both consume the stream and make the signature unmatchable —
+  // different key order, different whitespace, different bytes. Same
+  // reasoning as meta-leads and meta-messaging.
+  //
+  // And the check happens BEFORE anything is parsed. Until today this
+  // route read `phone` straight out of an unauthenticated body and
+  // acted on it, so a forged payload reached Master Chat as the owner
+  // and `APPROVE n` on their pending actions. The phone number was the
+  // only thing identifying the caller, and the caller wrote it.
+  const rawBody = await request.text();
+
+  const sender = verifyWhatsAppSender(rawBody, request.headers);
+  if (!sender.ok) {
+    const why = describeWhatsAppRejection(sender);
+    console.error("[whatsapp]", why);
+    // RECORDED, NOT ONLY LOGGED (migration 226). A console line in
+    // Vercel is invisible to the owner, and "no secret is set",
+    // rejecting every delivery, looks identical from outside to the
+    // provider never calling at all.
+    await recordDeliveryStandalone({ source: "whatsapp", outcome: "signature_rejected", detail: why });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body: any;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return NextResponse.json({ ok: true }); // Providers also post non-message events (delivery receipts, etc.) — always 200 so they don't retry-storm us
+  }
+
+  let provider: WhatsAppProvider;
+  try {
+    provider = activeProvider();
+  } catch (err: any) {
+    // The payload cannot be read without knowing whose shape it is,
+    // and guessing is what M2 exists to stop.
+    console.error("[whatsapp]", err?.message ?? err);
+    await recordDeliveryStandalone({ source: "whatsapp", outcome: "nothing_to_reply_to", detail: "WHATSAPP_PROVIDER is not set" });
     return NextResponse.json({ ok: true });
   }
+
+  const supabase = createServiceClient();
+
+  // EVERY MESSAGE, NOT THE FIRST. Meta can carry several in one
+  // delivery, and the dropped one is as likely to be the decision as
+  // the chat. Sequentially, because two Master Chat turns for the same
+  // owner running at once would interleave their tool calls.
+  const read = readInbound(body, provider);
+  for (const message of read.messages) {
+    await handleOneMessage(message.phone, message.text, supabase);
+  }
+
+  // WHY NOTHING HAPPENED, recorded rather than guessed at later. An
+  // empty read with no explanation is indistinguishable from a
+  // provider that never called — which is the hardest WhatsApp report
+  // to answer.
+  if (!read.messages.length && read.skipped.length) {
+    await recordDeliveryStandalone({
+      source: "whatsapp",
+      outcome: "nothing_to_reply_to",
+      detail: `nothing actionable: ${read.skipped.slice(0, 3).join("; ")}`,
+    });
+  }
+
+  return NextResponse.json({ ok: true });
 }
