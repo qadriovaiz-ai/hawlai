@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { projectMonthEndSpend, projectedBudgetWarning } from "@/lib/analytics/spendProjection";
 import { computeMarginSuggestions } from "@/lib/analytics/marginOptimization";
+import { baseOperation } from "@/lib/analytics/departmentSpend";
 
 // Usage/Pricing/Cost-Control spec, Section 17 (Admin Cost Dashboard).
 // EXTENDS the existing admin spend view — verified before touching it
@@ -87,7 +88,11 @@ export async function GET(request: Request) {
   const exactTotalCostInr = exactClaudeCostInr + exactVapiCostInr + exactGeminiCostInr + exactElevenLabsCostInr + exactPerplexityCostInr;
 
   const totalCallMinutes = vapiLogs.reduce((sum, l) => sum + (l.duration_seconds ?? 0), 0) / 60;
-  const totalMasterChatMessages = claudeLogs.filter((l) => l.operation === "master_chat").length;
+  // EVERY SURFACE, not just the web one. `master_chat:whatsapp` arrived
+  // on 23 November 2026 and an `=== "master_chat"` test would have
+  // quietly stopped counting WhatsApp turns — a number that drops
+  // without anything looking broken. See baseOperation's comment.
+  const totalMasterChatMessages = claudeLogs.filter((l) => baseOperation(l.operation) === "master_chat").length;
 
   // Genuine gap only — rows in content_pieces/graphic_designs/
   // video_generations with no matching exact log this month, not a

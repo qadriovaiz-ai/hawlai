@@ -5793,6 +5793,15 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
   }
 }
 
+/**
+ * The surfaces a Master Chat turn can arrive on.
+ *
+ * Deliberately a closed union rather than a string: the value becomes
+ * part of a logged operation key, and a typo would create a silent
+ * fourth category in the cost breakdown.
+ */
+export type ChatSurface = "web" | "whatsapp";
+
 export async function runMasterBrainChat(
   supabase: any,
   dealershipId: string,
@@ -5806,7 +5815,29 @@ export async function runMasterBrainChat(
    * is simply absent, which is the behaviour this function had for
    * its whole life.
    */
-  conversationId?: string | null
+  conversationId?: string | null,
+  /**
+   * Which surface this turn came in on.
+   *
+   * ADDED 23 NOVEMBER 2026, after M4's live run: web and WhatsApp both
+   * logged `operation: "master_chat"`, so the cost log could not tell
+   * them apart and reconciling one WhatsApp message against
+   * `daily_message_usage` had to be done by timestamp.
+   *
+   * EXPLICIT, NOT INFERRED. `conversationId` is absent on a WhatsApp
+   * turn and would have made a tempting proxy — but it is also absent
+   * on a web turn sent from a fresh /chat screen, so inferring the
+   * surface from it would mislabel real web cost as WhatsApp. It is
+   * the same reason `activeProvider()` refuses to guess a provider
+   * from whichever env vars happen to be set.
+   *
+   * DEFAULTS TO "web", and web keeps the BARE `master_chat` label.
+   * Suffixing web too would have been tidier and wrong: every row
+   * logged before today says `master_chat` and was overwhelmingly web,
+   * so `master_chat:web` would split one true thing into two across a
+   * deploy boundary. The bare label keeps meaning what it always meant.
+   */
+  surface: ChatSurface = "web"
 ): Promise<ChatTurnResult> {
   const ctx = await getContext(supabase, dealershipId);
   const toolsUsed: string[] = [];
@@ -6136,7 +6167,12 @@ A junior marketer takes a request literally and produces the thing asked for. A 
       // It used to log once per turn from here with summed tokens, which
       // meant the loop's own cost was invisible — and it wrote with the
       // request's session client, which RLS silently rejected.
-      { operation: "master_chat", logContext: { supabase, dealershipId: ctx.id } }
+      // THE SURFACE TRAVELS WITH THE COST. Web stays the bare
+      // `master_chat` so 90 days of rows keep their meaning; anything
+      // else is suffixed, and every consumer that keys on MEANING
+      // reads it through `baseOperation` so the suffix cannot move
+      // money out of a department or out of a count.
+      { operation: surface === "web" ? "master_chat" : `master_chat:${surface}`, logContext: { supabase, dealershipId: ctx.id } }
     );
 
     if (!result.ok) {

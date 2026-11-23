@@ -86,8 +86,35 @@ const OPERATION_DEPARTMENT: Record<string, Department> = {
   pitch_deck_content: "Reports & Strategy",
 };
 
+/**
+ * An operation without its surface suffix.
+ *
+ * ADDED 23 NOVEMBER 2026, with the first suffixed operation
+ * (`master_chat:whatsapp`). Before it, every logged operation was a
+ * flat key and this function would have been pointless.
+ *
+ * IT EXISTS SO A SUFFIX CANNOT MOVE MONEY. `departmentFor` is an exact
+ * lookup with `?? "Other"`, and this file's own header says a
+ * breakdown that silently loses money is worse than no breakdown — so
+ * `master_chat:whatsapp` landing in "Other" is exactly the failure it
+ * warns about, and it would arrive the moment a surface was added
+ * rather than when anyone was looking. `admin/spend`'s master-chat
+ * message count had the same shape: `=== "master_chat"` would have
+ * quietly stopped counting WhatsApp turns.
+ *
+ * Anything added after a `:` is therefore a DETAIL of the operation,
+ * never a different operation, and every consumer that keys on meaning
+ * reads it through here. A consumer that wants the surfaces apart —
+ * `byOperation` in admin/spend — keeps the raw value, which is the
+ * whole reason the suffix was added.
+ */
+export function baseOperation(operation: string): string {
+  const at = operation.indexOf(":");
+  return at === -1 ? operation : operation.slice(0, at);
+}
+
 export function departmentFor(operation: string): Department {
-  return OPERATION_DEPARTMENT[operation] ?? "Other";
+  return OPERATION_DEPARTMENT[operation] ?? OPERATION_DEPARTMENT[baseOperation(operation)] ?? "Other";
 }
 
 export interface DepartmentSpendRow {

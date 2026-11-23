@@ -4798,3 +4798,69 @@ is known, written down here, and visible to exactly one person.
 The plan change itself was a one-row data edit, so **no migration file
 exists for it** — nothing in the repo changed and there is no new drift
 between `supabase/migrations/` and production.
+
+---
+
+## 2026-11-23 — the surface is in the cost row, and web keeps the bare label
+
+M4's live run exposed it: web and WhatsApp both logged
+`operation: "master_chat"`, so working out that a `message_count` of 2
+was one WhatsApp turn plus that day's web chat took a query, a timezone
+correction and a reconstruction from timestamps. The owner approved
+fixing it in its own commit.
+
+**Two judgment calls, both the non-obvious direction.**
+
+**1. Web keeps the bare `master_chat`.** Suffixing both surfaces —
+`master_chat:web` and `master_chat:whatsapp` — reads tidier and is
+wrong. Every row logged before today says `master_chat` and was
+overwhelmingly web, so suffixing web would split one true thing in half
+at a deploy boundary: a query over that date would see two categories
+where there is one behaviour. The bare label keeps meaning exactly what
+it always meant, and the suffix means "not the default surface".
+
+**2. The surface is passed, never inferred.** `conversationId` is null
+on a WhatsApp turn and was a tempting proxy — but it is also null on a
+web turn sent from a fresh `/chat` screen, so inferring from it would
+file real web cost under WhatsApp. Same reasoning as `activeProvider()`
+refusing to guess a provider from whichever env vars happen to be set.
+Both call sites name their surface explicitly, including the web one
+that could have relied on the default: a default is a decision nobody
+made, and a third surface added later must not inherit "web" by
+omission.
+
+**THE RISK THIS CREATED, AND WHY IT IS IN THE SAME COMMIT.**
+`master_chat:whatsapp` is the FIRST suffixed operation in this
+codebase — a sweep of every `operation: "…"` literal found 57 values
+and not one colon. Two consumers key on the operation by meaning, and
+both were exact matches:
+
+```ts
+OPERATION_DEPARTMENT[operation] ?? "Other"          // departmentSpend
+claudeLogs.filter((l) => l.operation === "master_chat")  // admin/spend
+```
+
+So the suffix alone would have moved WhatsApp's model cost into
+"Other" and dropped WhatsApp turns out of the master-chat count — both
+silently, and both arriving on the day a surface was added rather than
+the day anyone looked. `departmentSpend.ts`'s own header says a
+breakdown that silently loses money is worse than no breakdown; this
+would have been that, caused by the file that warns about it.
+
+`baseOperation()` is therefore the convention, not a patch: anything
+after a `:` is a DETAIL of an operation, never a different operation.
+Consumers that key on meaning read through it. The one consumer that
+should see the surfaces apart — `byOperation` — deliberately keeps the
+raw value, and a test pins that it does, because collapsing it would
+delete the feature while leaving the label.
+
+Mutation-verified from a green baseline (52 passed): 13 of 14 killed,
+the 14th a control that survives by design. Both directions are
+covered — dropping the suffix fails, and so does suffixing web.
+
+**Observed, not fixed:** `OPERATION_DEPARTMENT` has drifted. Its header
+says the keys came from "the 42 distinct values actually present"; there
+are now 57, and about a dozen (`auto_reply`, `claim_extraction`,
+`content_revision`, `positioning_write`, `video_script` and others)
+already fall into "Other". That predates this change and is a separate
+piece of work.

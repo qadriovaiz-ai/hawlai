@@ -218,7 +218,12 @@ ${result.publish.message}` : ""}`
 
     const { data: session } = await supabase.from("whatsapp_chat_sessions").select("id, history").eq("phone_number", phone).maybeSingle();
     const history = (session?.history ?? []).slice(-20);
-    const result = await runMasterBrainChat(supabase, dealership.id, history, text);
+    // `null` conversationId, "whatsapp" surface. There is no chat
+    // conversation row for a WhatsApp turn — the history lives in
+    // whatsapp_chat_sessions — and the surface is passed rather than
+    // inferred from that absence, because a fresh /chat screen has no
+    // conversation either.
+    const result = await runMasterBrainChat(supabase, dealership.id, history, text, null, "whatsapp");
 
     const newHistory = [...history, { role: "user", content: text }, { role: "assistant", content: result.reply }];
     await supabase.from("whatsapp_chat_sessions").upsert({ dealership_id: dealership.id, phone_number: phone, history: newHistory, updated_at: new Date().toISOString() }, { onConflict: "phone_number" });

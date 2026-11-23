@@ -64,7 +64,10 @@ export async function POST(request: Request) {
       dealershipId,
       Array.isArray(history) ? history : [],
       message,
-      activeConversationId
+      activeConversationId,
+      // Passed rather than left to the default, so the surface is a
+      // decision at both call sites instead of an omission at one.
+      "web"
     );
 
     let savedMessageId: string | null = null;
