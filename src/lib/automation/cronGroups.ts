@@ -28,6 +28,17 @@ export type SubsystemKey =
   | "email_automation" | "workflows" | "competitor_alerts" | "topic_alerts" | "google_reviews"
   | "budget_alerts" | "seasonal_calendar" | "churn_detection" | "cold_lead_detection"
   | "lead_scoring" | "stale_approvals" | "lead_export" | "site_audit" | "search_console_sync" | "content_performance" | "strategy_signals"
+  // S-a/b/c — turns two of site_audit's own findings into proposals the
+  // owner can approve. In `signals` because it calls NO model: a title
+  // is the page's title plus the business name, a description is the
+  // page's own sentences. The claims guard it passes through is rule
+  // based, not a model call.
+  //
+  // AND AFTER site_audit, which is the subsystem that finds the gaps.
+  // Running first would propose against yesterday's reading of the
+  // site — on the one morning the owner had just fixed a page by hand,
+  // it would ask him to fix it again.
+  | "seo_fixes"
   // S5/P2. A SUBSYSTEM AND NOT A CRON ENTRY: Vercel Hobby allows
   // exactly two and both are used, which is why this file exists at
   // all. In `signals` because it reads and writes rows and calls no
@@ -143,7 +154,7 @@ export const GROUPS: Record<string, SubsystemKey[]> = {
   // Database-only and fast, and what surfaces work waiting on a human —
   // so it runs FIRST and never queues behind LLM calls.
   // The export email first: it's the one that reaches a person.
-  signals: ["lead_export", "stale_approvals", "budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "site_audit", "content_performance", "strategy_signals", "decision_results", "monthly_review", "autonomy_review"],
+  signals: ["lead_export", "stale_approvals", "budget_alerts", "seasonal_calendar", "churn_detection", "cold_lead_detection", "lead_scoring", "site_audit", "seo_fixes", "content_performance", "strategy_signals", "decision_results", "monthly_review", "autonomy_review"],
   // Everything slow: LLM-backed work plus third-party APIs. Emails and
   // workflow steps (a lead is waiting) and auto-posting (customers see it)
   // before monitoring and reports; daily_autopilot's per-campaign AI work

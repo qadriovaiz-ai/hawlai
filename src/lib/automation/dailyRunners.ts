@@ -20,6 +20,7 @@ import { scoreActiveLeads } from "@/lib/agents/leadScoringAgent";
 import { checkStalePendingApprovals } from "@/lib/automation/staleApprovalDetection";
 import { runScheduledLeadExport } from "@/lib/leads/scheduledExport";
 import { runTechnicalAudit } from "@/lib/seo/runTechnicalAudit";
+import { runMetaFixLoop } from "@/lib/seo/metaFixLoop";
 import { runPageSpeed } from "@/lib/seo/pageSpeed";
 import { runAeoSchedule } from "@/lib/seo/aeoSchedule";
 import { runPlaceSnapshot } from "@/lib/seo/placeSnapshot";
@@ -91,6 +92,10 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // so it belongs in the database-only group and costs nothing to run
   // daily for every business (lib/seo/technicalAudit.ts).
   site_audit: (s, id) => runTechnicalAudit(s, id),
+  // S-a/b/c — L0 by the owner's decision: every page-SEO fix is
+  // PROPOSED and he approves it. Three a day, his number, so the first
+  // run on a neglected site cannot raise forty cards he will not read.
+  seo_fixes: (s, id) => runMetaFixLoop(s, id),
   // A third-party API call, so it belongs in the heavy group rather than
   // the database-only one. Costs nothing in AI, and businesses with no
   // Search Console connection return a reason and stop.

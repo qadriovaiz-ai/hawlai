@@ -5168,3 +5168,94 @@ a fixture gap, not a code one, and now pinned.
 **Still out of scope by decision:** any paid AI-visibility feed, and
 any reading of Perplexity's or OpenAI's developer terms. The disclosure
 stands until something actually queries a named engine.
+
+---
+
+## 2026-11-24 — the SEO loop proposes, at L0, three a day
+
+The owner's decision: **approval-first**, and S-d — the same loop
+running unattended — only once S-e has produced a measured outcome on a
+real business. Three proposals a day, his number.
+
+**IT GOES THROUGH `createPublishAction`, NOT `requestApproval`.**
+Checked rather than assumed: this is an edit to a resource on a
+platform, which is the shape `src/lib/publish` describes — previewDiff,
+targetRef, staleness. And that door already does three things the loop
+would otherwise reinvent: it refuses a second card for an intent
+already waiting, it retires a card whose values went stale before
+anyone decided, and it creates the `pending_approvals` row itself.
+
+**NO MODEL CALL, and that is most of why this is the safe commit.** A
+title is the page's own title plus the business name — the same shape
+`resolvePageTitle` already uses for what the browser tab shows, so
+approving it makes explicit what the site was already displaying. A
+description is the page's own sentences. Nothing is invented, nothing
+is billed, and there is no AI-failure path.
+
+**IT STILL PASSES THE CLAIMS GUARD, in `publish` mode, the strictest.**
+Copying the page's own words feels safe and is not: a claim in a meta
+description is **more prominent** than the same claim in a paragraph,
+because it is what the search result shows — and after approval nobody
+reads it again. The guard is the point here, not a generator.
+
+**SCOPE, STATED RATHER THAN QUIETLY NARROWED.** Two of the audit's
+three page-SEO findings are in: `pages_without_search_title` and
+`pages_without_meta_description`. The third, `pages_still_fallback`,
+means **writing the page** — real copy, from facts, with a model. That
+is A6's generator, and putting it in the safest commit would move the
+riskiest piece into it. It stays a finding in the email.
+
+**THE COOLDOWN IS WHY THIS SURVIVES ITS FIRST WEEK.**
+`createPublishAction` refuses a duplicate still *waiting*, but a
+rejected intent can be asked again — and a daily loop would ask every
+morning, which is how a product teaches somebody to ignore it. The
+strategist's 30-day rule is reused rather than rewritten.
+
+**`requested_by` IS A uuid, NOT A LABEL** (migration 170), so a text
+signature there is an invalid insert. Found by reading the schema after
+writing it the wrong way first. The loop signs its rows in
+`resolution_detail` — jsonb, no constraint, and the column exists to
+answer "how did it pick that one?", which is exactly what is recorded.
+Using its `query` field for an audit finding rather than a merchant's
+phrase is a mild stretch, written down rather than left to be found.
+
+**NO MIGRATION, DELIBERATELY.** The alternative was a fourth
+`resolution_path` value, which needs a check-constraint change — and an
+unapplied migration would make every insert fail the constraint and
+leave the loop proposing nothing, silently. Migration 140 is this
+repo's record of that exact shape.
+
+**The cap counts only this loop's own cards.** A card he asked for in
+chat is one he wanted; counting it against the loop's three would
+punish him for using the product. And it counts from the record rather
+than a local tally, because the daily run is resumed by a 2-minute
+nudge — a second invocation in the same day is normal, and a local
+counter would give each one its own three.
+
+`seo_fixes` runs in `signals` (no model call) and **after**
+`site_audit`, which is the subsystem that finds the gaps. Running first
+would propose against yesterday's reading of the site — on the one
+morning he had just fixed a page by hand, it would ask him to fix it
+again.
+
+**TWO REAL BUGS WERE CAUGHT BY THESE TESTS BEFORE ANY MUTATION RUN**,
+and both would have reached a live search result:
+
+1. The generic block walk took **every** value in the tree, so the
+   block's own `type` became copy — the first description read
+   "text Hand poured soy candles…". A skip list for structural keys,
+   kept as a skip list rather than an allow list so a block type added
+   later is not silently missed.
+2. `inCooldown` answers `false` for a missing date, because in its
+   own caller a null `rejected_at` means "never rejected". Here the
+   status has already established that he said no, so a missing date
+   means "no, time unknown" — and the loop would have asked again the
+   next morning.
+
+Mutation-verified from a green baseline (110 passed): 23 of 24 killed,
+the 24th a control. **Three survived the first run:** a URL reaching
+the description (no fixture had one), a mid-word cut in the
+single-long-sentence fallback (the fixture repeated a 5-character word,
+which divides the 160-character limit exactly, so the cut landed on a
+space by arithmetic), and one anchor that never applied and was
+reported as proving nothing rather than counted.
