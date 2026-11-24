@@ -93,7 +93,14 @@ const SKIP_KEYS = new Set([
   "contentSource", "content_source", "blockId", "block_id",
 ]);
 
-function blockText(sections: unknown): string[] {
+/**
+ * EXPORTED for the answer planner (A6-a), which needs the same thing
+ * for a different reason: to ask whether the site already answers a
+ * question. One extractor, so the two cannot disagree about what the
+ * page says — and the skip-list reasoning above is the part worth not
+ * writing twice.
+ */
+export function blockText(sections: unknown): string[] {
   const out: string[] = [];
   const walk = (node: any) => {
     if (!node) return;

@@ -5259,3 +5259,85 @@ single-long-sentence fallback (the fixture repeated a 5-character word,
 which divides the 160-character limit exactly, so the cut landed on a
 space by arithmetic), and one anchor that never applied and was
 reported as proving nothing rather than counted.
+
+---
+
+## 2026-11-24 — A6-a lists the questions, and writes nothing
+
+The owner's scope decision: **FAQ entries and paragraphs on existing
+pages only — no new pages** until a need shows. So the piece that
+ships is the one that writes nothing.
+
+A6's real risk is at the other end: deciding a question deserves a
+page, getting it wrong generously, and mass-producing thin pages — the
+most reliable way to damage a small site, and it would be Hawlai doing
+it unasked. **A list cannot write a wrong page.** It does not decide
+shape either; that is A6-b, and guessing it here would be the planner
+reaching into the decision it exists to inform.
+
+**THREE SOURCES, AND THEY ARE NOT EQUAL.** `answer_gaps` ranks first
+always: a real customer wanted to know something and the records had
+nothing to tell them. Every other gap this product finds is one it went
+looking for; that one is the market naming it. **One customer who asked
+beats a search term with two hundred impressions**, because the second
+may be people who found what they needed.
+
+**"ALREADY ANSWERED" ERRS TOWARD LISTING.** A false "answered" hides a
+real gap and nothing happens; a false "not answered" puts a duplicate
+on a list read in a glance. A question counts as answered only when
+**every** one of its words is already on the site.
+
+**A PRIVACY GUARD CAUGHT A REAL BUG.** The first version read
+`search_queries` directly, and `tests/searchConsolePrivacy` holds that
+`lib/seo/searchQueries` is the one door — because it filters out rows
+with no `page_filter`, domain-wide leftovers written before scoping
+existed, which can describe pages that are not this business's. Routed
+through `topQueries`, with a positive assertion added for the half that
+sweep cannot make.
+
+**TWO REAL BUGS IN MY OWN CODE, both found before any mutation run:**
+
+1. **`STOPWORDS` was built for search queries, not questions.** It
+   drops "how", "what", "which" and keeps "do", "can", "we" — people
+   type the first set into Google and rarely the second. So *"Do you
+   deliver across the city?"* kept "do", and the strict every-word test
+   failed against a page that literally says *"We deliver across the
+   city"*: a question that **was** answered would have been listed as
+   unanswered. A question-word layer sits on top, added in the planner
+   rather than to the shared list, because that list also decides how
+   search queries **cluster** — widening it would change a different
+   feature as a side effect of this one.
+2. **An undeclared figure in the line.** `why` carries a number for
+   both non-trivial sources, and the digit walk removes the **whole
+   block** for an undeclared figure. He would have heard nothing at all
+   on the mornings the first question came from search.
+
+**AND ONE FALSE CLAIM CORRECTED IN PASSING.** `recordAeoSignals` wrote
+*"Named in 3 of 4 buying questions **an AI assistant was asked**"* —
+while `aeoAgent`'s fixed DISCLOSURE says the check is *"not a direct
+query of ChatGPT, Gemini, or Perplexity, which Hawlai has no API access
+to"*. The owner read the first sentence; nothing had caught it. Now
+"checked in a web search", and a test pins **both halves** — the claim
+is gone and the disclosure it must agree with is still there, so
+softening that disclosure later cannot quietly make the summary honest.
+
+Mutation-verified from a green baseline (199 passed): 19 of 20 killed,
+the 20th a control. **One survived the first run:** relaxing every-word
+to some-word. Both negative fixtures shared no words with the page, so
+the two rules agreed on them — the dangerous case is **partial**
+overlap, where the site says it delivers across the city, the customer
+asks about another town, and "deliver" matching would hide a question
+the business has never answered. That is now the case the rule is
+tested on.
+
+A fixture was also written wrong twice the same way — "delivery"
+against "deliver". Nothing stems, deliberately: there is no stemmer in
+this repo to be consistent with. Recorded in the test rather than fixed
+by adding one nobody asked for.
+
+The list also files a `business_signals` row (`source: "seo"`,
+confidence `counted`, one per business by fingerprint) so the monthly
+review and the outcome engine read the same fact later. Worth noting
+for whoever looks next: that store has writers and **almost no
+readers** — only `monthlyReview` and `outcomes` — so a signal alone
+would not have reached him, which is why the daily line exists too.

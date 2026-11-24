@@ -528,6 +528,38 @@ export async function buildGrowthReport(
     console.error(`[daily-growth] could not read answer-search presence for ${dealershipId}: ${err?.message ?? err}`);
   }
 
+  // ---- Questions the site does not answer — A6-a ---------------------
+  //
+  // READ AT REPORT TIME like the two above, and it WRITES NOTHING to
+  // the site: a list, and a signal so the monthly review and the
+  // outcome engine can read the same fact later.
+  let answerGaps: { text: string; numbers: { label: string; value: number; source: string }[] } | null = null;
+  try {
+    const { gatherAnswerGaps } = await import("@/lib/seo/answerPlanner");
+    const planned = await gatherAnswerGaps(supabase, dealershipId);
+    answerGaps = planned.line;
+    if (planned.candidates.length) {
+      const { recordSignal, fingerprintOf } = await import("@/lib/signals/signals");
+      await recordSignal(supabase, dealershipId, {
+        source: "seo",
+        topic: "questions without answers",
+        summary: `${planned.candidates.length} questions get asked that the site does not answer`,
+        evidence: {
+          questions: planned.candidates.slice(0, 5).map((c) => ({ question: c.question, source: c.source, demand: c.demand })),
+          askedByCustomers: planned.candidates.filter((c) => c.source === "asked").length,
+        },
+        // COUNTED, not observed: these are rows in this product's own
+        // tables, not somebody else's presence on the web.
+        confidence: "counted",
+        // One standing signal per business, rewritten each run rather
+        // than a new row every morning.
+        fingerprint: fingerprintOf(["seo", "questions without answers"]),
+      });
+    }
+  } catch (err: any) {
+    console.error(`[daily-growth] could not plan answer gaps for ${dealershipId}: ${err?.message ?? err}`);
+  }
+
   const business = await businessName(supabase, dealershipId);
   const report = buildDailyReport({
     dealershipId,
@@ -553,6 +585,7 @@ export async function buildGrowthReport(
     activeGoals,
     pendingApprovals,
     rivals,
+    answerGaps,
     findingCount: findings.length,
     pendingSetupDrafts: drafts.pending,
     aiFailure: opts.aiFailure

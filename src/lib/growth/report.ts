@@ -455,6 +455,13 @@ export function buildDailyReport(input: {
    */
   rivals?: { text: string; numbers: Counted[] } | null;
   /**
+   * Questions people ask that the site does not answer, when there are
+   * any. Already composed by `answerGapLine`, which returns null for an
+   * empty list — A6-a WRITES NOTHING, so this is a list and never a
+   * draft.
+   */
+  answerGaps?: { text: string; numbers: Counted[] } | null;
+  /**
    * Setup goals sitting on the Tasks page, waiting to be confirmed.
    *
    * WHY IT IS CARRIED, 1 November 2026. The block below used to end
@@ -567,6 +574,17 @@ export function buildDailyReport(input: {
   // `rivalsLine` returns null and this pushes nothing.
   if (input.rivals) {
     blocks.push({ kind: "line", text: input.rivals.text, numbers: input.rivals.numbers });
+  }
+
+  // QUESTIONS THE SITE DOES NOT ANSWER — A6-a, 24 November 2026.
+  //
+  // Beside the rivals line, because the two answer the same worry from
+  // opposite ends: who gets named instead of him, and what he is not
+  // saying. Absent when the list is empty, which is the normal state
+  // for a business with no Search Console connection and no customer
+  // questions on record.
+  if (input.answerGaps) {
+    blocks.push({ kind: "line", text: input.answerGaps.text, numbers: input.answerGaps.numbers });
   }
 
   blocks.push({

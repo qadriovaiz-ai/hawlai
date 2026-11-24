@@ -137,7 +137,13 @@ export async function recordAeoSignals(service: any, dealershipId: string, trend
   await recordSignal(service, dealershipId, {
     source: "aeo",
     topic: "answer presence",
-    summary: `Named in ${trend.mentionedNow} of ${trend.total} buying questions an AI assistant was asked${moved}`,
+    // "AN AI ASSISTANT WAS ASKED" WAS FALSE, and corrected on 24
+    // November 2026 while building G-a. aeoAgent's own fixed
+    // DISCLOSURE says this check is "not a direct query of ChatGPT,
+    // Gemini, or Perplexity, which Hawlai has no API access to" — it
+    // is a Claude model with live web search. This summary contradicted
+    // it, in a sentence the owner reads, and nothing had caught it.
+    summary: `Named in ${trend.mentionedNow} of ${trend.total} buying questions checked in a web search${moved}`,
     evidence: {
       mentioned: trend.mentionedNow,
       questions: trend.total,
