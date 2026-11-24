@@ -98,4 +98,56 @@ export const EVENT_HANDLERS: Record<string, EventHandler[]> = {
       );
     },
   ],
+  // ─────────────────────────────────────────────────────────────────
+  // P-b — THE OPPORTUNITY LEAVES THE APP
+  // ─────────────────────────────────────────────────────────────────
+  //
+  // Emitted by emitNotification for the three kinds the owner chose
+  // (PUSHED_KINDS), and ONLY when a row was really written — so this
+  // runs on a fact that is new, not on the same fact every morning.
+  //
+  // REACH ONLY. It says where the opportunity is and what to do; the
+  // decision is the owner's. Nothing here acts, and nothing here
+  // raises an approval either.
+  //
+  // WHY IT IS AN EVENT AND NOT A CALL FROM THE DETECTOR. The detectors
+  // run inside the daily job list; the dispatcher runs every two
+  // minutes. `hot_lead` comes from the meta-leads WEBHOOK and can fire
+  // at any hour, and this is what gets it out of the app within
+  // minutes instead of at 03:00 tomorrow.
+  //
+  // ONE EMAIL PER FACT, keyed on the notification's own dedupe key.
+  // The event queue retries a failed handler, and a retry must not ask
+  // him twice about one thing.
+  opportunity_noticed: [
+    async (supabase, event) => {
+      const kind = event.payload?.kind;
+      const title = event.payload?.title;
+      if (!kind || !title) return;
+
+      const { ownerEmail, sendDealerEmail } = await import("@/lib/email/sendDealerEmail");
+      const { opportunityEmail } = await import("@/lib/notifications/opportunityEmail");
+      const { businessDisplayName } = await import("@/lib/business/displayName");
+      const { PLACEHOLDER_BUSINESS_NAME } = await import("@/lib/onboarding/signup");
+
+      const { data: dealership } = await supabase
+        .from("dealerships")
+        .select("dealership_name, owner_id")
+        .eq("id", event.dealership_id)
+        .maybeSingle();
+
+      // No address on record is not an error — the bell still has it.
+      const to = await ownerEmail(dealership?.owner_id ?? null);
+      if (!to) return;
+
+      const { subject, body } = opportunityEmail(
+        businessDisplayName(dealership?.dealership_name, PLACEHOLDER_BUSINESS_NAME),
+        { kind, title, body: event.payload?.body ?? null, href: event.payload?.href ?? null }
+      );
+
+      await sendDealerEmail(supabase, event.dealership_id, to, subject, body, {
+        idempotencyKey: `opportunity:${event.payload?.dedupeKey ?? event.id}`,
+      });
+    },
+  ],
 };

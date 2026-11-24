@@ -54,6 +54,44 @@ export type NotificationKind =
   // tokens from the same Google app and can die the same way.
   | "integration_disconnected";
 
+/**
+ * The kinds that leave the app — P-a.
+ *
+ * ──────────────────────────────────────────────────────────────────
+ * THE OWNER CHOSE THIS LIST, on 23 November 2026, from the sizing in
+ * docs/RESEARCH-WHATSAPP-PROACTIVE.md §4. Three push, three stay.
+ *
+ *   campaign_not_delivering   the strongest case by far. A campaign
+ *                             read Active in Hawlai and in Ads Manager
+ *                             with zero impressions for SEVENTY DAYS
+ *                             and nobody was told. Migration 234.
+ *   hot_lead                  a person waiting on a reply, and the
+ *                             only one of the three that can fire at
+ *                             any hour — it comes from the meta-leads
+ *                             webhook, not the daily run.
+ *   campaign_budget_overrun   money already spent past its limit.
+ *
+ * DELIBERATELY NOT PUSHED: competitor_alert, topic_alert,
+ * content_performance. Those are READING material and the daily email
+ * is the right place for them. A push that fires for everything gets
+ * muted, and then the real one is muted too — which is the whole
+ * reason this is a list somebody chose rather than every kind above.
+ *
+ * A FOURTH ENTRY IS A DECISION, not a convenience: the set is pinned
+ * by tests/opportunityPush.test.ts, so adding one fails the suite
+ * until somebody writes down why.
+ * ──────────────────────────────────────────────────────────────────
+ */
+export const PUSHED_KINDS: readonly NotificationKind[] = [
+  "campaign_not_delivering",
+  "hot_lead",
+  "campaign_budget_overrun",
+] as const;
+
+export function isPushedKind(kind: string): boolean {
+  return (PUSHED_KINDS as readonly string[]).includes(kind);
+}
+
 export interface EmitNotificationInput {
   dealershipId: string;
   kind: NotificationKind;
@@ -65,7 +103,12 @@ export interface EmitNotificationInput {
 
 export async function emitNotification(supabase: any, input: EmitNotificationInput): Promise<void> {
   try {
-    await supabase.from("notifications").insert({
+    // THE ERROR IS READ NOW, AND IT IS THE WHOLE MECHANISM BELOW.
+    // A repeated dedupe_key collides on the partial unique index and
+    // comes back as an error rather than a throw — which is exactly
+    // what "this fact is not new" looks like. It is still swallowed;
+    // it is just no longer invisible.
+    const { error } = await supabase.from("notifications").insert({
       dealership_id: input.dealershipId,
       kind: input.kind,
       title: input.title,
@@ -73,6 +116,44 @@ export async function emitNotification(supabase: any, input: EmitNotificationInp
       href: input.href ?? null,
       dedupe_key: input.dedupeKey ?? null,
     });
+
+    // ──────────────────────────────────────────────────────────────
+    // P-a — THE PUSH RIDES THE ROW THAT WAS ACTUALLY WRITTEN
+    // ──────────────────────────────────────────────────────────────
+    //
+    // ONLY ON A REAL INSERT. These detectors run daily, with a stable
+    // dedupe_key, so most calls are a no-op collision — "the campaign
+    // is still not delivering". Emitting regardless would email the
+    // same fact every morning until he fixed it, which is how a push
+    // becomes noise and then becomes muted.
+    //
+    // ALSO NOT ON ANY OTHER ERROR, which matters more than it looks.
+    // Migration 234's whole story is a kind the DB constraint
+    // rejected while this function swallowed the error — the detector
+    // ran daily, found the silence, and was silent about it. An email
+    // about a notification that does not exist would be the same bug
+    // wearing a second hat.
+    //
+    // ONE PLACE, SO DETECTOR AND PUSH CANNOT DRIFT. The alternative
+    // was emitEvent at each of the three call sites; then a fourth
+    // detector emitting a pushed kind would silently not push.
+    if (!error && isPushedKind(input.kind)) {
+      const { emitEvent } = await import("@/lib/events/emitEvent");
+      await emitEvent(supabase, {
+        dealershipId: input.dealershipId,
+        eventType: "opportunity_noticed",
+        // The words the owner already has on the bell, carried rather
+        // than recomposed — the same reason the approval notice quotes
+        // the card's stored sentence instead of paraphrasing it.
+        payload: {
+          kind: input.kind,
+          title: input.title,
+          body: input.body ?? null,
+          href: input.href ?? null,
+          dedupeKey: input.dedupeKey ?? null,
+        },
+      });
+    }
   } catch {
     // Best-effort — never break the real work this rides along with.
   }
