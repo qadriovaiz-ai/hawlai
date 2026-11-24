@@ -537,7 +537,18 @@ export async function buildGrowthReport(
   try {
     const { gatherAnswerGaps } = await import("@/lib/seo/answerPlanner");
     const planned = await gatherAnswerGaps(supabase, dealershipId);
-    answerGaps = planned.line;
+    // THE TWO SENTENCES TRAVEL AS ONE BLOCK — A6-b/c. The list and
+    // "N of them can be answered in your own words" are one thought,
+    // and as separate blocks the digit walk could remove the second
+    // and leave the first reading as though nothing could be done.
+    answerGaps = planned.line
+      ? planned.answers
+        ? {
+            text: `${planned.line.text} ${planned.answers.text}`,
+            numbers: [...planned.line.numbers, ...planned.answers.numbers],
+          }
+        : planned.line
+      : null;
     if (planned.candidates.length) {
       const { recordSignal, fingerprintOf } = await import("@/lib/signals/signals");
       await recordSignal(supabase, dealershipId, {

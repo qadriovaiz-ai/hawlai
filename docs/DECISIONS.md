@@ -5341,3 +5341,85 @@ review and the outcome engine read the same fact later. Worth noting
 for whoever looks next: that store has writers and **almost no
 readers** — only `monthlyReview` and `outcomes` — so a signal alone
 would not have reached him, which is why the daily line exists too.
+
+---
+
+## 2026-11-24 — A6-b/c: the answer is his own sentence, and the output step stops at a fork
+
+**THE FINDING THAT CHANGES THIS PIECE.** A3 and A6-c were both sized as
+"answers written from the business's own facts, through the C2 door" —
+a generator with a claims guard in front. Reading the interview showed
+that is unnecessary: the answer to *"how long does delivery take"* is
+**already stored**, as the sentence the owner typed, because
+`saveInterviewAnswer` writes it to `business_knowledge` under a stable
+title the question itself carries in `writesTo`.
+
+So there is **no model call, no cost, and no invented answer to guard
+against**. An FAQ entry says what he said. The claims guard becomes a
+check on his own wording rather than a gate on ours — the difference
+between "the risk is managed" and "the risk is not present". A3's own
+note, *"a short page of three true answers rather than a long one of
+twelve vague ones"*, is satisfied by construction.
+
+**TWO PERMISSIONS THAT ARE NOT THE SAME THING.** Missing either would
+put something public that nobody agreed to publish:
+
+- **`internalOnly`** — a compliance declaration ad platforms need and
+  no customer should read back (migration 229). Refused **before the
+  row is even looked for**, so a later reader cannot reorder it and
+  leak one. A test asserts that ordering, not only the outcome.
+- **`publishColumn`** — for `business_listing_facts`, the owner's
+  separate decision about whether a value may appear publicly. Knowing
+  his phone number is not permission to print it, and an FAQ answer is
+  as public as a page gets. Checked strictly against `true`, so a
+  string `"true"` or a `1` is not permission either.
+
+**A SEARCH TERM IS NEVER ANSWERED.** There is no interview question
+behind a phrase somebody typed into Google, so nothing is stored — and
+pretending otherwise is how a generator gets invited back in.
+
+**A6-b ANSWERED RATHER THAN DODGED: the shape is always an FAQ entry.**
+A question and its answer **is** the `faq_item` shape — `heading` and
+`html`, a pair in the data — which A2 built for this and which is what
+lets FAQPage schema exist. A paragraph is the same words with that fact
+thrown away. No heuristic was invented, because one like "short
+questions become FAQ entries, topical ones become paragraphs" is a rule
+nobody can check against an outcome.
+
+**WHERE IT STOPS, AND WHY — the owner has a decision to make.**
+`update_page_text` can only change a string prop that is **already** on
+the page: `previewText` reads `lineNow(sections, blockId, prop)` and
+refuses when it is null. So it can **fill** an empty `faq_item` the
+owner has added by hand, and it cannot **add** one. The output step
+therefore needs one of:
+
+1. **The two-step dance** — he adds blank Q&A blocks in the builder,
+   and the loop fills them. No new machinery, and a feature that only
+   works if he does something first.
+2. **A new action key**, `add_faq_item`, which appends a `faq_item` to
+   the `faq` container. Genuinely reversible, unlike creating a page:
+   the item is identifiable and removing it restores the prior state
+   exactly. Needs an `executionPolicy` entry, `supports`/`undoes` on
+   `hawlaiSite`, and his sign-off — a new action key is a registry
+   change, not an implementation detail.
+
+My recommendation is 2, because A2 built the `faq_item` block for
+exactly this and option 1 is a feature that waits on the owner. It is
+not taken unilaterally.
+
+**Two of my own slips, both caught before any mutation run:** a ternary
+whose branches were identical apart from the number, with a test of
+mine asserting they differed; and a test asserting a **comment**
+through `code()`, which strips comments — Rule 8's exact trap, fixed
+with `sourceWithComments` as Rule 8 instructs.
+
+Mutation-verified from a green baseline (193 passed): 15 of 16 killed,
+the 16th a control. **Two survived the first run, both wiring rather
+than logic:** dropping the interview key on the way out of
+`answer_gaps` (nothing becomes answerable, ever) and running the
+drafting queries for every business every morning whether or not there
+is anything to answer. Nothing executed `gatherAnswerGaps`, so only a
+source grep was available — and a grep cannot tell that the key
+**arrives**, only that the word appears. It is now run for real against
+a fake client, which also exercises `questionByKey` and
+`aeoQuestionsFor` end to end.

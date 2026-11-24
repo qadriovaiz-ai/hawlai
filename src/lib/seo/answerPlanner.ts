@@ -40,6 +40,7 @@
 
 import { contentWords } from "@/lib/seo/queryClusters";
 import { blockText } from "@/lib/seo/metaGaps";
+import type { AnswerPlanRow } from "@/lib/seo/answerDraft";
 
 /**
  * Question words the shared stopword list does not carry.
@@ -83,11 +84,20 @@ export type Candidate = {
   demand: number;
   /** Why it is on the list, in the owner's words. */
   why: string;
+  /**
+   * The interview key, for `asked` candidates only — A6-b/c.
+   *
+   * ONLY THESE CAN BE ANSWERED. A search term is a phrase somebody
+   * typed into Google: there is no interview question behind it and so
+   * no stored answer, and pretending otherwise is how a generator
+   * would be invited back in.
+   */
+  key?: string | null;
 };
 
 export type PlannerInput = {
   /** From answer_gaps: a question_key and how many customers asked it. */
-  asked: { question: string; times: number }[];
+  asked: { question: string; times: number; key?: string | null }[];
   /** From search_queries. */
   searched: { query: string; impressions: number }[];
   /** The fixed four. */
@@ -147,7 +157,7 @@ export function planAnswers(input: PlannerInput): Candidate[] {
   const seen = new Set<string>();
   const out: Candidate[] = [];
 
-  const consider = (question: string, source: AnswerSource, demand: number, why: string) => {
+  const consider = (question: string, source: AnswerSource, demand: number, why: string, interviewKey?: string | null) => {
     const text = String(question ?? "").replace(/\s+/g, " ").trim();
     if (!text) return;
     // Keyed on the content words, so "do you deliver" and "delivery?"
@@ -156,7 +166,7 @@ export function planAnswers(input: PlannerInput): Candidate[] {
     if (seen.has(key)) return;
     if (alreadyAnswered(text, siteWords)) return;
     seen.add(key);
-    out.push({ question: text, source, demand, why });
+    out.push({ question: text, source, demand, why, ...(interviewKey ? { key: interviewKey } : {}) });
   };
 
   for (const row of [...(input.asked ?? [])].sort((a, b) => (b?.times ?? 0) - (a?.times ?? 0))) {
@@ -167,7 +177,8 @@ export function planAnswers(input: PlannerInput): Candidate[] {
       times,
       times === 1
         ? "a customer asked this and your records had no answer"
-        : `${times} customers asked this and your records had no answer`
+        : `${times} customers asked this and your records had no answer`,
+      row?.key ?? null
     );
   }
 
@@ -266,8 +277,13 @@ export function answerGapLine(
 export async function gatherAnswerGaps(
   supabase: any,
   dealershipId: string
-): Promise<{ candidates: Candidate[]; line: ReturnType<typeof answerGapLine> }> {
-  const empty = { candidates: [] as Candidate[], line: null };
+): Promise<{
+  candidates: Candidate[];
+  drafted: AnswerPlanRow[];
+  line: ReturnType<typeof answerGapLine>;
+  answers: { text: string; numbers: { label: string; value: number; source: string }[] } | null;
+}> {
+  const empty = { candidates: [] as Candidate[], drafted: [] as AnswerPlanRow[], line: null, answers: null };
   try {
     // SEARCH QUERIES COME THROUGH `topQueries` AND NOWHERE ELSE, and a
     // privacy guard caught the first version of this reading the table
@@ -299,13 +315,13 @@ export async function gatherAnswerGaps(
     }
 
     const { questionByKey } = await import("@/lib/onboarding/interview");
-    const asked: { question: string; times: number }[] = [];
+    const asked: { question: string; times: number; key: string }[] = [];
     for (const [key, count] of times) {
       // A KEY WITH NO REGISTERED QUESTION IS SKIPPED, not guessed at —
       // the same rule factGaps states: a gap that cannot be turned into
       // a question is a gap nobody can be asked about.
       const registered = questionByKey(key);
-      if (registered?.prompt) asked.push({ question: registered.prompt, times: count });
+      if (registered?.prompt) asked.push({ question: registered.prompt, times: count, key });
     }
 
     const { aeoQuestionsFor } = await import("@/lib/seo/aeoQuestions");
@@ -317,7 +333,23 @@ export async function gatherAnswerGaps(
       pageSections: (pages as any[]).map((p) => p?.sections),
     });
 
-    return { candidates, line: answerGapLine(candidates) };
+    // ── A6-b/c: the answer, where he has already given one ──────────
+    //
+    // READ ONLY WHEN THERE IS SOMETHING TO ANSWER. A business with no
+    // candidates needs neither query, and this runs for every business
+    // every morning.
+    let drafted: AnswerPlanRow[] = [];
+    if (candidates.some((c) => c.key)) {
+      const [{ data: knowledge }, { data: listing }] = await Promise.all([
+        supabase.from("business_knowledge").select("title, content, is_weak, is_active").eq("dealership_id", dealershipId),
+        supabase.from("business_listing_facts").select("*").eq("dealership_id", dealershipId).maybeSingle(),
+      ]);
+      const { draftAnswers } = await import("@/lib/seo/answerDraft");
+      drafted = draftAnswers(candidates, questionByKey, Array.isArray(knowledge) ? knowledge : [], listing ?? null);
+    }
+
+    const { draftSummary } = await import("@/lib/seo/answerDraft");
+    return { candidates, drafted, line: answerGapLine(candidates), answers: draftSummary(drafted) };
   } catch (err: any) {
     console.error(`[answer-planner] could not plan for ${dealershipId}: ${err?.message ?? err}`);
     return empty;

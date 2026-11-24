@@ -394,3 +394,100 @@ describe("8. SEARCH QUERIES COME THROUGH THE ONE PERMITTED DOOR", () => {
     expect(s).toMatch(/topQueries\(supabase, dealershipId/);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────
+// 9. THE READ, RUN FOR REAL
+//
+// FOUND BY MUTATION. Everything above tests the pure functions, so two
+// wiring regressions survived: dropping the interview key on the way
+// out of answer_gaps (nothing becomes answerable, ever) and running the
+// drafting queries for every business every morning whether or not
+// there is anything to answer.
+//
+// Nothing executed gatherAnswerGaps, so a source grep was the only
+// option — and a grep cannot tell that the key ARRIVES, only that the
+// word appears. This runs it.
+// ──────────────────────────────────────────────────────────────────
+
+import { gatherAnswerGaps } from "@/lib/seo/answerPlanner";
+import { INTERVIEW_QUESTIONS } from "@/lib/onboarding/interview";
+
+/** A real question with a public, knowledge-backed answer. */
+const REAL = INTERVIEW_QUESTIONS.find(
+  (q) => q.writesTo.table === "business_knowledge" && !(q.writesTo as any).internalOnly
+)!;
+
+function plannerDb(opts: { gaps?: string[]; knowledge?: any[] } = {}) {
+  const read: string[] = [];
+  const from = (table: string) => {
+    read.push(table);
+    const rows =
+      table === "answer_gaps"
+        ? (opts.gaps ?? []).map((question_key) => ({ question_key }))
+        : table === "business_knowledge"
+        ? opts.knowledge ?? []
+        : table === "website_pages"
+        ? [{ sections: [{ props: { body: "Nothing relevant on this page at all." } }] }]
+        : [];
+    const single =
+      table === "websites"
+        ? { id: "w1" }
+        : table === "dealerships"
+        ? { business_category: "Home fragrance", city: "Shahjahanpur" }
+        : table === "business_listing_facts"
+        ? { public_phone: "", publish_phone: false }
+        : null;
+    const api: any = {
+      select: () => api,
+      eq: () => api,
+      not: () => api,
+      order: () => api,
+      limit: () => api,
+      maybeSingle: async () => ({ data: single, error: null }),
+      then: (res: any, rej: any) => Promise.resolve({ data: rows, error: null }).then(res, rej),
+    };
+    return api;
+  };
+  return { client: { from }, read };
+}
+
+describe("9. THE READ, RUN FOR REAL", () => {
+  it("THE INTERVIEW KEY ARRIVES, so a customer's question can be answered", async () => {
+    const note = {
+      title: (REAL.writesTo as any).title,
+      content: "A sentence the owner typed himself, long enough to be a real answer.",
+      is_weak: false,
+      is_active: true,
+    };
+    const { client } = plannerDb({ gaps: [REAL.key, REAL.key], knowledge: [note] });
+    const out = await gatherAnswerGaps(client as any, "d1");
+
+    const mine = out.candidates.find((c) => c.key === REAL.key);
+    expect(mine, "the interview key was dropped on the way out of answer_gaps").toBeTruthy();
+    expect(mine!.source).toBe("asked");
+
+    const drafted = out.drafted.find((d) => d.key === REAL.key);
+    expect(drafted?.draft.ok, "a question with a stored answer came back unanswerable").toBe(true);
+    expect(out.answers?.text).toContain("can be answered in your own words");
+  });
+
+  it("AND THE DRAFTING QUERIES DO NOT RUN WHEN THERE IS NOTHING TO ANSWER", async () => {
+    // Two extra reads per business per morning, for every business
+    // that has no customer questions on record — which is most of them.
+    const { client, read } = plannerDb({ gaps: [] });
+    const out = await gatherAnswerGaps(client as any, "d1");
+    expect(out.drafted).toEqual([]);
+    expect(read, "business_knowledge was read with nothing to answer").not.toContain("business_knowledge");
+    expect(read).not.toContain("business_listing_facts");
+  });
+
+  it("AND AN UNANSWERABLE QUESTION SAYS SO RATHER THAN DISAPPEARING", async () => {
+    // The gap is still worth listing: he just has to tell Hawlai
+    // something first.
+    const { client } = plannerDb({ gaps: [REAL.key], knowledge: [] });
+    const out = await gatherAnswerGaps(client as any, "d1");
+    expect(out.candidates.some((c) => c.key === REAL.key)).toBe(true);
+    expect(out.drafted.find((d) => d.key === REAL.key)?.draft.ok).toBe(false);
+    expect(out.answers, "an unanswerable list produced an answers sentence").toBeNull();
+  });
+});
