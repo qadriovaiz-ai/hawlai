@@ -28,28 +28,9 @@ import * as meta from "./metaClient";
 
 export type WhatsAppProvider = "meta" | "gupshup";
 
-const PROVIDERS: Record<
-  WhatsAppProvider,
-  {
-    sendText: typeof gupshup.sendWhatsAppText;
-    sendImage: typeof gupshup.sendWhatsAppImage;
-    sendTemplate: typeof meta.sendWhatsAppTemplate;
-  }
-> = {
-  meta: { sendText: meta.sendWhatsAppText, sendImage: meta.sendWhatsAppImage, sendTemplate: meta.sendWhatsAppTemplate },
-  gupshup: {
-    sendText: gupshup.sendWhatsAppText,
-    sendImage: gupshup.sendWhatsAppImage,
-    // NOT IMPLEMENTED, AND SAID SO RATHER THAN FALLING BACK TO TEXT.
-    // A template exists because the 24-hour window has closed; sending
-    // free-form text instead would be refused by the provider anyway,
-    // and in the meantime the code would read as though the notice went
-    // out. Gupshup has its own template API and nobody has built it —
-    // so this throws, loudly, in the one deployment that would need it.
-    sendTemplate: async () => {
-      throw new Error("WhatsApp templates aren't implemented for Gupshup — only Meta Cloud API.");
-    },
-  },
+const PROVIDERS: Record<WhatsAppProvider, { sendText: typeof gupshup.sendWhatsAppText; sendImage: typeof gupshup.sendWhatsAppImage }> = {
+  meta: { sendText: meta.sendWhatsAppText, sendImage: meta.sendWhatsAppImage },
+  gupshup: { sendText: gupshup.sendWhatsAppText, sendImage: gupshup.sendWhatsAppImage },
 };
 
 /**
@@ -76,18 +57,17 @@ export async function sendWhatsAppImage(destination: string, imageUrl: string, c
   return PROVIDERS[activeProvider()].sendImage(destination, imageUrl, caption);
 }
 
-/**
- * A template — the only shape Meta accepts outside the 24-hour window.
- *
- * Through the same chooser as the other two, so there is still one
- * place that decides whose number a message leaves from.
- */
-export async function sendWhatsAppTemplate(
-  destination: string,
-  template: { name: string; language?: string; variables: string[]; buttonPayload?: string | null }
-) {
-  return PROVIDERS[activeProvider()].sendTemplate(destination, template);
-}
+// A TEMPLATE SENDER LIVED HERE, and was removed on 24 November 2026
+// with the rest of H3's per-approval notice. It existed so an approval
+// could be announced outside WhatsApp's 24-hour window, which is the
+// only time Meta accepts anything but free-form. The owner replaced
+// that notice with a count in the daily email — no per-message cost,
+// no template — so nothing needed it any more.
+//
+// It was never sent once: both templates were still PENDING when the
+// design changed. docs/RESEARCH-WHATSAPP-PROACTIVE.md and the
+// DECISIONS entries of 23–24 November carry the reasoning, and the
+// code is in git if a template is ever wanted again.
 
 /**
  * Digits only, no `+`, no leading `00`.

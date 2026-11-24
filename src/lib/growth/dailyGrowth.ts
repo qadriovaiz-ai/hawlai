@@ -468,6 +468,29 @@ export async function buildGrowthReport(
     console.error(`[growth] could not build the comparison for ${dealershipId}: ${err?.message ?? err}`);
   }
 
+  // ---- Work waiting on him — H3 --------------------------------------
+  //
+  // READ HERE, not in the work, for the same reason `comparison` is:
+  // it is about what the owner is being TOLD, and a count gathered
+  // hours earlier can be wrong in the direction that matters — he may
+  // have decided them all since.
+  //
+  // IT NEVER THROWS INTO THE REPORT. A table that will not read is not
+  // a reason to cost him the rest of his email, which is October's
+  // nine dead days and 3 November's silence in one sentence. Zero on
+  // failure means the line is simply absent, never "0 waiting".
+  let pendingApprovals = 0;
+  try {
+    const { count } = await supabase
+      .from("pending_approvals")
+      .select("id", { count: "exact", head: true })
+      .eq("dealership_id", dealershipId)
+      .eq("status", "pending");
+    pendingApprovals = Number(count ?? 0) || 0;
+  } catch (err: any) {
+    console.error(`[daily-growth] could not count pending approvals for ${dealershipId}: ${err?.message ?? err}`);
+  }
+
   const business = await businessName(supabase, dealershipId);
   const report = buildDailyReport({
     dealershipId,
@@ -491,6 +514,7 @@ export async function buildGrowthReport(
     comparison,
     askForFact,
     activeGoals,
+    pendingApprovals,
     findingCount: findings.length,
     pendingSetupDrafts: drafts.pending,
     aiFailure: opts.aiFailure

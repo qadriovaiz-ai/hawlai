@@ -5,7 +5,7 @@ import { runMasterBrainChat } from "@/lib/agents/masterBrainV2";
 import { checkAndRecordMessageUsage } from "@/lib/usage/messageLimits";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 import { applyApprovalDecision } from "@/lib/approvals/decide";
-import { describeApproval, approvalCode } from "@/lib/whatsapp/approvalReply";
+import { describeApproval } from "@/lib/whatsapp/approvalReply";
 import { parseDecision, resolvePending, cannotTell, type Pending } from "@/lib/whatsapp/pendingReply";
 import { pendingSuggestionRows, applySuggestionDecision } from "@/lib/whatsapp/suggestionReply";
 import { pendingSuggestions } from "@/lib/onboarding/suggestions";
@@ -244,102 +244,6 @@ ${result.publish.message}` : ""}`
   }
 }
 
-/**
- * The owner tapped "Review request" on an approval notice.
- *
- * ──────────────────────────────────────────────────────────────────
- * WHY THIS EXISTS, and it is the piece that makes a Utility template
- * usable at all.
- *
- * A Utility template CANNOT carry what the approval actually is.
- * approval_waiting_v2 tried, and Meta recategorised it to Marketing —
- * because `confirm` is a sentence about marketing work ("Send the
- * Diwali email to 40 customers"), so any template filled with it
- * reads as marketing however the rest is worded. That is structural
- * for this product, not a wording problem.
- *
- * BUT A TAP IS AN INBOUND MESSAGE, and an inbound message OPENS the
- * 24-hour session window. Inside it a free-form reply is legal — and
- * free-form may be sent from this file, which channelRules already
- * names as the one permitted free-form sender. So the detail the
- * template may never contain travels in the reply to the tap, and no
- * guard has to move.
- *
- * A TAP NEVER DECIDES ANYTHING. It means "tell me what this is". The
- * decision stays with a typed `haan`/`nahi` and a code — the path H2
- * built and M4 verified live. So a tap on a five-day-old notice is
- * harmless: it re-sends the detail, or says the row is gone.
- *
- * UNVERIFIED AGAINST A LIVE TAP. Both templates are PENDING, so no
- * button exists to press — this is written from Meta's documented
- * `type: "button"` shape. An unrecognised payload answers with the
- * pending list rather than guessing, which is the same refusal H2
- * makes when it cannot tell which row is meant.
- * ──────────────────────────────────────────────────────────────────
- */
-async function handleOneTap(phone: string, payload: string, supabase: ReturnType<typeof createServiceClient>): Promise<void> {
-  try {
-    const { data: dealership } = await supabase
-      .from("dealerships")
-      .select("id, dealership_name, owner_id")
-      .eq("owner_whatsapp_number", phone)
-      .eq("owner_whatsapp_verified", true)
-      .maybeSingle();
-    if (!dealership) {
-      // Same answer the text path gives an unknown number, and for the
-      // same reason: the phone number is not proof of anything.
-      await sendWhatsAppText(phone, "This number isn't connected to a Hawlai account. Connect it first from the Hawlai dashboard.");
-      return;
-    }
-
-    const { data: approvals } = await supabase
-      .from("pending_approvals")
-      .select("id, action_type, amount, action_details")
-      .eq("dealership_id", dealership.id)
-      .eq("status", "pending")
-      .order("created_at", { ascending: true });
-
-    const rows = approvals ?? [];
-
-    // THE PAYLOAD IS OURS, so this is a lookup and not a guess — and
-    // it is SCOPED to this business's pending rows, so a payload
-    // naming someone else's approval finds nothing.
-    const asked = payload.trim();
-    const match = asked ? rows.find((a: any) => String(a.id) === asked) : null;
-
-    if (!match) {
-      // NEVER A BEST GUESS, even with exactly one pending. A tap whose
-      // payload we cannot place means the notice and the row have come
-      // apart, and answering with the list says so plainly.
-      const pending: Pending[] = rows.map((a: any) => ({ id: String(a.id), kind: "approval" as const, describe: describeApproval(a) }));
-      await sendWhatsAppText(phone, cannotTell(pending.length ? "unknown_code" : "none_pending", pending));
-      return;
-    }
-
-    // WHAT THE TEMPLATE COULD NOT SAY. The row's own stored sentence,
-    // word for word — the same one the card and the email carry, so
-    // three surfaces cannot drift into three versions of one claim.
-    const said = describeApproval(match);
-    const confirm = String((match as any).action_details?.confirm ?? "").trim();
-    const code = approvalCode(String(match.id));
-    await sendWhatsAppText(
-      phone,
-      [
-        confirm || `${said} is waiting for your approval.`,
-        "",
-        `Reply "haan ${code}" to go ahead, or "nahi ${code}" to drop it.`,
-        "",
-        "Nothing has happened yet, and nothing will until you answer.",
-      ].join("\n")
-    );
-    return;
-  } catch (err: any) {
-    console.error("[whatsapp] tap handling failed:", err?.message ?? err);
-    try { await sendWhatsAppText(phone, "Something went wrong on my end — try again in a moment."); } catch {}
-    return;
-  }
-}
-
 export async function GET(request: Request) {
   const result = whatsappChallenge(request.url);
   if (!result.ok) {
@@ -405,20 +309,11 @@ export async function POST(request: Request) {
     await handleOneMessage(message.phone, message.text, supabase);
   }
 
-  // A TAP IS NOT A MESSAGE, AND NOT A DECISION — H3.
-  //
-  // Handled after the text, and through its own function, because the
-  // two must not be able to turn into each other: a tap never reaches
-  // parseDecision, and the button's label never reaches Master Chat.
-  for (const tap of read.taps) {
-    await handleOneTap(tap.phone, tap.payload, supabase);
-  }
-
   // WHY NOTHING HAPPENED, recorded rather than guessed at later. An
   // empty read with no explanation is indistinguishable from a
   // provider that never called — which is the hardest WhatsApp report
   // to answer.
-  if (!read.messages.length && !read.taps.length && read.skipped.length) {
+  if (!read.messages.length && read.skipped.length) {
     await recordDeliveryStandalone({
       source: "whatsapp",
       outcome: "nothing_to_reply_to",

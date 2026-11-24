@@ -38,36 +38,10 @@ import { normalizePhoneNumber } from "./gupshupClient";
 
 export type IncomingMessage = { phone: string; text: string };
 
-/**
- * A template button the owner tapped.
- *
- * ──────────────────────────────────────────────────────────────────
- * ITS OWN KIND, NOT TEXT, and that distinction is the point.
- *
- * A quick-reply tap arrives as `type: "button"` with
- * `button: { text, payload }`. The tempting shortcut is to read
- * `button.text` as a message — and it is wrong twice: the label
- * ("Review request") would reach Master Chat, spending a model call to
- * answer a sentence nobody wrote, and it would pass through
- * `parseDecision` where a label could one day read as an instruction.
- *
- * A TAP IS NEVER A DECISION. It means "tell me what this is". The
- * payload is OURS — set when the template is sent — so it names the
- * row exactly rather than being matched against the owner's words.
- * ──────────────────────────────────────────────────────────────────
- */
-export type ButtonTap = { phone: string; payload: string; label: string };
 
 export type InboundRead = {
   /** Text messages, in the order the provider sent them. */
   messages: IncomingMessage[];
-  /**
-   * Template buttons the owner tapped, in order.
-   *
-   * SEPARATE FROM `messages` SO NOTHING CAN CONFUSE THE TWO. See
-   * ButtonTap: a tap must not reach the approval parser or the chat.
-   */
-  taps: ButtonTap[];
   /**
    * Why anything was left out — one short phrase per reason, for the
    * delivery log. Never a body, a number or a token.
@@ -91,11 +65,10 @@ const text = (v: unknown): string | null => (typeof v === "string" && v.trim() ?
  */
 function fromMeta(body: any): InboundRead {
   const messages: IncomingMessage[] = [];
-  const taps: ButtonTap[] = [];
   const skipped: string[] = [];
 
   const entries = Array.isArray(body?.entry) ? body.entry : [];
-  if (!entries.length) return { messages, taps, skipped: ["no entry[] in the payload"] };
+  if (!entries.length) return { messages, skipped: ["no entry[] in the payload"] };
 
   for (const entry of entries) {
     const changes = Array.isArray(entry?.changes) ? entry.changes : [];
@@ -117,31 +90,6 @@ function fromMeta(body: any): InboundRead {
       for (const message of list) {
         const type = message?.type;
 
-        // A QUICK-REPLY TEMPLATE BUTTON — H3. Its own branch, before
-        // the non-text skip, because it is the one non-text shape this
-        // product SENDS and therefore the one it must understand.
-        //
-        // `interactive` (list pickers, reply buttons) is DELIBERATELY
-        // not handled: this product does not send one, so a path for
-        // it would be another unverified guess. It stays in `skipped`,
-        // counted, so "I tapped and nothing happened" is answerable if
-        // that ever changes.
-        if (type === "button") {
-          const from = text(message?.from);
-          // THE PAYLOAD IS OURS, set when the template was sent, so it
-          // names a row exactly. An empty one is KEPT rather than
-          // dropped: the route answers an unresolvable tap with the
-          // pending list, which is honest. Silence is not.
-          const payload = text(message?.button?.payload) ?? "";
-          const label = text(message?.button?.text) ?? "";
-          if (!from) {
-            skipped.push("a button tap with no sender");
-            continue;
-          }
-          taps.push({ phone: normalizePhoneNumber(from), payload, label });
-          continue;
-        }
-
         if (type !== "text") {
           skipped.push(`message type "${String(type ?? "unknown").slice(0, 20)}"`);
           continue;
@@ -156,7 +104,7 @@ function fromMeta(body: any): InboundRead {
       }
     }
   }
-  return { messages, taps, skipped };
+  return { messages, skipped };
 }
 
 /**
@@ -170,14 +118,14 @@ function fromMeta(body: any): InboundRead {
 function fromGupshup(body: any): InboundRead {
   const payload = body?.payload ?? body;
   const type = payload?.type;
-  if (type && type !== "text") return { messages: [], taps: [], skipped: [`message type "${String(type).slice(0, 20)}"`] };
+  if (type && type !== "text") return { messages: [], skipped: [`message type "${String(type).slice(0, 20)}"`] };
 
   const phone = payload?.sender?.phone ?? payload?.source ?? body?.source;
   const said = payload?.payload?.text ?? payload?.text ?? body?.text;
   const from = text(phone);
   const words = text(said);
-  if (!from || !words) return { messages: [], taps: [], skipped: ["no sender or no body"] };
-  return { messages: [{ phone: normalizePhoneNumber(from), text: words }], taps: [], skipped: [] };
+  if (!from || !words) return { messages: [], skipped: ["no sender or no body"] };
+  return { messages: [{ phone: normalizePhoneNumber(from), text: words }], skipped: [] };
 }
 
 export function readInbound(body: unknown, provider: WhatsAppProvider): InboundRead {

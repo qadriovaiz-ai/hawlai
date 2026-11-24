@@ -429,6 +429,19 @@ export function buildDailyReport(input: {
    */
   findingCount: number;
   /**
+   * Approvals sitting on the Approvals page, waiting on a decision.
+   *
+   * H3, 24 November 2026 — and READ AT REPORT TIME rather than carried
+   * out of the daily work, for the same reason `comparison` is: it is
+   * about what the owner is being told at the moment he is being told
+   * it. A count gathered hours earlier can be wrong in the direction
+   * that matters — he may have decided them all since.
+   *
+   * OPTIONAL, so the two callers that build a report for a screen
+   * rather than an email are unaffected until they choose to pass it.
+   */
+  pendingApprovals?: number;
+  /**
    * Setup goals sitting on the Tasks page, waiting to be confirmed.
    *
    * WHY IT IS CARRIED, 1 November 2026. The block below used to end
@@ -491,6 +504,43 @@ export function buildDailyReport(input: {
     text: healthText,
     numbers: input.counted.filter((c) => healthNumbers(input.tracking).includes(c.value)).concat(healthCounted(input.tracking)),
   });
+
+  // ──────────────────────────────────────────────────────────────────
+  // WORK WAITING ON HIM — H3, redesigned 24 November 2026.
+  // ──────────────────────────────────────────────────────────────────
+  //
+  // A COUNT AND A LINK, ONCE A DAY. The owner's decision, replacing a
+  // per-approval email raised through the event queue: an approval
+  // that arrives at 2am does not need to wake anybody, and a notice
+  // per approval is a notice per approval.
+  //
+  // HIGH IN THE EMAIL, BEFORE THE PLAN LINE, because this is the one
+  // block that is about something only HE can move. Everything below
+  // it is Hawlai reporting on itself.
+  //
+  // IT SAYS WHAT IT DOES NOT SAY. No action type, no amount, no
+  // business detail — those live on the card, which is the only place
+  // that can show them with a decision attached. A summary here would
+  // be a second version of the same claim, and the two would drift.
+  //
+  // ABSENT WHEN THE COUNT IS ZERO, rather than "0 approvals are
+  // waiting". A line that appears every morning saying nothing is a
+  // line the eye learns to skip, and then it is skipped on the morning
+  // it is not zero.
+  if ((input.pendingApprovals ?? 0) > 0) {
+    const n = input.pendingApprovals as number;
+    blocks.push({
+      kind: "line",
+      text:
+        n === 1
+          ? "1 approval is waiting for you in Hawlai — nothing happens until you decide. Open Approvals to see it."
+          : `${n} approvals are waiting for you in Hawlai — nothing happens until you decide. Open Approvals to see them.`,
+      // DECLARED, or the digit walk removes this block and the owner
+      // hears nothing — the failure mode `withoutUncountedBlocks`
+      // exists to make visible rather than silent.
+      numbers: [{ label: "Approvals waiting", value: n, source: "pending_approvals" }],
+    });
+  }
 
   blocks.push({
     kind: "line",

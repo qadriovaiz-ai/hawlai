@@ -282,12 +282,13 @@ describe("EVERY approval card stores the words it showed", () => {
     // TABLE-AWARE, since 23 November 2026, and that is a strengthening.
     //
     // This fake ignored the table and kept whichever insert came LAST.
-    // H3-a added a second one — requestApproval now queues an
-    // `approval_raised` event after the row — so `stored` silently
-    // became the event_queue payload and `stored.action_details` was
-    // undefined. The assertions below are untouched; what changed is
-    // that the fake can no longer confuse one table's row for
-    // another's, which is the thing it exists to inspect.
+    // H3-a briefly added a second one — requestApproval queued an
+    // `approval_raised` event after the row — and `stored` silently
+    // became the event_queue payload, so `stored.action_details` was
+    // undefined. That event was removed again on 24 November, so there
+    // is once more only one insert here; the fake stays table-aware
+    // because the next second insert should not be able to do it
+    // again. The assertions below have never changed.
     const supabase = {
       from: (table: string) => ({
         insert: (row: any) => {

@@ -5018,3 +5018,88 @@ button exists to press. This is written from Meta's documented
 `type: "button"` shape — the exact situation M2's header warns about,
 and unlike the WordPress adapter it cannot be probed first, because
 there is no approved template to produce a tap.
+
+---
+
+## 2026-11-24 — H3 becomes a count in an email that already goes out
+
+The owner replaced the per-approval notice entirely: no instant email,
+no event, no WhatsApp. In its place, one line in the daily email he
+already receives — *"3 approvals are waiting for you in Hawlai"* — with
+a count and a link and nothing else. No WhatsApp leg at all, for
+per-message cost.
+
+**What was reusable, since he asked.** The `event_queue` dispatcher is
+**not** useful here: its whole value was immediacy, and immediacy is
+what he dropped. The daily email already runs inside the daily job
+list.
+
+It is not wasted work, though, and that is worth recording rather than
+assuming: it is load-bearing for **P-a/P-b**, the opportunity push he
+kept. `hot_lead` is raised by the meta-leads *webhook* at any hour and
+reaches him within minutes through that 2-minute lane; through the
+daily email it would arrive the following morning. `lead_converted`,
+`task_completed` and `task_failed` were using it before H3 existed.
+
+What *was* reused: `pending_approvals` itself. The count is read
+straight off it, so there is no second record to keep in step — and
+H2's reply path (`haan A3F2`) is untouched and still the only way a
+decision is made.
+
+**THE COUNT IS READ AT REPORT TIME**, in `buildGrowthReport`, not
+carried out of `runGrowthWork` — the reasoning the file already states
+for `comparison`: it is about what the owner is being *told*, and a
+count gathered hours earlier is wrong in the direction that matters,
+because he may have decided them all since.
+
+**ZERO IS SILENCE, NOT A ZERO.** No line when nothing is waiting,
+rather than "0 approvals are waiting". A line that appears every
+morning saying nothing is a line the eye learns to skip — and then it
+is skipped on the morning it is not zero.
+
+**THE COUNT IS DECLARED**, or `withoutUncountedBlocks` removes the
+block and the owner hears nothing at all about work waiting on him. An
+unreadable table costs the line and never the email: October's nine
+dead days and 3 November's silence are the same lesson twice.
+
+**DELETED, WITH THE OWNER'S EXPLICIT GO-AHEAD** — about 1,350 lines
+across five files plus four guard tests:
+
+| | |
+|---|---|
+| `approvals/notifyOwner.ts` | the per-approval email |
+| `approvals/whatsappNotice.ts` | the per-approval template send |
+| `metaClient.sendWhatsAppTemplate`, `templateVariable` | the transport |
+| `client.sendWhatsAppTemplate` + the Gupshup stub | the third switch entry |
+| `inbound.ts` taps, the route's `handleOneTap` | tap → detail |
+| `approvalNotice`, `whatsappTemplate`, `whatsappTap` tests | 1,015 lines |
+| `channelRules`' second (template) sender list | H3-c |
+| `WHATSAPP_APPROVAL_TEMPLATE` | env var and its `.env.example` note |
+
+None of it ever ran against live traffic: both templates were still
+PENDING when the design changed. Keeping it would have left two
+hazards — a guard pinning a template-sender list that means nothing,
+and code a later reader would take for "already built" and build on.
+
+**`button` LEFT whatsappInbound's SKIPPED LIST AND CAME BACK THE SAME
+DAY.** It left because a tap was briefly a shape this product sent, so
+counting it as unhandled was false; it returned because nothing sends
+one again. The round trip is in that test's comment, because the list
+shrinking and growing within a day is exactly the kind of thing that
+reads as a mistake later.
+
+**One stale comment corrected in the same commit.** `sitePublishGuard`'s
+fake says why it became table-aware, and said requestApproval "now
+queues an `approval_raised` event" — false as of this commit. Rewritten
+in the past tense; the fake stays table-aware, because the next second
+insert should not be able to do it again.
+
+**Found by mutation, and it is the same class as two earlier ones in
+this feature:** every test of the new line used `buildDailyReport`,
+which is pure, plus a source read of the query — so replacing
+`pendingApprovals = Number(count ?? 0) || 0` with `= 0` SURVIVED. The
+count was fetched and thrown away, and the email would simply never
+mention an approval again. `buildGrowthReport` is now run for real
+against a client that answers a counting select, and what reaches the
+report builder is asserted. Read-and-not-used has now cost three
+assertions in three commits; it is worth looking for by default.

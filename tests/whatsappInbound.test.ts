@@ -140,46 +140,20 @@ describe("4. NON-TEXT IS SKIPPED, NOT MISHANDLED", () => {
   });
 
   it("every non-text type is skipped and counted", () => {
-    // ───────────────────────────────────────────────────────────────
-    // `button` LEFT THIS LIST ON 24 NOVEMBER 2026, with the owner's
-    // explicit go-ahead. Stated here rather than quietly dropped.
+    // `button` LEFT THIS LIST ON 24 NOVEMBER 2026 AND CAME STRAIGHT
+    // BACK, within the day, and the round trip is worth one line.
     //
-    // It was right while nothing understood a tap. H3's approval
-    // notice is a Utility template with a quick-reply button, so a tap
-    // is now the one non-text shape this product SENDS — and therefore
-    // the one it must understand rather than count.
-    //
-    // THE SAFETY HALF IS UNCHANGED, and re-made for `button` in the
-    // test below: a non-text message must never become a text
-    // message. That was always the property. "Counted in skipped" was
-    // how an UNHANDLED type satisfied it, not the property itself.
-    //
-    // WHAT GENUINELY NARROWS, said plainly: if some other shape of
-    // `type: "button"` arrives that we do not handle, this list no
-    // longer catches it. tests/whatsappTap.test.ts carries the
-    // replacement coverage, including that the label must never be
-    // read as text.
-    // ───────────────────────────────────────────────────────────────
-    for (const type of ["image", "audio", "document", "sticker", "location", "interactive", "reaction", "unsupported"]) {
+    // H3's approval notice was briefly a Utility template with a
+    // quick-reply button, so a tap became a shape this product SENT
+    // and therefore had to understand rather than count. Then the
+    // owner replaced the whole per-approval notice with a count in the
+    // daily email — no template, no button, no tap. Nothing sends one,
+    // so nothing should claim to understand one.
+    for (const type of ["image", "audio", "document", "sticker", "location", "button", "interactive", "reaction", "unsupported"]) {
       const read = readInbound(delivery({ messages: [{ from: "91900", id: "x", type }] }), "meta");
       expect(read.messages, type).toEqual([]);
       expect(read.skipped.join(" "), type).toContain(type);
     }
-  });
-
-  it("AND A BUTTON TAP IS HANDLED RATHER THAN COUNTED — still never a message", () => {
-    // The replacement for `button`'s entry above. The dangerous
-    // reading is the LABEL becoming text: "Review request" would reach
-    // Master Chat, spending a model call to answer a sentence nobody
-    // wrote, and would pass through parseDecision on the way there.
-    const read = readInbound(
-      delivery({ messages: [{ from: "91900", id: "x", type: "button", button: { text: "Review request", payload: "ap-1" } }] }),
-      "meta"
-    );
-    expect(read.messages, "a button tap was read as a text message").toEqual([]);
-    expect(read.taps.length).toBe(1);
-    expect(read.taps[0].payload).toBe("ap-1");
-    expect(read.skipped.join(" "), "a handled tap was also counted as skipped").not.toContain("button");
   });
 
   it("A TEXT MESSAGE IN A BATCH SURVIVES ITS NON-TEXT NEIGHBOURS", () => {
