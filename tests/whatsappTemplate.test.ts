@@ -151,6 +151,14 @@ describe("2. THE PAYLOAD IS THE SHAPE META DOCUMENTS", () => {
     await sendWhatsAppTemplate("918115015907", { name: "t", variables: [] });
     expect(sent[0].body.template.components).toEqual([]);
   });
+
+  it("AND NO BUTTON COMPONENT WHEN THERE IS NO PAYLOAD TO SET", async () => {
+    // A button component for a template that has no button is its own
+    // 132000, so this must not be sent unconditionally.
+    metaAnswers();
+    await sendWhatsAppTemplate("918115015907", { name: "t", variables: ["a"] });
+    expect(sent[0].body.template.components.some((c: any) => c.type === "button")).toBe(false);
+  });
 });
 
 describe("3. A REFUSAL IS REPORTED IN META'S OWN WORDS", () => {
@@ -319,9 +327,44 @@ describe("6. THE WHATSAPP LEG IS OFF UNTIL A TEMPLATE IS NAMED", () => {
       // The handle becomes words — businessDisplayName, not the raw
       // signup handle, which is what a customer-facing name would be.
       "Candle by Qaaf",
-      "Send the Diwali email to 40 customers.",
       "A3F2",
     ]);
+  });
+
+  it("AND `confirm` IS NEVER IN THE TEMPLATE, which is what recategorised the first one", async () => {
+    // THE LOAD-BEARING ONE AFTER 24 NOVEMBER 2026. Meta read
+    // approval_waiting_v2 as MARKETING — "did not meet our utility
+    // guidelines" — and the cause is structural: `confirm` is a
+    // sentence about marketing work, so any template filled with it
+    // reads as marketing however the rest is worded. The sample value
+    // is part of what gets classified.
+    process.env.WHATSAPP_APPROVAL_TEMPLATE = "approval_pending_notice";
+    metaAnswers();
+    await whatsappApprovalNotice(
+      sessionAt(null),
+      VERIFIED,
+      "a3f29c10-1111-2222-3333-444444444444",
+      "Send the Diwali email to 40 customers."
+    );
+    const payload = JSON.stringify(sent[0].body);
+    expect(payload, "the confirm sentence reached the template").not.toContain("Diwali");
+    expect(payload).not.toContain("40 customers");
+    expect(sent[0].body.template.components[0].parameters.length, "the template still carries three variables").toBe(2);
+  });
+
+  it("AND THE TAP CARRIES THE ROW'S OWN ID, so the reply is a lookup not a guess", async () => {
+    // The approved template stores no payload of its own — read off
+    // Graph on 24 November 2026 — so without this a tap would come
+    // back carrying nothing to look up.
+    process.env.WHATSAPP_APPROVAL_TEMPLATE = "approval_pending_notice";
+    metaAnswers();
+    const id = "a3f29c10-1111-2222-3333-444444444444";
+    await whatsappApprovalNotice(sessionAt(null), VERIFIED, id, "Send it.");
+    const button = sent[0].body.template.components.find((c: any) => c.type === "button");
+    expect(button, "no button component was sent").toBeTruthy();
+    expect(button.sub_type).toBe("quick_reply");
+    expect(button.index).toBe("0");
+    expect(button.parameters).toEqual([{ type: "payload", payload: id }]);
   });
 
   it("AND A TEMPLATE IS SENT INSIDE THE WINDOW TOO, not free-form", async () => {
@@ -370,6 +413,6 @@ describe("6. THE WHATSAPP LEG IS OFF UNTIL A TEMPLATE IS NAMED", () => {
     const id = "bd7e0000-1111-2222-3333-444444444444";
     await whatsappApprovalNotice(sessionAt(null), VERIFIED, id, "Do it.");
     const { approvalCode } = await import("@/lib/whatsapp/approvalReply");
-    expect(sent[0].body.template.components[0].parameters[2].text).toBe(approvalCode(id));
+    expect(sent[0].body.template.components[0].parameters[1].text).toBe(approvalCode(id));
   });
 });

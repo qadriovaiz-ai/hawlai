@@ -169,9 +169,30 @@ export function templateVariable(value: string, limit = 600): string {
  */
 export async function sendWhatsAppTemplate(
   destination: string,
-  template: { name: string; language?: string; variables: string[] }
+  template: { name: string; language?: string; variables: string[]; buttonPayload?: string | null }
 ) {
   const parameters = template.variables.map((value) => ({ type: "text", text: templateVariable(value) }));
+
+  // THE QUICK-REPLY PAYLOAD IS SET PER SEND, and that is why it can be
+  // trusted. The approved template stores no payload of its own (read
+  // off Graph on 24 November 2026: its QUICK_REPLY button has no
+  // payload or example field), so without this a tap would come back
+  // carrying nothing to look up and the reply would have to guess.
+  //
+  // Index "0", because a template's buttons are addressed by position
+  // and this one has exactly one. A second button would need its own
+  // component and its own decision about what tapping it means.
+  const buttons = template.buttonPayload
+    ? [
+        {
+          type: "button",
+          sub_type: "quick_reply",
+          index: "0",
+          parameters: [{ type: "payload", payload: templateVariable(template.buttonPayload, 128) }],
+        },
+      ]
+    : [];
+
   return post({
     to: destination,
     type: "template",
@@ -182,7 +203,7 @@ export async function sendWhatsAppTemplate(
       // approval fails as "template not found" — which reads like the
       // template was never approved at all.
       language: { code: template.language ?? "en" },
-      components: parameters.length ? [{ type: "body", parameters }] : [],
+      components: [...(parameters.length ? [{ type: "body", parameters }] : []), ...buttons],
     },
   });
 }

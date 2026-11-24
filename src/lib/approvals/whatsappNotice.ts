@@ -120,6 +120,14 @@ export async function whatsappApprovalNotice(
   supabase: any,
   business: NoticeBusiness,
   approvalId: string,
+  /**
+   * RECEIVED AND DELIBERATELY NOT SENT. See the comment on `variables`
+   * below: putting this sentence in a template is what recategorised
+   * the first one to Marketing. It travels in the free-form reply to a
+   * tap instead. Kept in the signature so the three notice surfaces
+   * share one shape, and asserted absent from the payload by
+   * tests/whatsappTemplate.
+   */
   confirm: string
 ): Promise<boolean> {
   const template = approvalTemplateName();
@@ -144,16 +152,36 @@ export async function whatsappApprovalNotice(
   const { sendWhatsAppTemplate } = await import("@/lib/whatsapp/client");
   await sendWhatsAppTemplate(phone, {
     name: template,
-    // POSITIONAL, AND THE ORDER IS THE APPROVED BODY'S CONTRACT:
-    // {{1}} the business, {{2}} what will happen, {{3}} the code. A
-    // count or order that disagrees with the approved template is Graph
-    // 132000, which reports a parameter-count problem rather than the
-    // thing that is actually wrong.
+    // ───────────────────────────────────────────────────────────────
+    // TWO VARIABLES, AND `confirm` IS NOT ONE OF THEM — 24 Nov 2026.
+    // ───────────────────────────────────────────────────────────────
+    //
+    // This sent three, with `confirm` as {{2}}, and that is exactly
+    // what got the first template recategorised. Meta read
+    // approval_waiting_v2 as MARKETING — "did not meet our utility
+    // guidelines" — and the cause is structural rather than a wording
+    // slip: `confirm` is a sentence about marketing work ("Send the
+    // Diwali email to 40 customers"), so ANY template filled with it
+    // reads as marketing however carefully the rest is written. The
+    // sample value is part of what gets classified.
+    //
+    // So the template is a doorbell: the business, and the code. The
+    // approved one (approval_pending_notice) has exactly those two,
+    // read off Graph rather than counted by eye — and a count that
+    // disagrees with the approved body is Graph 132000, which reports
+    // a parameter-count problem rather than the thing that is wrong.
+    //
+    // WHAT THE TEMPLATE MAY NEVER SAY TRAVELS AFTER THE TAP. A tap is
+    // an inbound message, which opens the 24-hour window, inside which
+    // a free-form reply is legal — sent from the webhook, already the
+    // one permitted free-form sender. The detail arrives there.
     variables: [
       businessDisplayName(business?.dealership_name, PLACEHOLDER_BUSINESS_NAME),
-      String(confirm ?? "").trim() || "An action is waiting for your approval.",
       approvalCode(approvalId),
     ],
+    // THE ROW'S OWN ID, so the tap is a lookup and not a guess. The
+    // approved template stores no payload of its own.
+    buttonPayload: approvalId,
   });
 
   if (!insideWindow) {

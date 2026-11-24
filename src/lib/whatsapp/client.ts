@@ -84,7 +84,7 @@ export async function sendWhatsAppImage(destination: string, imageUrl: string, c
  */
 export async function sendWhatsAppTemplate(
   destination: string,
-  template: { name: string; language?: string; variables: string[] }
+  template: { name: string; language?: string; variables: string[]; buttonPayload?: string | null }
 ) {
   return PROVIDERS[activeProvider()].sendTemplate(destination, template);
 }

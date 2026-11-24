@@ -4942,3 +4942,79 @@ Not done, and not code: the Utility template is the owner's to submit.
 `sendWhatsAppTemplate` does not exist yet (H3-b) and `channelRules`
 has not been touched (H3-c) — its one-sender assertion is still exactly
 as it was, and a test in `approvalNotice` pins that.
+
+---
+
+## 2026-11-24 — a Utility template cannot say what the approval is, so the tap does
+
+Meta recategorised `approval_waiting_v2` to **MARKETING** — "did not
+meet our utility guidelines" — while the old `approval_pending_notice`
+stayed Utility. Both were PENDING.
+
+**THE CAUSE IS STRUCTURAL FOR THIS PRODUCT, not a wording slip.** The
+template carried `confirm` as `{{2}}`, and `confirm` is a sentence
+about marketing work — the sample value supplied at submission was
+*"Send the Diwali email to 40 customers."* Meta's classifier reads the
+body with its sample, and Meta's own docs say mixed content is treated
+as Marketing. So ANY template filled with a Hawlai approval sentence
+reads as marketing however carefully the rest is written.
+
+**That reverses advice given the day before.** I had argued the
+template MUST carry the confirm sentence, because without it the notice
+never says what the request is. The owner's original template — a
+business name, a Request ID, a button, and no detail — was right, for a
+reason neither of us knew at the time.
+
+**The way out was already in the design.** A quick-reply tap is an
+INBOUND MESSAGE, and an inbound message opens WhatsApp's 24-hour
+session window. Inside it a free-form reply is legal — and free-form
+may be sent from the webhook, which `channelRules` already names as the
+one permitted free-form sender. So:
+
+```
+Utility template (business + code, no detail)
+   → owner taps "Review request"
+   → inbound type:"button" → webhook → free-form reply carrying the
+     row's own stored sentence and "haan A3F2 / nahi A3F2"
+```
+
+The detail the template may never contain arrives after the tap, and
+**no guard had to move**. A URL button could not have done this: it
+would open the dashboard, the screen H3 exists to avoid.
+
+**A TAP NEVER DECIDES ANYTHING.** It means "tell me what this is". The
+decision stays with a typed haan/nahi plus a code — the path H2 built
+and M4 verified live. So a tap on a five-day-old notice is harmless: it
+re-sends the detail, or says the row is gone. An unplaceable payload
+gets the pending list, never a best guess, not even when exactly one is
+pending.
+
+The payload is set per send, because the approved template stores none
+of its own — read off Graph rather than assumed.
+
+**AN EXISTING TEST WAS NARROWED, WITH PERMISSION.**
+`tests/whatsappInbound.test.ts` listed `button` among non-text types
+that must be "skipped and counted". That was right while nothing
+understood a tap; it is now false. The auto-mode classifier refused the
+edit twice, correctly — Rule 7 says bring it to the owner, and that is
+what happened. He approved it.
+
+The safety half is unchanged and re-made for `button` in its own test:
+a non-text message must never become a TEXT message. That was always
+the property; "counted in skipped" was how an unhandled type satisfied
+it. What genuinely narrows: another shape of `type: "button"` that we
+do not handle is no longer caught by that list. Verified by mutation
+that the edited test still fails when a tap is read as text.
+
+**REJECTED:** making the parser push `button` into `skipped` as well as
+handling it, which would have left the test untouched. `skipped` is
+documented as "why anything was left out, for the delivery log", and a
+handled tap was not left out — the row would have said something false.
+Two earlier pieces of this feature moved code rather than a guard; this
+one could not, so it went to the owner instead of being worked around.
+
+**UNVERIFIED, AND UNPROBEABLE.** Both templates are PENDING, so no
+button exists to press. This is written from Meta's documented
+`type: "button"` shape — the exact situation M2's header warns about,
+and unlike the WordPress adapter it cannot be probed first, because
+there is no approved template to produce a tap.
