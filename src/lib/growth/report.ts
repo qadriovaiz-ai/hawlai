@@ -442,6 +442,19 @@ export function buildDailyReport(input: {
    */
   pendingApprovals?: number;
   /**
+   * Who was named in the answer searches, when anybody was.
+   *
+   * G-a, 24 November 2026. Already composed by `rivalsLine`, which
+   * returns null in the three cases where a line would be worse than
+   * none — so this being absent is the normal state, not an error.
+   *
+   * COMPOSED ELSEWHERE AND CARRIED, rather than built here, because
+   * the sentence has a constraint this file has no way to know about:
+   * it must name no AI engine. The rows come from a web search, and
+   * `aeoAgent`'s disclosure says so.
+   */
+  rivals?: { text: string; numbers: Counted[] } | null;
+  /**
    * Setup goals sitting on the Tasks page, waiting to be confirmed.
    *
    * WHY IT IS CARRIED, 1 November 2026. The block below used to end
@@ -540,6 +553,20 @@ export function buildDailyReport(input: {
       // exists to make visible rather than silent.
       numbers: [{ label: "Approvals waiting", value: n, source: "pending_approvals" }],
     });
+  }
+
+  // WHO GETS NAMED AND HE DOES NOT — G-a / A4a, 24 November 2026.
+  //
+  // Drawn from rows `aeo_presence` has been recording since migration
+  // 199; the trend read our own column and threw this one away. No
+  // vendor, no contract, no terms reading — see lib/seo/aeoRivals.
+  //
+  // AFTER the approvals line, which is work only HE can move, and
+  // before the plan line. Absent entirely when there is no run, when
+  // every question named him, or when nothing else was named —
+  // `rivalsLine` returns null and this pushes nothing.
+  if (input.rivals) {
+    blocks.push({ kind: "line", text: input.rivals.text, numbers: input.rivals.numbers });
   }
 
   blocks.push({

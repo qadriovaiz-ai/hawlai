@@ -491,6 +491,43 @@ export async function buildGrowthReport(
     console.error(`[daily-growth] could not count pending approvals for ${dealershipId}: ${err?.message ?? err}`);
   }
 
+  // ---- Who gets named and he does not — G-a / A4a -------------------
+  //
+  // READ HERE for the same reason as the two above, and NEVER THROWN.
+  // No run yet is the normal state: aeoAgent is on demand only and
+  // AEO_SCHEDULE_ENABLED is off by default, so most businesses have no
+  // rows and simply get no line.
+  let rivals: { text: string; numbers: { label: string; value: number; source: string }[] } | null = null;
+  try {
+    const { data } = await supabase
+      .from("aeo_presence")
+      .select("run_id, run_at, question, mentioned, competitors")
+      .eq("dealership_id", dealershipId)
+      .order("run_at", { ascending: false })
+      .limit(20);
+    const rows = data ?? [];
+    if (rows.length) {
+      // THE LATEST RUN ONLY. Pooling runs would count a business named
+      // in September against questions asked in November, and report a
+      // rival that may have stopped appearing months ago.
+      const latestRun = rows[0].run_id;
+      const { rivalsNamedInstead, rivalsLine } = await import("@/lib/seo/aeoRivals");
+      rivals = rivalsLine(
+        rivalsNamedInstead(
+          rows
+            .filter((r: any) => r.run_id === latestRun)
+            .map((r: any) => ({
+              question: String(r.question ?? ""),
+              mentioned: Boolean(r.mentioned),
+              competitors: Array.isArray(r.competitors) ? r.competitors : [],
+            }))
+        )
+      );
+    }
+  } catch (err: any) {
+    console.error(`[daily-growth] could not read answer-search presence for ${dealershipId}: ${err?.message ?? err}`);
+  }
+
   const business = await businessName(supabase, dealershipId);
   const report = buildDailyReport({
     dealershipId,
@@ -515,6 +552,7 @@ export async function buildGrowthReport(
     askForFact,
     activeGoals,
     pendingApprovals,
+    rivals,
     findingCount: findings.length,
     pendingSetupDrafts: drafts.pending,
     aiFailure: opts.aiFailure

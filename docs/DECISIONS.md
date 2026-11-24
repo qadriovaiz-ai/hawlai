@@ -5103,3 +5103,68 @@ mention an approval again. `buildGrowthReport` is now run for real
 against a client that answers a counting select, and what reaches the
 report builder is asserted. Read-and-not-used has now cost three
 assertions in three commits; it is worth looking for by default.
+
+---
+
+## 2026-11-24 — G-a: who gets named, from rows already being written
+
+The owner's GEO decision: **no vendor, no contract, no terms reading**
+— only the piece that uses what is already there. That is A4a, planned
+on 6 November and never built.
+
+**Nothing new is measured.** `aeo_presence` (migration 199) has stored,
+per run and per question, whether the business was mentioned **and who
+was named instead**. `aeoTrend` read our own column — "three of four
+questions named you, up from two" — and threw the other one away. This
+reads the column that was already there, and adds one line to the daily
+email.
+
+**THE RISK IS NOT THE ARITHMETIC, IT IS THE CLAIM**, and it is the
+whole reason this piece needed care. The rows come from a Claude model
+with live web search, which `aeoAgent`'s fixed DISCLOSURE describes as
+*"not a direct query of ChatGPT, Gemini, or Perplexity, which Hawlai
+has no API access to"* — the most accurate sentence in the SEO toolkit.
+The obvious wording for this line, *"ChatGPT names nine competitors and
+not you"*, would be **false**.
+
+So the line names no engine, says what it is in the same breath — *"a
+search of the open web, not a question put to any AI assistant"* — and
+calls them **businesses that were named**, never "your competitors": a
+name that came out of a search is an observation, and nothing here
+checks it is a real business, a competitor, or even distinct from the
+next one. Three assertions hold that, including one over the module's
+own source, because an engine name reaching a template string is how
+the sentence quietly becomes false.
+
+**ONE RIVAL IS ONE BUSINESS.** Names are case- and space-folded for
+counting and displayed as first seen. Counting appearances instead
+would report nine rivals where there are four — the inflated figure the
+daily report's digit walk exists to keep away from him. The tally is
+"how many questions named them", so a search listing a business twice
+in one answer counts once.
+
+**SILENT IN THREE CASES**, each one where a line is worse than none: no
+run yet (`aeoAgent` is on demand and `AEO_SCHEDULE_ENABLED` is off, so
+this is the normal state), named every time (the finding does not
+exist), and nobody else named (that says something about the search,
+not about him). **Not** silent when he was named *and* others were —
+"you and nine others" is real, and suppressing it would report only the
+worst case.
+
+**THE LATEST RUN ONLY.** Pooling runs would count a business named in
+September against questions asked in November, and report a rival that
+may have stopped appearing months ago.
+
+Figures declared, as the approvals line is: an undeclared number costs
+the whole block, and he would hear nothing while the email looked
+normal.
+
+Mutation-verified from a green baseline (211 passed): 15 of 16 killed,
+the 16th a control. **One survived the first run**: keying the tally on
+the appearance rather than the question. Every fixture had named a
+business at most once per question, so the two were indistinguishable —
+a fixture gap, not a code one, and now pinned.
+
+**Still out of scope by decision:** any paid AI-visibility feed, and
+any reading of Perplexity's or OpenAI's developer terms. The disclosure
+stands until something actually queries a named engine.
