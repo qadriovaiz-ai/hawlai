@@ -33,6 +33,11 @@ import { readFileSync } from "node:fs";
  */
 export function code(path: string): string {
   return readFileSync(path, "utf8")
+    // CRLF FILES: the regexes and indexOf searches built through this
+    // helper use `\n` (the LF convention) — normalizing to LF makes the
+    // helper line-ending agnostic. Verified 2026-11-26 against
+    // src/app/api/ads/[id]/status/route.ts and src/lib/approvals/decide.ts.
+    .replace(/\r\n/g, "\n")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .split("\n")
     .filter((line) => !line.trim().startsWith("//"))
@@ -48,7 +53,19 @@ export function code(path: string): string {
  * Named so that using it is a visible choice rather than the default.
  */
 export function sourceWithComments(path: string): string {
-  return readFileSync(path, "utf8");
+  // NORMALISED LIKE THE OTHER TWO, 26 November 2026. `code()` and
+  // `sql()` were given this and this one was not, which left the
+  // helper fragile in exactly the place a reader would least expect
+  // it: a test that reaches for the comments is already doing the
+  // careful thing.
+  //
+  // THE SAME BUG, NOT A PRECAUTION. `.gitattributes` has `* text=auto`
+  // and a Windows checkout has `core.autocrlf=true`, so a fresh clone
+  // carries CRLF while files written locally are LF. Any assertion
+  // whose pattern or slice contains `\n` then matches on one machine
+  // and not the other — which is how seven tests were red on a fresh
+  // Windows clone and green here.
+  return readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 }
 
 /**
@@ -66,6 +83,10 @@ export function sourceWithComments(path: string): string {
  */
 export function sql(path: string): string {
   return readFileSync(path, "utf8")
+    // CRLF FILES: same normalization as code() — migrations such as
+    // supabase/migrations/226_webhook_deliveries.sql carry `--` comments
+    // whose content the line-ending split must not obscure.
+    .replace(/\r\n/g, "\n")
     .split("\n")
     .map((line) => {
       const at = line.indexOf("--");

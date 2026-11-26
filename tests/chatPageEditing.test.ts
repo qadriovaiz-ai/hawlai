@@ -515,7 +515,10 @@ describe("the body writer never writes the search title", () => {
   });
 
   it("and the platform's text path only ever writes sections", () => {
-    const platform = readFileSync("src/lib/publish/platforms/hawlaiSite.ts", "utf8");
+    //hawlaiSite.ts is CRLF; normalize so the slice below (which searches
+    // with `\n`) does not run to end-of-file — otherwise later code in
+    // execute() leaks into `textPath` and trips the forbidden-words assert.
+    const platform = readFileSync("src/lib/publish/platforms/hawlaiSite.ts", "utf8").replace(/\r\n/g, "\n");
     const textPath = platform.slice(platform.indexOf("async function executeText"), platform.indexOf("return {\n    id: \"hawlai_site\""));
     expect(textPath).toMatch(/update: Record<string, unknown> = \{ sections: result\.sections/);
     expect(textPath).not.toMatch(/seo_title|meta_description|og_image_url/);
