@@ -80,6 +80,28 @@ export type ActionKey =
    */
   | "update_page_text"
   /**
+   * Add one question-and-answer to a page's FAQ — A6-d.
+   *
+   * A SEPARATE KEY FROM `update_page_text`, AND THE SEPARATION IS THE
+   * WHOLE REASON THIS EXISTS. `update_page_text` can only change a
+   * string prop that is ALREADY on the page: `lineNow` returns null for
+   * a block that is not there, and preview refuses. So it can FILL an
+   * empty `faq_item` the owner added by hand, and it cannot ADD one —
+   * which made A6-d impossible without either a two-step dance or this.
+   *
+   * REVERSIBLE, UNLIKE CREATING A PAGE. The item carries the id this
+   * action generated, so undo removes exactly what was added and the
+   * page returns to precisely its prior state. That is why it may hold
+   * L1 at all, and it is the difference `canHoldL1` tests for.
+   *
+   * NOT IN L2_ALLOWLIST, and deliberately: `update_page_meta` is there
+   * because a search title is read by strangers and nobody else. An
+   * answer on a page is the business speaking to its customers, and the
+   * owner's decision of 24 November keeps the whole SEO loop at L0
+   * until a measured outcome exists.
+   */
+  | "add_faq_item"
+  /**
    * Change the words on a COLLECTION page of the merchant's store — the
    * paragraph a customer reads above a group of products.
    *
@@ -367,6 +389,7 @@ export const ALWAYS_REQUIRES_APPROVAL: readonly ActionKey[] = [
   "activate_ad_campaign",
   "update_page_meta",
   "update_page_text",
+  "add_faq_item",
   "update_collection_text",
 ];
 
@@ -390,6 +413,11 @@ export const ACTION_RISK: Record<ActionKey, RiskLevel> = {
   // draft layer, so an approved edit is what every visitor reads from
   // the moment it saves.
   update_page_text: "medium",
+  // Nothing spends, and the added item is identifiable so removing it
+  // restores the page exactly — but it is the business answering a
+  // customer's question in public, and an answer nobody meant to give
+  // is worse than a page that says nothing.
+  add_faq_item: "medium",
   // Nothing spends, and the prior text is recorded so it is reversible
   // — but this is a live external storefront with no draft layer, so an
   // approved edit is what the merchant's customers read immediately.

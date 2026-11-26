@@ -134,7 +134,6 @@ export async function runMetaFixLoop(supabase: any, dealershipId: string, now: D
     if (!Array.isArray(pages)) return { proposed: 0, skipped: ["could not read the pages"] };
 
     const gaps = findMetaGaps(pages as PageRow[], business?.dealership_name ?? null);
-    if (!gaps.length) return { proposed: 0, skipped: [] };
 
     // Everything this loop has ever done for this business, so both the
     // cooldown and today's cap are answered from the record rather than
@@ -143,7 +142,7 @@ export async function runMetaFixLoop(supabase: any, dealershipId: string, now: D
       .from("publish_actions")
       .select("target_ref, requested_changes, status, updated_at, created_at, resolution_detail")
       .eq("dealership_id", dealershipId)
-      .eq("action_key", "update_page_meta")
+      .in("action_key", ["update_page_meta", "add_faq_item"])
       .order("created_at", { ascending: false })
       .limit(200);
     // THIS LOOP'S OWN ROWS ONLY. A card the owner asked for in chat is
@@ -219,9 +218,172 @@ export async function runMetaFixLoop(supabase: any, dealershipId: string, now: D
       room--;
     }
 
+    // ──────────────────────────────────────────────────────────────────
+    // AND THE ANSWERS HE HAS ALREADY GIVEN — A6-d.
+    //
+    // THE SAME SUBSYSTEM AND THE SAME CAP, deliberately. Two subsystems
+    // would mean three meta proposals AND three FAQ proposals, which is
+    // six a day — and the owner's number is three. One cap means one
+    // loop.
+    //
+    // AFTER THE META GAPS, because a page with no search title is
+    // invisible in a result list, and an answer on a page nobody can
+    // find helps nobody.
+    if (room > 0) {
+      const faq = await proposeFaqAnswers(supabase, dealershipId, pages as PageRow[], history, room, now, facts, platform);
+      proposed += faq.proposed;
+      skipped.push(...faq.skipped);
+    }
+
     return { proposed, skipped };
   } catch (err: any) {
     console.error(`[seo-fix-loop] failed for ${dealershipId}: ${err?.message ?? err}`);
     return { proposed: 0, skipped: ["the loop could not finish"] };
   }
+}
+
+/**
+ * A stable id for one question's FAQ entry.
+ *
+ * DERIVED FROM THE INTERVIEW KEY, so it is the same id tomorrow. That
+ * matters three times over: `createPublishAction`'s intent key stays
+ * stable so a retry does not stack a second card, the platform's
+ * already-present check recognises its own work, and the cooldown can
+ * tell which question he said no to.
+ */
+export function faqItemId(questionKey: string): string {
+  const slug = String(questionKey ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  // TRIMMED AFTER COMPOSING, not before. A blank key produced "faq-"
+  // — a trailing dash, and an id that LOOKS usable for a question that
+  // has no key. The loop already refuses a candidate without one, so
+  // this is the second line of defence rather than the first.
+  return `faq-${slug}`.replace(/-+$/, "");
+}
+
+/** Has he said no to this exact FAQ entry recently? */
+export function faqRejectedRecently(
+  rows: { requested_changes?: any; status?: string | null; updated_at?: string | null }[],
+  itemId: string,
+  now: Date
+): boolean {
+  return (rows ?? []).some((row) => {
+    if (row?.status !== "rejected") return false;
+    if (String(row?.requested_changes?.itemId ?? "") !== itemId) return false;
+    // Same reading as the meta half: the status already says he
+    // declined, so a date this code cannot read is not permission.
+    if (!String(row?.updated_at ?? "").trim()) return true;
+    return inCooldown(row?.updated_at, now);
+  });
+}
+
+/**
+ * Propose the answers he has already given, as FAQ entries.
+ *
+ * NOTHING IS WRITTEN AND NOTHING IS GENERATED. The answer is the
+ * sentence he typed into the interview, read back out of
+ * `business_knowledge` by `answerDraft`; this only asks whether it may
+ * go on the page.
+ */
+async function proposeFaqAnswers(
+  supabase: any,
+  dealershipId: string,
+  pages: PageRow[],
+  history: any[],
+  room: number,
+  now: Date,
+  facts: any,
+  platform: any
+): Promise<FixLoopResult> {
+  const skipped: string[] = [];
+
+  // THE PAGE THAT ALREADY HAS AN FAQ SECTION. Where an FAQ sits on a
+  // page is a layout decision and this action does not make it — so a
+  // business with no FAQ block is told once, rather than once per
+  // question.
+  const host = pages.find((p) => !p?.is_fallback && hasFaqBlock(p?.sections));
+  if (!host) {
+    return { proposed: 0, skipped: ["no FAQ section on any page yet — add one in Website Builder and I can fill it"] };
+  }
+
+  const { gatherAnswerGaps } = await import("@/lib/seo/answerPlanner");
+  const planned = await gatherAnswerGaps(supabase, dealershipId);
+  const answerable = planned.drafted.filter((d) => d.draft.ok && d.key);
+  if (!answerable.length) return { proposed: 0, skipped: [] };
+
+  const { createPublishAction } = await import("@/lib/publish/create");
+  const { guardOrMark } = await import("@/lib/claims/factsGate");
+
+  let proposed = 0;
+  let left = room;
+  for (const row of answerable) {
+    if (left <= 0) {
+      skipped.push(`${answerable.length - proposed} more answers waiting for tomorrow`);
+      break;
+    }
+    const itemId = faqItemId(String(row.key));
+    if (faqRejectedRecently(history, itemId, now)) {
+      skipped.push(`"${row.question}": you said no to this recently`);
+      continue;
+    }
+
+    // HIS OWN WORDS, STILL GUARDED. He wrote this into the interview as
+    // a note about his business; putting it on a public page makes it
+    // an advertising claim, which is a different thing. The
+    // site-as-evidence work settled that owner-written is not the same
+    // as substantiated. Publish mode, the strictest, because after
+    // approval nobody reads it again.
+    const answer = (row.draft as any).answer as string;
+    const gated = guardOrMark({ value: answer }, facts, "publish");
+    const clean = String((gated.output as any).value ?? "").trim();
+    if (!clean) {
+      skipped.push(`"${row.question}": nothing left after the claims check`);
+      continue;
+    }
+
+    const result = await createPublishAction(supabase, platform, {
+      dealershipId,
+      platform: "hawlai_site",
+      actionKey: "add_faq_item",
+      targetRef: String(host.id),
+      targetLabel: `${host.title || host.slug} page`,
+      requestedChanges: { itemId, question: row.question, answer: clean },
+      requestedBy: null,
+      resolutionPath: "direct",
+      resolutionDetail: { query: AUDIT_SOURCE, candidateCount: 1, matchType: "direct", chosenRef: String(host.id) },
+    });
+
+    if (!result.ok) {
+      skipped.push(`"${row.question}": ${result.reason}`);
+      continue;
+    }
+    if ((result as any).alreadyPending) {
+      skipped.push(`"${row.question}": already waiting`);
+      continue;
+    }
+    proposed++;
+    left--;
+  }
+
+  return { proposed, skipped };
+}
+
+/** Does this page carry an FAQ container at all? */
+export function hasFaqBlock(sections: unknown): boolean {
+  let found = false;
+  const walk = (node: any): void => {
+    if (found || !node) return;
+    if (Array.isArray(node)) return node.forEach(walk);
+    if (typeof node !== "object") return;
+    if (node.type === "faq" && typeof node.id === "string") {
+      found = true;
+      return;
+    }
+    walk(node.children);
+  };
+  walk(sections);
+  return found;
 }

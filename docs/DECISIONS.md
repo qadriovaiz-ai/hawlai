@@ -5423,3 +5423,82 @@ source grep was available — and a grep cannot tell that the key
 **arrives**, only that the word appears. It is now run for real against
 a fake client, which also exercises `questionByKey` and
 `aeoQuestionsFor` end to end.
+
+---
+
+## 2026-11-24 — A6-d: a new action key, reversible by the id it generated
+
+The owner chose **Raasta 2** — a new action key rather than the
+two-step dance — and the reason it was needed at all is a hard limit:
+`update_page_text` can only change a string prop that is **already** on
+the page. `previewText` reads `lineNow(sections, blockId, prop)` and
+refuses when it is null, so it can **fill** an empty `faq_item` the
+owner added by hand and cannot **add** one.
+
+**REVERSIBLE, AND THAT IS THE WHOLE DESIGN.** The item carries the id
+this action generated, so undo removes exactly that one and the page is
+precisely as it was. `canHoldL1` tests for that property — *"L1 only
+means anything because a change is reversible"* — and it is why A6-e
+stayed out of scope: un-creating a page is a deletion, not a reverse.
+
+**STILL L0.** Not in `L2_ALLOWLIST`, deliberately: `update_page_meta`
+is there because a search title is read by strangers, and an answer on
+a page is the business speaking to its own customers. The loop stays
+approval-first until S-e measures something on a real business.
+
+**TWO REGISTRIES DEMANDED AN ENTRY AND EACH NAMED ITSELF** — neither
+was found by reading the code. `approvalCoverage`: *"add_faq_item
+missing from ACTION_POLICIES"*. `recordDecision`: *"action types with
+no measure decided"*. That is Rule 6's mechanism working as designed.
+
+The measure is the **same as the other two page actions** — visits to
+this page, from `page_events` — because it is the same consequence. Not
+"not collected": something changed on a page, and what this product can
+count about a page is visits to it. A number claiming to attribute one
+FAQ answer is one the data cannot support.
+
+**THE PROPS ARE `heading` AND `html`, NOT `question` AND `answer`.**
+Four systems are keyed on that exact prop set — provenance, the claims
+guard, the owner's claims review and the Properties Panel — and a prop
+named `answer` would be invisible to all four, which is precisely the
+2026-09-30 incident that put the guard on the builder.
+
+**ONE CAP, NOT THREE PLUS THREE.** The FAQ half runs inside the same
+`seo_fixes` subsystem and spends the same `room`, because two
+subsystems would have meant six proposals a day against the owner's
+number of three. It runs **after** the meta gaps: a page with no search
+title is invisible in a result list, and an answer on a page nobody can
+find helps nobody.
+
+**HIS OWN WORDS, STILL GUARDED**, in publish mode. He wrote the answer
+into the interview as a note about his business; on a public page it
+becomes an advertising claim, which is a different thing — the
+site-as-evidence work settled that owner-written is not the same as
+substantiated.
+
+**WHAT THE PLATFORM REFUSES RATHER THAN DOING:** creating an FAQ
+container on a page that has none (where an FAQ sits is a layout
+decision, and this action is about one answer, not redesigning his
+page); a second copy of a question already there; an entry missing its
+question or its answer; and **undoing a removal**, because putting an
+answer back would mean re-approving copy taken down on purpose.
+
+Removal is also **not verified by reading the page back** — an absence
+cannot be told apart from a page that failed to load, and reporting "it
+is gone" off a failed fetch is the kind of claim this adapter exists to
+avoid.
+
+Mutation-verified from a green baseline (186 passed): 26 of 27 killed,
+the 27th a control. **One survived the first run:** a fallback page
+hosting the answer. `hasFaqBlock` is pure and tested, but the host
+**selection** lives inside `proposeFaqAnswers`, which no unit test
+executes, so dropping the `!is_fallback` clause passed. The
+replacement is a **source** assertion and therefore weaker than the
+rest of that file — bounded to the one line, and labelled as weaker in
+the test itself. A behavioural version would need a fake covering
+`websites`, `website_pages`, `publish_actions`, the platform registry
+and the facts gather; worth doing if that loop grows again.
+
+One slip of my own, caught by a test: `faqItemId("")` produced `"faq-"`
+— a trailing dash, and an id that **looks** usable for a question with
+no key. Trimmed after composing rather than before.

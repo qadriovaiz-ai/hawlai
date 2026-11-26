@@ -155,6 +155,12 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // true. The draft layer protects a NEW page, not an edit to a live
   // one, so this action's risk is unchanged.
   update_page_text: { actionType: "edit", riskLevel: "medium", description: "Change a heading, paragraph or button label on a page of the merchant's own site — what a visitor reads", requiresApproval: true },
+  // A6-d. An EDIT rather than a creation: the item is added inside a
+  // block the owner already has, it carries the id this action
+  // generated, and removing that id puts the page back exactly. That
+  // reversibility is what `canHoldL1` tests for and what makes this
+  // different from creating a page, which cannot be un-created.
+  add_faq_item: { actionType: "edit", riskLevel: "medium", description: "Add one question and its answer to the FAQ on a page of the merchant's own site — what a visitor reads", requiresApproval: true },
 
   // ---- Proposing a page for a search that has none (G3) ------------
   //

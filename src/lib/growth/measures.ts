@@ -53,6 +53,13 @@ const COUNTED: Record<string, Measure> = {
   create_discount_code: { metric: "paid orders", source: "orders", direction: "up" },
   update_page_text: { metric: "visits to this page", source: "page_events", direction: "up" },
   update_page_meta: { metric: "visits to this page", source: "page_events", direction: "up" },
+  // A6-d. THE SAME MEASURE AS THE OTHER TWO PAGE ACTIONS, because it is
+  // the same consequence: something changed on a page, and the thing
+  // this product can count about a page is visits to it. An FAQ answer
+  // is not separately attributable — impressions move for many reasons
+  // — and claiming otherwise would put a number on this that the data
+  // cannot support.
+  add_faq_item: { metric: "visits to this page", source: "page_events", direction: "up" },
   publish_site: { metric: "visits to the site", source: "page_events", direction: "up" },
 };
 

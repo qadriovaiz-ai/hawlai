@@ -309,13 +309,238 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
     };
   }
 
+  // ──────────────────────────────────────────────────────────────────
+  // ADD ONE QUESTION AND ITS ANSWER — A6-d.
+  //
+  // WHY A SEPARATE KEY AT ALL: `update_page_text` can only change a
+  // string prop that is ALREADY on the page — `lineNow` returns null
+  // for a block that is not there and preview refuses. So it can fill
+  // an empty `faq_item` the owner added by hand, and cannot add one.
+  //
+  // THE ITEM CARRIES THE ID THIS ACTION GENERATED, and that is what
+  // makes the whole thing reversible: undo removes exactly that id, so
+  // the page returns to precisely its prior state. A created PAGE
+  // cannot be un-created; an item identified by id can.
+  //
+  // THE ANSWER IS GUARDED WHEN THE CARD IS BUILT, not here — the same
+  // division executeText states: "the text that was APPROVED is what
+  // goes on the page". Re-guarding at write time against different
+  // facts would be a second, different answer to a question the owner
+  // has already decided.
+  // ──────────────────────────────────────────────────────────────────
+
+  /**
+   * The `faq` container on a page — the NODE, not a copy of it.
+   *
+   * Returning the node is what lets `executeFaq` mutate a deep copy of
+   * the tree in place. A copy of the items would have to be written
+   * back by id, which is a second lookup and a second thing to get
+   * wrong.
+   */
+  function faqBlock(sections: unknown): Record<string, any> | null {
+    let found: Record<string, any> | null = null;
+    const walk = (node: unknown): void => {
+      if (found || !node) return;
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (typeof node !== "object") return;
+      const b = node as Record<string, any>;
+      if (b.type === "faq" && typeof b.id === "string") {
+        found = b;
+        return;
+      }
+      walk(b.children);
+    };
+    walk(sections);
+    return found;
+  }
+
+  /** A faq container's items, however the tree stores them. */
+  const faqItems = (block: Record<string, any> | null): any[] =>
+    block && Array.isArray(block.children) ? block.children : [];
+
+  /** What a card asked for, as the loop recorded it. */
+  function faqRequest(changes: Record<string, unknown>): { itemId: string; question: string; answer: string; remove: boolean } | null {
+    const itemId = String((changes as any)?.itemId ?? "").trim();
+    if (!itemId) return null;
+    return {
+      itemId,
+      question: String((changes as any)?.question ?? "").trim(),
+      answer: String((changes as any)?.answer ?? "").trim(),
+      // THE REVERSE DIRECTION ON THE SAME KEY, following
+      // `update_page_text`'s own `restore: true`. One key, one place to
+      // reason about, and the flag says which way it goes.
+      remove: (changes as any)?.remove === true,
+    };
+  }
+
+  /** The same target shape the other two actions show on a card. */
+  function faqTarget(action: PublishActionRecord, page: any, site: any) {
+    return {
+      title: `${page.title ?? page.slug} (/site/${site?.slug ?? ""}${page.slug === "home" ? "" : `/${page.slug}`})`,
+      variantTitle: null,
+      currentPrice: null,
+      currency: null,
+      currencyLabel: null,
+      imageUrl: null,
+      resolutionPath: action.resolutionPath ?? undefined,
+    };
+  }
+
+  async function previewFaq(action: PublishActionRecord): Promise<PreviewResult> {
+    if (!action.targetRef) return { ok: false, reason: "No page was specified." };
+    const read = await readPage(action.dealershipId, action.targetRef);
+    if (!read.ok) return { ok: false, reason: read.reason };
+    if (!read.page || !read.site) return { ok: false, reason: "That page is no longer on your website." };
+
+    const want = faqRequest(action.requestedChanges);
+    if (!want) return { ok: false, reason: "Nothing to add — that request didn't say which question and answer." };
+    if (!want.remove && (!want.question || !want.answer)) {
+      return { ok: false, reason: "An FAQ entry needs both a question and an answer." };
+    }
+
+    const faq = faqBlock(read.page.sections);
+    // REFUSED, NOT CREATED. Adding an FAQ block to a page is a layout
+    // decision — where it sits, what it is headed — and this action is
+    // about one answer, not about redesigning his page.
+    if (!faq) {
+      return {
+        ok: false,
+        reason: "That page has no FAQ section yet. Add one in Website Builder — where it sits on the page is your call — and I can fill it.",
+      };
+    }
+
+    const existing = faqItems(faq).find((i: any) => i?.id === want.itemId);
+
+    if (want.remove) {
+      if (!existing) {
+        return { ok: false, reason: "That question isn't on the page any more, so there is nothing to take off." };
+      }
+      return {
+        ok: true,
+        preview: {
+          summary: `Remove "${String(existing?.props?.heading ?? "a question")}" from the FAQ on the ${String(action.targetLabel ?? read.page.slug)}`,
+          target: faqTarget(action, read.page, read.site),
+          changes: [{ field: `${faq.id}:${want.itemId}`, before: String(existing?.props?.heading ?? ""), after: "" }],
+          warnings: [],
+        },
+      };
+    }
+
+    // A RETRIED REQUEST MUST NOT ADD A SECOND COPY, and saying so is
+    // more use to the approver than a silent no-op.
+    if (existing) {
+      return { ok: false, reason: "That question is already in the FAQ on this page." };
+    }
+
+    return {
+      ok: true,
+      preview: {
+        summary: `Add "${want.question}" to the FAQ on the ${String(action.targetLabel ?? read.page.slug)}`,
+        target: faqTarget(action, read.page, read.site),
+        changes: [{ field: `${faq.id}:${want.itemId}`, before: "", after: `${want.question} — ${want.answer}` }],
+        warnings:
+          read.site.published === false
+            ? ["This website isn't published, so nothing becomes public until you publish it in Website Builder."]
+            : [`This adds to your LIVE page straight away — anyone visiting /site/${read.site.slug}${read.page.slug === "home" ? "" : `/${read.page.slug}`} sees it immediately.`],
+      },
+    };
+  }
+
+  async function executeFaq(action: PublishActionRecord): Promise<ExecuteResult> {
+    if (!action.targetRef) return { ok: false, reason: "No page was specified." };
+    if (!action.preview) return { ok: false, reason: "This action was never previewed." };
+
+    const read = await readPage(action.dealershipId, action.targetRef);
+    if (!read.ok) return { ok: false, reason: read.reason };
+    if (!read.page || !read.site) return { ok: false, reason: "That page is no longer on your website." };
+    const { page, site } = read;
+
+    const want = faqRequest(action.requestedChanges);
+    if (!want) return { ok: false, reason: "That request didn't say which question and answer." };
+
+    const faq = faqBlock(page.sections);
+    if (!faq) return { ok: false, reason: "The FAQ section isn't on that page any more, so nothing was saved." };
+
+    const present = faqItems(faq).some((i: any) => i?.id === want.itemId);
+
+    // ALREADY AT THE TARGET, checked first — the same order the text and
+    // meta actions use, and for the same reason: a successful write
+    // followed by a timeout and a retry must not read as a failure.
+    if (want.remove ? !present : present) {
+      publishLog("hawlai_site.faq_noop", { action: action.id, page: page.id, item: want.itemId, remove: want.remove });
+    } else {
+      // A DEEP COPY, AND THE TREE AS IT IS NOW. An unrelated block
+      // somebody edited in Website Builder since the preview must not
+      // be rolled back by this save — the same reasoning executeText
+      // states for re-applying to the current tree.
+      const next = JSON.parse(JSON.stringify(page.sections ?? []));
+      const container = faqBlock(next);
+      if (!container) return { ok: false, reason: "The FAQ section isn't on that page any more, so nothing was saved." };
+      const children: any[] = faqItems(container);
+
+      container.children = want.remove
+        ? children.filter((i: any) => i?.id !== want.itemId)
+        : [
+            ...children,
+            // `heading` AND `html`, NOT `question` AND `answer`. Four
+            // systems are keyed on that exact prop set — provenance,
+            // the claims guard, the owner's claims review and the
+            // Properties Panel — and a prop named `answer` would be
+            // invisible to all four, which is the 2026-09-30 incident.
+            { id: want.itemId, type: "faq_item", props: { heading: want.question, html: want.answer } },
+          ];
+
+      publishLog("hawlai_site.faq_write", { action: action.id, page: page.id, item: want.itemId, remove: want.remove });
+      const { data: updated, error } = await deps.supabase
+        .from("website_pages")
+        .update({ sections: next, updated_at: new Date().toISOString() })
+        .eq("id", page.id)
+        .eq("website_id", site.id)
+        .select("id")
+        .maybeSingle();
+      if (error) {
+        publishError("hawlai_site.faq_write_failed", { action: action.id, page: page.id, detail: error.message });
+        return { ok: false, reason: `Couldn't save the change to your website: ${error.message}` };
+      }
+      if (!updated) {
+        publishError("hawlai_site.faq_write_matched_nothing", { action: action.id, page: page.id });
+        return { ok: false, reason: "The change matched no page on your website, so nothing was saved." };
+      }
+    }
+
+    // REMOVAL IS NOT VERIFIED BY READING THE PAGE. An absence cannot be
+    // told apart from a page that simply failed to load, and reporting
+    // "it is gone" off a failed fetch is the kind of claim this adapter
+    // exists to avoid.
+    if (want.remove) {
+      return { ok: true, platformResponse: { pageId: page.id, item: want.itemId, removed: true } };
+    }
+
+    const { readLiveText, verifyTextLive } = await import("@/lib/seo/liveText");
+    const verification =
+      site.published === false
+        ? { verified: false, url: "", message: "Saved. Your site isn't published yet, so nothing is public — publish it and the answer goes live.", missing: [] }
+        : verifyTextLive([want.answer], await readLiveText(site.slug, page.slug, { fetchImpl: deps.fetchImpl, baseUrl: deps.baseUrl }));
+
+    publishLog("hawlai_site.faq_write_ok", { action: action.id, page: page.id, verified: verification.verified });
+    return {
+      ok: true,
+      platformResponse: {
+        pageId: page.id,
+        item: want.itemId,
+        skipped: present ? "that question was already in the FAQ" : undefined,
+        verification,
+      },
+    };
+  }
+
   return {
     id: "hawlai_site",
-    supports: ["update_page_meta", "update_page_text"] as const,
+    supports: ["update_page_meta", "update_page_text", "add_faq_item"] as const,
     // Both, and it has been able to since undo existed here. Declared
     // now because the question moved from the platform to the key —
     // see `undoes` in publish/types.
-    undoes: ["update_page_meta", "update_page_text"] as const,
+    undoes: ["update_page_meta", "update_page_text", "add_faq_item"] as const,
 
     async isConnected(dealershipId: string): Promise<boolean> {
       const { data, error } = await deps.supabase.from("websites").select("id").eq("dealership_id", dealershipId).limit(1);
@@ -324,6 +549,7 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
     },
 
     async preview(action: PublishActionRecord): Promise<PreviewResult> {
+      if (action.actionKey === "add_faq_item") return previewFaq(action);
       if (action.actionKey === "update_page_text") return previewText(action);
       if (action.actionKey !== "update_page_meta") return { ok: false, reason: `Your website can't do "${action.actionKey}".` };
       if (!action.targetRef) return { ok: false, reason: "No page was specified." };
@@ -403,6 +629,7 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
     },
 
     async execute(action: PublishActionRecord): Promise<ExecuteResult> {
+      if (action.actionKey === "add_faq_item") return executeFaq(action);
       if (action.actionKey === "update_page_text") return executeText(action);
       if (action.actionKey !== "update_page_meta") return { ok: false, reason: `Execute for "${action.actionKey}" is not built yet.` };
       if (!action.targetRef) return { ok: false, reason: "No page was specified." };
@@ -509,6 +736,51 @@ export function createHawlaiSitePlatform(deps: { supabase: any; fetchImpl?: type
       if (!read.page) return { ok: false, reason: "That page isn't on your website any more, so there's nothing to put back." };
       const { page } = read;
       const label = String(action.targetLabel ?? page.slug);
+
+      // ADD, UNDONE BY REMOVING THE EXACT ITEM — A6-d, and this is the
+      // clause that makes `add_faq_item` eligible for L1 at all.
+      //
+      // `canHoldL1` refuses any action whose platform cannot put it
+      // back, and the id this action generated is what makes "put it
+      // back" exact rather than approximate: remove that one item and
+      // the page is precisely as it was. A created PAGE has no such
+      // handle — un-creating it is a deletion, which is why A6-e stayed
+      // out of scope.
+      //
+      // IT PROPOSES, IT DOES NOT WRITE. The contract for every undo on
+      // every platform here, and the reason removal goes back through
+      // an approval of its own.
+      if (action.actionKey === "add_faq_item") {
+        const want = faqRequest(action.requestedChanges);
+        if (!want) {
+          return { ok: false, reason: "That edit didn't record which question it added, so I can't take it off again." };
+        }
+        // UNDOING A REMOVAL IS NOT THIS ACTION'S JOB. Putting an answer
+        // back would mean re-approving copy that was taken down on
+        // purpose, and the owner asking for it again is a clearer
+        // route than an undo that quietly republishes.
+        if (want.remove) {
+          return { ok: false, reason: "That was already a removal. If you want the question back, ask me to add it again." };
+        }
+
+        const faq = faqBlock(page.sections);
+        const still = faqItems(faq).some((i: any) => i?.id === want.itemId);
+        if (!still) {
+          return { ok: false, reason: "That question isn't in the FAQ any more, so there's nothing to take off." };
+        }
+
+        return {
+          ok: true,
+          actionKey: "add_faq_item",
+          targetRef: action.targetRef,
+          targetLabel: label,
+          // The same key with the direction flipped, following
+          // update_page_text's own `restore: true`.
+          requestedChanges: { itemId: want.itemId, remove: true },
+          changed: [{ what: want.question || "that question", from: "in the FAQ", to: "taken off" }],
+          warnings: [],
+        };
+      }
 
       if (action.actionKey === "update_page_text") {
         // "<blockId>:<prop>", the shape previewText writes.
