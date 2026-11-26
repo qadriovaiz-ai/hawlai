@@ -124,6 +124,14 @@ const NOT_COLLECTED: Record<string, Measure> = {
   // source: "search_console" }` — and the baseline is the day it was
   // published, not the day it was proposed.
   create_page_draft: { metric: "impressions for the search this page answers", source: null, direction: "up" },
+  // 27 November 2026. NOT COLLECTED, for two honest reasons. It is a
+  // PLATFORM action — one sitemap for every shop — so there is no
+  // business whose decision it is, and no decision row is written for
+  // it. And what it moves is Google's crawl, which shows up weeks later
+  // as impressions that move for many reasons at once; naming
+  // search_queries as the source would credit (or blame) the submission
+  // for whatever Google did in the meantime.
+  submit_sitemap: { metric: "impressions for this business's pages", source: null, direction: "up" },
   auto_reply_dm: { metric: "replies this automation sent", source: null, direction: "up" },
   dm_auto_reply: { metric: "replies this automation sent", source: null, direction: "up" },
   comment_auto_reply: { metric: "replies this automation sent", source: null, direction: "up" },

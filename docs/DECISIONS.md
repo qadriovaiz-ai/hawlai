@@ -5929,3 +5929,115 @@ another refresh error points at the OAuth client; a `fetchQueries`
 message points at the property or a scope; a missing property reads as a
 success with a skip reason. One query settles which, and a fix written
 before that would be invention.
+
+
+---
+
+## 2026-11-27 — THE STANDING RULE: automate by default; and the sitemap is submitted with nobody touching Search Console
+
+### The rule, from the founder
+
+> Nothing in Hawlai should require the business owner to manually visit a
+> different page or tool for their own business.
+
+Search Console was connected read-only as a caution, so every owner would
+have had to submit their own sitemap by hand. **The founder has now asked
+for full automation, and it is the standing rule for every integration
+from here: default to doing it, unless there is a real reason not to** —
+a security risk, a Google (or other platform) review or policy
+requirement, or an action that cannot be taken back. When one of those
+applies, the reason is written down here, not assumed.
+
+### What was built
+
+**On publish, and again every day, the platform sitemap is submitted to
+Google Search Console.** `src/lib/seo/sitemapSubmit.ts`.
+
+- `setSitePublished(…, true)` queues a `site_published` event; the
+  2-minute dispatcher runs `EVENT_HANDLERS.site_published`, which PUTs
+  `https://hawlai.online/sitemap.xml` onto `sc-domain:hawlai.online`.
+- The daily run's `platformTasks` does the same, beside the Resend
+  webhook that has the identical "ensure it is registered" shape. That
+  covers shops published before this existed (`candle_by_qaaf`), a lost
+  event, and a day Google refused. Resubmitting is harmless.
+
+**WHOSE CREDENTIAL, AND WHY IT IS NOT THE OWNER'S.** Every storefront
+lives at `hawlai.online/site/{slug}`, and `hawlai.online` is a property
+only the platform owns. A business owner's Google account will never hold
+it, so **no scope on their token — read-only or write — could ever submit
+this sitemap.** The platform does it as a service account that owns the
+platform property, and one sitemap covers every published shop because
+`sitemap.xml` lists them all. That is what makes it zero-touch for every
+future owner: they never connect anything for this to happen.
+
+**Two traps avoided, both found before writing a line:**
+
+- `event_queue` has **no client INSERT policy** (migration 129), and the
+  publish route passes the owner's own session. An event emitted through
+  it is refused — and `emitEvent` discards the insert's error, so the
+  refusal would have been silent. The event goes through the service
+  client, and its error is read and logged.
+- **Not configured is an error, not a skip.** An unset credential means
+  the automation is not happening; a skip would let that stay quiet for
+  ever. The event fails with the reason, and the daily run logs it.
+
+**Rule 6, with teeth.** `submit_sitemap` is in `ACTION_POLICIES` as
+`edit` / `low` / no approval — nothing becomes public that was not
+already (the sitemap lists published pages only) and Search Console can
+delete a sitemap entry. `ensurePlatformSitemap` **reads the entry and
+stops** if it is removed or reclassified as needing approval, so the
+registry is load-bearing rather than a comment. S5's measures list names
+it NOT_COLLECTED: it is a platform action with no business's decision
+behind it, and its effect is Google's crawl weeks later.
+
+**Mutation-checked, six ways, each anchor matching exactly once:**
+
+| Mutation | Tests that fail (of 12) |
+|---|---|
+| publish no longer queues the event | 6 |
+| registry entry deleted | 6 |
+| the runner's approval check removed | 1 |
+| the handler swallows a failure | 2 |
+| the daily run no longer submits | 1 |
+| the event insert dropped | 6 |
+
+Two existing guards caught gaps in the first version, and the **code**
+was fixed, not the tests: `envExample` (an env var read through a
+variable is invisible to it — and then a comment of mine that spelled out
+a literal environment read was itself picked up, Rule 8's trap from the
+other side) and `recordDecision` (every action must declare how its
+outcome is measured).
+
+Gates: `tsc` 0, `vitest` 0 (**439 files, 8119 passed**), `next build` 0.
+
+### What was NOT built, and why — the rule's own exemptions
+
+**"Request indexing" — impossible by Google's policy, not by choice.**
+There is no legitimate API for it on ordinary pages. Google's Indexing
+API is restricted by its own terms to JobPosting and livestream
+BroadcastEvent pages, and the URL Inspection API only reads. A submitted
+sitemap is the supported way to ask Google to crawl, and it is all that
+is possible. A test pins that nothing here calls the Indexing API.
+
+**Widening the owner OAuth scope to `webmasters` — held for the founder,
+under Rule 7.** `tests/searchConsoleConnect.test.ts` asserts **"READ-ONLY,
+and nothing else"**, deliberately, with the reason "write access to
+someone's Search Console property has no use here". That reason is no
+longer true for owners with their **own** domain — but it **still holds
+for every shop on `hawlai.online`**, which is every shop today, because
+the platform credential does their submission. Changing an existing test
+is the founder's call, so it is brought to him with that finding rather
+than changed here. If he approves, the follow-up is: the scope change,
+that test's assertion updated, and an own-domain submission at connect
+time.
+
+### What the founder sets up once — for the platform, never per business
+
+1. Google Cloud → IAM → Service Accounts → create one → Keys → JSON.
+2. Search Console → `hawlai.online` → Settings → Users and permissions →
+   add the service account's email as **Owner**.
+3. Vercel → `GOOGLE_SEARCH_CONSOLE_SERVICE_ACCOUNT` = the JSON key on one
+   line → redeploy.
+
+**Unverified:** nothing here has run against Google. The first proof is
+the next daily run, or the next publish.

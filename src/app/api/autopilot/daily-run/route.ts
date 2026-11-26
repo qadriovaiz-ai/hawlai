@@ -7,6 +7,7 @@ import { runDailyInvocation, type DailyGroup } from "@/lib/automation/dailyJobs"
 import { GROUPS } from "@/lib/automation/cronGroups";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 import { authorizeCron } from "@/lib/cronAuth";
+import { ensurePlatformSitemap } from "@/lib/seo/sitemapSubmit";
 
 // The daily automation run. Vercel Cron calls it twice a day (vercel.json:
 // signals at 8:30 AM IST, heavy at 9:00) with `Authorization: Bearer
@@ -62,6 +63,11 @@ export async function GET(request: Request) {
       platformTasks: async () => {
         const resendWebhook = await ensureResendWebhook();
         if ("error" in resendWebhook) console.error("[autopilot] resend webhook:", resendWebhook.error);
+        // Every day, not only on publish: it covers a site published
+        // before this existed, an event that was lost, and a day Google
+        // refused. Resubmitting the same sitemap is harmless.
+        const sitemap = await ensurePlatformSitemap();
+        if (!sitemap.submitted) console.error("[autopilot] platform sitemap:", sitemap.error);
         let platformSpend: unknown;
         try {
           platformSpend = await checkPlatformDailySpend(service);
@@ -69,7 +75,7 @@ export async function GET(request: Request) {
           console.error("[autopilot] platform spend check failed:", err.message);
           platformSpend = { error: err.message };
         }
-        return { resendWebhook, platformSpend };
+        return { resendWebhook, sitemap, platformSpend };
       },
     });
     console.log(`[autopilot] ${groups.join("+")} ${isContinuation ? "continuation" : "run"} ${JSON.stringify(summary).slice(0, 1000)}`);

@@ -53,6 +53,13 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   auto_paused_campaign: { actionType: "edit", riskLevel: "low", description: "Pause an underperforming campaign automatically — always reversible", requiresApproval: false },
   lead_update: { actionType: "edit", riskLevel: "low", description: "Update a lead record", requiresApproval: false },
   generate_draft: { actionType: "create", riskLevel: "low", description: "Generate a content/creative draft — nothing goes live", requiresApproval: false },
+  // 27 Nov 2026, the founder's standing rule: automate unless there is a
+  // real reason not to. Tells Google the platform sitemap exists. Nothing
+  // becomes public that was not already — sitemap.xml lists PUBLISHED
+  // pages only — and Search Console can delete a sitemap entry, so it is
+  // reversible. src/lib/seo/sitemapSubmit.ts reads this entry and stops
+  // if it is removed or reclassified as needing approval.
+  submit_sitemap: { actionType: "edit", riskLevel: "low", description: "Tell Google Search Console the platform sitemap exists, so published shops get crawled", requiresApproval: false },
 
   // ---- One-shot outbound actions reachable from chat (Phase 2B) ----
   //

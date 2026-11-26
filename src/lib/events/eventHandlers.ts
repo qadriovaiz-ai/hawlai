@@ -18,6 +18,18 @@ import { checkGoalCompletion, notifyGoalTaskFailed } from "../orchestrator/goalO
 export type EventHandler = (supabase: any, event: { id: string; dealership_id: string; event_type: string; payload: Record<string, any> }) => Promise<void>;
 
 export const EVENT_HANDLERS: Record<string, EventHandler[]> = {
+  // A site was just published: tell Google the sitemap changed.
+  // THROWS when it did not happen, so the dispatcher records the event
+  // as failed with the reason — a quiet "done" here would be the exact
+  // silence this exists to end. Platform-wide, so the business id is not
+  // needed; one sitemap lists every shop.
+  site_published: [
+    async () => {
+      const { ensurePlatformSitemap } = await import("@/lib/seo/sitemapSubmit");
+      const result = await ensurePlatformSitemap();
+      if (!result.submitted) throw new Error(result.error);
+    },
+  ],
   lead_converted: [
     async (supabase, event) => {
       await logAuditEvent(supabase, {
