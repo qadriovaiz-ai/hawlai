@@ -17,11 +17,29 @@ migrations.
 | | What it is | State | Its own plan records as open |
 |---|---|---|---|
 | **S4** | The growth manager: audit → findings → goals → the daily report | **Closed.** Runs daily as `site_audit` + `daily_autopilot` | **Nothing outstanding.** The 30-day cooldown was the last open item and it SHIPPED on 18 Nov (`f9509cfc`): migration 210 had already added `rejected` and the cooldown, and nothing could put a row into that state — the route wrote `dismissed`, which the re-audit's live set does not contain, so the finding came back every morning. Left reading as open until 19 Nov |
-| **S5** | Outcomes: decisions recorded, measured on a check date | **Closed.** P6 exit test DONE 4 Nov. Migration 215 | Nothing in the plan's table |
-| **S6** | Actions: nothing that changes state is reachable except through an Action | **Closed.** P6 exit test DONE 5 Nov | P4's four retirements were **WITHDRAWN** — none was a duplicate. Its one real find, `/api/growth-report`, **was deleted in `6f78aea2`** — nothing is outstanding here. Left reading as open until 18 Nov, which cost a re-investigation |
-| **S7** | Autonomy L0/L1/L2: promotion asks once, demotion is automatic | **Closed.** P7 exit test DONE 6 Nov. Migrations 219 + 220 run and verified 7 Nov | **Nothing has ever run unattended.** An L2 action has by definition not run long when the stage closes |
+| **S5** | Outcomes: decisions recorded, measured on a check date | **Closed.** P6 exit test DONE 4 Nov, **re-run 26 Nov: 16 green**. Migration 215 | **Nothing. §7's four questions were all answered** — 3-day short check (armed by `GROWTH_SHORT_CHECK_UNTIL=<date>:<id>`), `expected_effect` nullable (3 Nov), review **alongside** the daily on the 1st, P4 before P5. **The 28-day loop and the first monthly review are still ahead: 1 Dec** |
+| **S6** | Actions: nothing that changes state is reachable except through an Action | **Closed.** P6 exit test DONE 5 Nov, **re-run 26 Nov: 12 green** | P4's four retirements were **WITHDRAWN** — none was a duplicate. Its one real find, `/api/growth-report`, **was deleted in `6f78aea2`** — nothing is outstanding here. Left reading as open until 18 Nov, which cost a re-investigation |
+| **S7** | Autonomy L0/L1/L2: promotion asks once, demotion is automatic | **Closed.** P7 exit test DONE 6 Nov, **re-run 26 Nov: 18 green**. Migrations 219 + 220 run and verified 7 Nov | **Nothing has ever run unattended, and nothing has been promoted.** Measured 26 Nov from the code: of **32** classified actions, **5 are pinned to L0** for ever (4 spend, 1 price), **1** (`update_page_meta`) is the only key the L2 allowlist contains, and L1 needs a platform `undo` — which exists for **5** keys. Every stored level in production is still whatever `action_levels` says, which only a query answers |
 
 **All four stages are closed and nothing in this table is outstanding as code.** Checked on 19 November 2026 against the question "what is the next stage": there is no S8. S5's outcome records are live (migration 215), S6's four proposed retirements were withdrawn because none was a duplicate, and S7's promotion reads from recorded data. What remains is not building — it is watching any of it work on a real business, which the live-verification section below is for.
+
+**Re-verified on 26 November 2026**, because a note from outside this
+repo claimed S5/S6/S7 were "not started". All three are closed, and no such note
+exists in these docs — this page has said **Closed** since 19 November
+(`6abc7cd7`) and the "Next, and not started" section below lists V1-V5,
+A4a and local L3/L4, not the S-stages. What was actually checked:
+`npx vitest run tests/s5ExitTest.test.ts tests/s6ExitTest.test.ts
+tests/s7ExitTest.test.ts` -> **exit 0, 3 files, 46 tests passed**; both S5
+subsystems are wired in `DAILY_RUNNERS` (`decision_results`,
+`monthly_review`); and S6's four withdrawn retirements
+(`growthAdvisorAgent`, `croAgent`, `videoAgent`, `strategyAgent`) are each
+**still imported by live code** — they are distinct capabilities, not
+stale files, exactly as §4.2a of PLAN-CORE-ARCHITECTURE recorded. The one
+real retirement, `/api/growth-report`, is gone from the tree.
+
+**What a test run cannot settle:** whether migrations 215, 217 and 220 are
+applied to production, and what `action_levels` actually holds there. Both
+need a query against the live database, not a green suite.
 
 Twice now a row here has read as open after the work was done — S6 until 18 November, S4 until 19 November — and each cost a re-investigation. The header's rule about a stale page is not decoration.
 
