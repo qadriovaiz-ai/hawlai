@@ -10,6 +10,7 @@
 //   2. Exactly one worker executes a given action.
 //   3. A crash mid-execute must not wedge an action forever.
 
+import { OWN_DOMAIN_PLATFORMS, queueSitemapSubmission } from "@/lib/seo/sitemapSubmit";
 import { getActionPolicy } from "@/lib/executionPolicy";
 import { recordExecutedPublish } from "@/lib/claims/claimChecks";
 import { publishLog, publishError } from "./log";
@@ -232,6 +233,14 @@ export async function executePublishAction(deps: ExecutorDeps, actionId: string)
     const recorded = await recordExecutedPublish(supabase, toRecord(action));
     if (!recorded.recorded && recorded.why && recorded.why !== "this action carries no copy to check") {
       publishError("execute.claim_check_not_recorded", { action: actionId, detail: recorded.why });
+    }
+
+    // A CHANGE LANDED ON THE BUSINESS'S OWN DOMAIN — 27 Nov 2026. Tell
+    // Google its sitemap changed, the way a Hawlai site publish does.
+    // After the work, never in its way: the helper throws nothing, and
+    // the daily run submits again regardless.
+    if (OWN_DOMAIN_PLATFORMS.has(action.platform) && action.dealership_id) {
+      await queueSitemapSubmission(action.dealership_id, "own_domain");
     }
 
     publishLog("execute.done", { action: actionId });

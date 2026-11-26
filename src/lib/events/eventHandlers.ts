@@ -23,11 +23,20 @@ export const EVENT_HANDLERS: Record<string, EventHandler[]> = {
   // as failed with the reason — a quiet "done" here would be the exact
   // silence this exists to end. Platform-wide, so the business id is not
   // needed; one sitemap lists every shop.
+  // payload.scope says WHICH sitemap: absent is the platform's, own_domain
+  // is the business's own (Shopify, WordPress, a custom domain).
   site_published: [
-    async () => {
-      const { ensurePlatformSitemap } = await import("@/lib/seo/sitemapSubmit");
-      const result = await ensurePlatformSitemap();
-      if (!result.submitted) throw new Error(result.error);
+    async (supabase, event) => {
+      const { submitSitemapForEvent } = await import("@/lib/seo/sitemapSubmit");
+      await submitSitemapForEvent(supabase, event);
+    },
+  ],
+  // A business connected Search Console on its own domain: submit now,
+  // rather than waiting for tomorrow's run.
+  search_console_connected: [
+    async (supabase, event) => {
+      const { submitSitemapForEvent } = await import("@/lib/seo/sitemapSubmit");
+      await submitSitemapForEvent(supabase, event);
     },
   ],
   lead_converted: [

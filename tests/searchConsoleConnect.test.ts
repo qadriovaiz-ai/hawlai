@@ -7,7 +7,8 @@
 // owner's own real search data, free, from an account they already have.
 //
 // Reuses the Google OAuth app Gmail, YouTube and Ads already use, so
-// there are no new credentials — one more read-only scope.
+// there are no new credentials — one more scope. Read-only until 27
+// November 2026; write since, to submit sitemaps (see below).
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
@@ -24,12 +25,28 @@ beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
 describe("what Hawlai asks Google for", () => {
   const connect = readFileSync("src/app/api/auth/search-console/connect/route.ts", "utf8");
 
-  it("READ-ONLY, and nothing else", () => {
-    expect(connect).toContain("webmasters.readonly");
-    // Write access to someone's Search Console property has no use here,
-    // so it is never requested.
-    expect(connect).not.toContain("auth/webmasters\"");
-    expect(connect).not.toMatch(/webmasters['"]\s*,/);
+  // CHANGED 27 NOVEMBER 2026, ON THE FOUNDER'S EXPLICIT SIGN-OFF (Rule 7).
+  //
+  // This was "READ-ONLY, and nothing else", because "write access to
+  // someone's Search Console property has no use here". It now has one:
+  // submitting a business's sitemap so Google crawls its site with no
+  // manual step, which the read-only scope cannot do. Shopify, WordPress
+  // and custom-domain businesses all need it — their sites are their own
+  // properties, out of the platform credential's reach.
+  //
+  // NOT LOOSENED, PINNED HARDER. The old version forbade one scope; this
+  // one names the WHOLE list, so nothing wider — Gmail, Drive, anything —
+  // can be added beside it without this going red.
+  it("WRITE ACCESS TO SEARCH CONSOLE, AND NOTHING WIDER — the exact list", () => {
+    const scopes = [...connect.matchAll(/"(https:\/\/www\.googleapis\.com\/auth\/[^"]+)"/g)].map((m) => m[1]).sort();
+    expect(scopes).toEqual([
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/webmasters",
+    ]);
+  });
+
+  it("AND NO LONGER THE READ-ONLY SCOPE, which cannot submit a sitemap", () => {
+    expect(connect).not.toContain('"https://www.googleapis.com/auth/webmasters.readonly"');
   });
 
   it("asks for offline access, so the daily read keeps working", () => {

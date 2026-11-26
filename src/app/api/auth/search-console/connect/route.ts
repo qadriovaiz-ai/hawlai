@@ -1,11 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-// Read-only, and nothing else. Hawlai only ever reads this data; asking
-// for write access to a business's Search Console property would be
-// asking for permission it has no use for.
+// WRITE ACCESS, AND NOTHING WIDER — 27 November 2026, on the founder's
+// explicit decision. This was read-only, because Hawlai only read the
+// data. It now submits a business's sitemap so Google crawls its site
+// with no manual step (src/lib/seo/sitemapSubmit.ts), and the read-only
+// scope cannot do that. Shopify, WordPress and custom-domain businesses
+// all need it: their sites are their own properties, which the platform
+// credential cannot reach. Still the narrowest scope that can submit a
+// sitemap, and tests/searchConsoleConnect.test.ts pins the exact list.
 const SCOPES = [
-  "https://www.googleapis.com/auth/webmasters.readonly",
+  "https://www.googleapis.com/auth/webmasters",
   "https://www.googleapis.com/auth/userinfo.email",
 ].join(" ");
 

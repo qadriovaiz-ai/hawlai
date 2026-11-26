@@ -26,11 +26,30 @@ import { runAeoSchedule } from "@/lib/seo/aeoSchedule";
 import { runPlaceSnapshot } from "@/lib/seo/placeSnapshot";
 import { siteBase } from "@/lib/claims/businessFacts";
 import { syncSearchQueries } from "@/lib/seo/searchQueries";
+import { ensureOwnDomainSitemap } from "@/lib/seo/sitemapSubmit";
 import { runContentPerformance } from "@/lib/attribution/runContentPerformance";
 import { runStrategySignals } from "@/lib/strategy/strategySignals";
 import { monitorAndDemote } from "@/lib/autonomy/demotion";
 import { reviewAutonomy } from "@/lib/autonomy/review";
 import type { SubsystemKey } from "@/lib/automation/cronGroups";
+
+/**
+ * The search sync, then the business's own sitemap with the same
+ * connection — 27 November 2026.
+ *
+ * A failed submission makes the run red with "sitemap:" in front, so
+ * Automation Health says which half failed. A skip (no own domain, or
+ * the platform's property) changes nothing. Kept as a named function so
+ * DAILY_RUNNERS stays one line per subsystem, which
+ * tests/dailyRunOrder.test.ts reads.
+ */
+async function syncThenSubmitSitemap(s: any, id: string) {
+  const sync: Record<string, any> = await syncSearchQueries(s, id);
+  const sitemap = await ensureOwnDomainSitemap(s, id);
+  if (!("error" in sitemap)) return { ...sync, sitemap };
+  const errors = [sync.error, `sitemap: ${sitemap.error}`].filter(Boolean);
+  return { ...sync, sitemap, error: errors.join("; ") };
+}
 
 export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: string, category: string) => Promise<unknown>> = {
   // S5/P2 — measures decisions whose check date has passed. Model-free,
@@ -99,7 +118,8 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // A third-party API call, so it belongs in the heavy group rather than
   // the database-only one. Costs nothing in AI, and businesses with no
   // Search Console connection return a reason and stop.
-  search_console_sync: (s, id) => syncSearchQueries(s, id),
+  // Then the business's own sitemap — see syncThenSubmitSitemap above.
+  search_console_sync: (s, id) => syncThenSubmitSitemap(s, id),
   // Arithmetic over stored attribution rows — no AI, no third party — so
   // it sits with the database-only work. Says what it can't tell yet as
   // readily as what it can (lib/attribution/performanceBrain.ts).

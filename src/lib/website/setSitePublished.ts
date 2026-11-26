@@ -56,34 +56,12 @@ export async function setSitePublished(
 
   const { error } = await supabase.from("websites").update({ published: !!published }).eq("dealership_id", dealershipId);
   if (error) return { ok: false, status: 500, error: error.message };
-  if (published) await queueSitemapSubmission(dealershipId);
-  return { ok: true };
-}
-
-/**
- * Ask the dispatcher to tell Google, within about two minutes.
- *
- * THE SERVICE CLIENT, NEVER THE CALLER'S. The publish route passes the
- * owner's own session, and event_queue has no client INSERT policy
- * (migration 129: "No client insert policy") — an insert through that
- * client is refused. And emitEvent discards an insert's error, so the
- * refusal would have been silent: the shape that cost the usage log
- * ninety days and page_events a day of doubt on 26 November 2026. So
- * this inserts directly and reads the error.
- *
- * NEVER THE REASON A PUBLISH FAILS. The site is already public when
- * this runs; the daily run submits the sitemap again regardless, so a
- * lost event delays Google by a day and loses nothing else.
- */
-async function queueSitemapSubmission(dealershipId: string): Promise<void> {
-  try {
-    const { createServiceClient } = await import("@/lib/supabase/service");
-    const { SITE_PUBLISHED_EVENT } = await import("@/lib/seo/sitemapSubmit");
-    const { error } = await createServiceClient()
-      .from("event_queue")
-      .insert({ dealership_id: dealershipId, event_type: SITE_PUBLISHED_EVENT, payload: {} });
-    if (error) console.error(`[publish] couldn't queue the sitemap submission for ${dealershipId}: ${error.message}`);
-  } catch (err: any) {
-    console.error(`[publish] couldn't queue the sitemap submission for ${dealershipId}: ${err?.message ?? err}`);
+  if (published) {
+    // Through the shared helper in sitemapSubmit, which uses the SERVICE
+    // client: this route passes the owner's session, which event_queue's
+    // RLS refuses (migration 129).
+    const { queueSitemapSubmission } = await import("@/lib/seo/sitemapSubmit");
+    await queueSitemapSubmission(dealershipId, "platform");
   }
+  return { ok: true };
 }

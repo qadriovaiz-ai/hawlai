@@ -1,8 +1,9 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { tokenWrite } from "@/lib/crypto/oauthSecrets";
-import { listSites, matchProperty } from "@/lib/seo/searchConsole";
-import { siteBase } from "@/lib/claims/businessFacts";
+import { listSites, isPlatformProperty } from "@/lib/seo/searchConsole";
+import { businessSiteAddresses, matchFirstProperty } from "@/lib/seo/siteAddresses";
+import { queueSitemapSubmission, SEARCH_CONSOLE_CONNECTED_EVENT } from "@/lib/seo/sitemapSubmit";
 
 const BACK = "/dashboard/settings/integrations";
 
@@ -58,9 +59,11 @@ export async function GET(request: Request) {
     let siteUrl: string | null = null;
     let propertyNote = "";
     try {
-      const { data: website } = await service.from("websites").select("slug").eq("dealership_id", dealershipId).maybeSingle();
+      // EVERY ADDRESS THIS BUSINESS IS KNOWN BY — 27 Nov 2026. This matched
+      // only the Hawlai storefront, so a Shopify or WordPress business on
+      // its own domain could never find its property. See siteAddresses.ts.
       const sites = await listSites(access_token);
-      siteUrl = matchProperty(sites, website?.slug ? `${siteBase()}/site/${website.slug}` : null);
+      siteUrl = matchFirstProperty(sites, await businessSiteAddresses(service, dealershipId));
       if (!siteUrl) {
         propertyNote = sites.length
           ? "&search_console_note=" +
@@ -86,6 +89,12 @@ export async function GET(request: Request) {
         ...tokenWrite("search_console", "refresh_token", refresh_token),
       })
       .eq("id", dealershipId);
+
+    // Its own domain: tell Google about its sitemap now, not tomorrow.
+    // The platform property is submitted by the platform credential.
+    if (siteUrl && !isPlatformProperty(siteUrl)) {
+      await queueSitemapSubmission(dealershipId, "own_domain", SEARCH_CONSOLE_CONNECTED_EVENT);
+    }
 
     return NextResponse.redirect(`${origin}${BACK}?search_console=connected${propertyNote}`);
   } catch (err: any) {

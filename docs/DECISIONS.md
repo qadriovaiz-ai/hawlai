@@ -6041,3 +6041,138 @@ time.
 
 **Unverified:** nothing here has run against Google. The first proof is
 the next daily run, or the next publish.
+
+
+---
+
+## 2026-11-27 — own-domain businesses: write access, and their sitemap submitted with nobody touching Search Console
+
+**The founder's decision, explicitly signing off the change to an
+existing test (Rule 7):** widen the Search Console scope from
+`webmasters.readonly` to `webmasters`. His reasoning: Shopify, WordPress
+and future custom-website businesses all live on their own domains, not
+`hawlai.online` sub-paths, so the platform credential built earlier
+today can never reach them. It has to work for all of them.
+
+### What changed
+
+- **The scope.** `connect/route.ts` now asks for exactly
+  `webmasters` + `userinfo.email`. `tests/searchConsoleConnect.test.ts`
+  changed from "READ-ONLY, and nothing else" to **"WRITE ACCESS TO SEARCH
+  CONSOLE, AND NOTHING WIDER — the exact list"**. That is not a loosening:
+  the old version forbade one scope, the new one names the whole list, so
+  any other scope added beside it goes red.
+- **Three moments submit an own-domain business's sitemap**, the same
+  way as the platform's: a change Hawlai publishes to their Shopify or
+  WordPress site (the publish executor, `OWN_DOMAIN_PLATFORMS`),
+  connecting Search Console (a `search_console_connected` event), and
+  every day (riding that business's own `search_console_sync`, with the
+  same connection).
+- **The sitemap is found by looking, never by guessing.** Sitemaps
+  already submitted on the property are resubmitted and nothing is added
+  beside them. A property with none gets one discovered: robots.txt
+  first (the site's own declaration — Shopify and every WordPress SEO
+  plugin write it there), then `/sitemap.xml`, `/sitemap_index.xml`,
+  `/wp-sitemap.xml`. A candidate counts only if it really is a
+  `<urlset>` or `<sitemapindex>` and sits inside the property, and the
+  address a redirect ENDS at is the one submitted (WordPress redirects
+  `/sitemap.xml` to `/wp-sitemap.xml`). An address outside the property
+  is never even fetched.
+- **Two different 403s, two different instructions.** A token from
+  before today carries the read-only scope: one reconnect fixes it. A
+  Google account that is only a restricted user on the property needs
+  Owner or Full there, and no reconnect will ever help. The error says
+  which.
+
+### THE GAP THAT WOULD HAVE MADE ALL OF IT DEAD ON ARRIVAL
+
+**The connect callback matched Search Console properties against ONE
+address — the Hawlai storefront.** A Shopify merchant or WordPress site
+usually has no Hawlai storefront at all, so it connected and was told
+"none of your properties matches this business's site". No searches
+would ever be read and no sitemap could ever be submitted. **Widening
+the scope alone would have changed nothing for exactly the businesses it
+was widened for.**
+
+`src/lib/seo/siteAddresses.ts` now gives every address the business is
+known by: a Hawlai site's connected custom domain, the storefront path,
+the WordPress site URL, and for Shopify the store's **primary domain**,
+asked of Shopify itself — because `shopify_store_url` holds the
+`*.myshopify.com` address, which is almost never what a merchant
+verified. Still specific addresses only, **never "the first property"**:
+an agency account can hold a dozen clients' properties.
+
+`candle_by_qaaf` is unaffected: its only address is the storefront, as
+before.
+
+### Verification
+
+**Twelve mutations, each anchor matching exactly once, every one
+caught.** The first run had **one survivor**: removing the filter that
+stops robots.txt from pointing Hawlai at another domain still passed,
+because a second check later rejected the result. The test was asserting
+the outcome only. It now asserts the off-property address is **never
+fetched** — robots.txt is text anyone can write, and the server has no
+business requesting what it points at. The test was fixed, not the
+report.
+
+One existing guard caught my first version: `dailyRunOrder` reads every
+runner as one line, `key: (s, …`, and an inline `async` broke that
+shape. The code was reshaped into a named helper; the test stands.
+
+Gates: `tsc` 0, `vitest` 0 (**440 files, 8142 passed**), `next build` 0.
+
+### GOOGLE WILL VERY LIKELY REQUIRE A REVIEW — what it looks like
+
+**Whether it applies depends on the app's publishing status**, which
+only the Google Cloud console shows (APIs & Services → OAuth consent
+screen / Google Auth Platform → Audience):
+
+- **"Testing":** no review. But only listed test users can connect, and
+  **refresh tokens expire after 7 days** — which would explain Search
+  Console connections dying repeatedly since 4 November. Worth checking
+  regardless of this change.
+- **"In production", not verified:** anyone can connect, but they see
+  **"Google hasn't verified this app"**, and sensitive scopes are capped
+  at 100 users.
+- **"In production", verified:** **adding the scope triggers
+  re-verification**, and Google says the new scope is not available to
+  users until it is approved.
+
+**The scope's category** is shown by the console itself when it is
+added on the Data Access page. Google's documentation searched today did
+not state it directly. `webmasters` is very likely **sensitive** (not
+restricted — that tier is for Gmail and Drive-wide data and needs a
+security assessment); confirm it on that page.
+
+**The process for a sensitive scope:**
+
+1. Data Access → **Add or remove scopes** → add
+   `https://www.googleapis.com/auth/webmasters` (and remove
+   `webmasters.readonly`).
+2. Give a **justification** for it and say **why a narrower scope is not
+   enough**. Ready to paste:
+
+   > Hawlai submits each business's sitemap to Google Search Console
+   > automatically, on publish and daily, so its pages are crawled with
+   > no manual step from the owner. The sitemaps.submit method requires
+   > the webmasters scope; webmasters.readonly can list sitemaps but
+   > cannot submit one. Hawlai only reads search analytics, lists sites
+   > and sitemaps, and submits sitemaps; it never adds, removes or
+   > changes users, properties or settings.
+
+3. A **demo video**: connecting Search Console from Integrations, the
+   consent screen showing the scope, and where the result is visible.
+4. Homepage, privacy policy and authorised domains must already be in
+   order; Google asks for **all materials to be resubmitted**.
+5. Google's documentation gives **about 3–5 business days** for a
+   sensitive scope, from an older version of its page — treat it as
+   approximate.
+
+**Until it is approved, nothing breaks for anyone already connected**:
+existing tokens keep their read-only scope and keep reading. Only the
+own-domain submission waits — and today there are no own-domain
+businesses, so nothing is waiting on it yet.
+
+**Unverified:** nothing here has run against Google or a real Shopify or
+WordPress site.
