@@ -67,7 +67,7 @@ thing most likely to produce a surprise.
 | **A4a** | Who gets named instead of this business | **Held.** Needs A5 on, with real runs to read |
 | **Auto-reply** | The DM/comment bug: three missing scopes, and nothing ever subscribed a Page | **Fixed in code.** Migrations 226 ✅ and 227 ✅ (227 verified live 13 Nov — four columns, correct types, all nullable) |
 | **R1–R5** | The report becomes on-demand, and carries a before-and-after | **Done** |
-| **V1–V5b** | The Organic Visitor Engine: which page the visitor was on, those pages grouped into a visit, an intent score, the site-wide agent that knows the page, and a follow-up that starts because of what somebody did | **Closed.** Eleven commits, all 13 Nov: `6b3995ff` V1 (migration 228), `13081635` V2, `a3ddd6dc` V3, `09b3b17e` / `062cca27` / `640c2edd` V4a-i–iii, `a32046f9` V4b, `b3a29fcb` / `2db02665` V4c + V4c-ii, `dd94cf69` V5a (migration 231), `325d578c` V5b. Exit-verified 26 Nov: **10 files, 180 tests green**; `visitor_intent` is a live `trigger_type` and `ChatWidget` is mounted on every built site. **Migration 228 has no live-verify record** — see below |
+| **V1–V5b** | The Organic Visitor Engine: which page the visitor was on, those pages grouped into a visit, an intent score, the site-wide agent that knows the page, and a follow-up that starts because of what somebody did | **Closed.** Eleven commits, all 13 Nov: `6b3995ff` V1 (migration 228), `13081635` V2, `a3ddd6dc` V3, `09b3b17e` / `062cca27` / `640c2edd` V4a-i–iii, `a32046f9` V4b, `b3a29fcb` / `2db02665` V4c + V4c-ii, `dd94cf69` V5a (migration 231), `325d578c` V5b. Exit-verified 26 Nov: **10 files, 180 tests green**; `visitor_intent` is a live `trigger_type` and `ChatWidget` is mounted on every built site. **Migration 228 VERIFIED LIVE 26 Nov** — the column is there, and the owner walked contact / terms / cart / shop and each wrote its own `path`. **V1 is proven in production.** V2, V3 and V5b are not — they read `is_internal = false` and his rows are internal |
 
 ---
 
@@ -95,16 +95,16 @@ likely to produce the pilot's surprises. The four that matter most:
 - **No Meta webhook has ever reached this product**, by its own
   evidence. The auto-reply fix is reasoned from Meta's documentation and
   pinned by tests; the first real DM is what proves it.
-- **No real visitor has ever been tracked by the visitor engine.** V1–V5b
-  are green on 180 tests and were never watched working: a visit, an
-  intent score and a behaviour-triggered follow-up all need organic
-  traffic on a built site, and there has been none. Worse, **migration
-  228 is the one migration of that batch with no live-verify record** —
-  229, 230 and 231 were each confirmed on 13 Nov and 228 was not. If it
-  never ran, `/api/public/track` names a column production does not
-  have, and its insert error is never read, so **every page event since
-  13 November would have been silently dropped.** One query settles it
-  and it is the first thing to run.
+- **The visitor engine writes correctly and has still never measured
+  anybody.** V1 is **verified live (26 Nov)**: the owner opened
+  `/site/candle-by-qaaf` with `?hw=owner` and clicked through contact,
+  terms, cart and shop, and each page wrote its own `path` — so
+  migration 228 ran, the client sends the path, and the route stores it.
+  **But those rows are `is_internal = true` by design**, and `visits.ts`
+  and `diagnosis.ts` both read `is_internal = false`. So V2's visit
+  grouping, V3's intent score and V5b's behaviour-triggered follow-up
+  have still never run on a single row. **The write half is proven; the
+  measuring half needs one outside visitor.**
 - **No business has two weekly snapshots**, so nobody has seen a
   before-and-after. A pilot's first report will say so in words, which is
   correct rather than a gap.

@@ -5826,3 +5826,40 @@ Gates: `tsc` 0, `vitest` 0 (**437 files, 8103 passed**), `next build` 0.
 only when an insert is actually refused, and on the Hobby plan runtime
 logs last 30 minutes — so the way to see it is to watch during a real
 page view, not to look afterwards.
+
+---
+
+## 2026-11-26 — V1 verified live, and exactly what that proves
+
+The owner opened `/site/candle-by-qaaf` with `?hw=owner` and clicked
+through contact, terms, cart and shop. **Fresh rows, each with its own
+`path`, `is_internal = true`.**
+
+**THAT CLOSES THE QUESTION THE DAY STARTED WITH.** Three things are now
+true in production rather than in tests: migration 228 ran, the client
+computes and sends the path, and the route stores a distinct one per
+page. The earlier reading of 163 rows and 0 paths was what the migration
+predicted — the gap becoming visible — and not a defect.
+
+**AND IT PROVES V1 ONLY.** Stated plainly because the temptation is to
+call the whole engine verified: those rows are `is_internal = true`,
+which is correct and deliberate — `visits.ts:224` and
+`diagnosis.ts:214` both read `.eq("is_internal", false)`. So **V2's
+visit grouping, V3's intent score and V5b's behaviour-triggered
+follow-up have still never run on a single row.** The write half is
+proven; the measuring half needs one visitor who is not the owner.
+
+**THE ERROR LINE IS ALSO STILL UNVERIFIED**, for the same kind of
+reason: `console.error` on a refused insert fires only when an insert is
+actually refused, and nothing was refused here. A successful walk is
+evidence the guard does not fire wrongly, which is worth having and is
+not the same as evidence it fires.
+
+**And it was not deployed for this walk.** The silent-failure fix
+(`2adde2ce`) ships with the next deploy. What the owner exercised is the
+V1 chain as it has stood since 13 November — which is the thing that
+needed proving.
+
+ROADMAP's V1–V5b row and its never-seen-live bullet now carry this,
+including the `is_internal` boundary, so nobody reads "verified live" as
+covering more than it does.
