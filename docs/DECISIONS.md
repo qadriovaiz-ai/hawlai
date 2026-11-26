@@ -5863,3 +5863,69 @@ needed proving.
 ROADMAP's V1–V5b row and its never-seen-live bullet now carry this,
 including the `is_internal` boundary, so nobody reads "verified live" as
 covering more than it does.
+
+---
+
+## 2026-11-26 — the Search Console sync: what the code can and cannot tell us, and one real fix
+
+**The failures are recorded in `automation_run_log`** — one row per
+subsystem per run, written by `runAndLog`, with `success`, `detail` (the
+result JSON or the thrown message, cut at 500 characters) and
+`duration_ms`. There is no other store, and **nothing in this repo can
+read production**, so the actual errors are the owner's query to run.
+
+**What a UI "connected" badge does and does not mean.**
+`integrations/page.tsx:47` is `!!dealership?.search_console_email` — an
+email, nothing more. The page already knows this: its own comment says
+*"Connected and READING are different states"*, and
+`SearchConsoleActions.tsx:77` renders an amber **"No verified property
+matched this business yet"** when `search_console_site_url` is null. So
+which line the owner actually saw decides a lot, and the database
+decides it better than recollection.
+
+**A SKIP IS LOGGED AS A SUCCESS, which narrows the diagnosis.**
+`runAndLog:36` sets `success = !reportedError` where `reportedError` is
+an `error` key on the result. `syncSearchQueries` returns `skipped` for
+four states — not connected, no property selected, no Hawlai website,
+Google returned nothing — and **none of those produces a failed row.**
+So "failed every day since 4 November" means a **throw**, and the only
+throws in this job are `validAccessToken` (the refresh was refused),
+`fetchQueries` (the API answered non-2xx) and a `dealerships` read
+error. The missing-property case would read as a *successful* run with
+its reason in `detail`.
+
+**AND THAT TURNED UP A REAL DEFECT, fixed here.** The upsert failure
+came back as `skipped`:
+
+```ts
+if (error) return { stored: 0, window, skipped: `couldn't store the searches: …` };
+```
+
+A lost write was therefore **recorded as a good run**, indistinguishable
+from a quiet window. That is precisely the fault `runAndLog` was written
+to stop — its own comment names the incident, *"how the health panel
+showed Social Media Auto-Posting at 100% success while almost nothing
+reached Facebook"* — arriving through a different door. It now returns
+`error`, so the run goes red.
+
+It is also **why the run log could not answer "is the sync writing?"**,
+which is the question that was asked. A read that works and a write that
+does not was invisible.
+
+`SyncResult` gains `error?: string`; the four genuine skips stay skips,
+because turning "most businesses have not connected Search Console" red
+would make the subsystem permanently and uninformatively broken.
+
+**Mutation-checked:** reverting the branch to `skipped` fails 2 of the 4
+tests, including the one that applies `runAndLog`'s own rule
+(`"error" in result`). Restored: 4 passed.
+
+Gates: `tsc` 0, `vitest` 0 (**438 files, 8107 passed**), `next build` 0.
+
+**NOT FIXED, BECAUSE IT IS NOT YET DIAGNOSED.** No cause for the live
+failure is guessed at here. The decision tree is written up for the
+owner — `invalid_grant` means reconnect and nothing else will do;
+another refresh error points at the OAuth client; a `fetchQueries`
+message points at the property or a scope; a missing property reads as a
+success with a skip reason. One query settles which, and a fix written
+before that would be invention.

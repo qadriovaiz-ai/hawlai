@@ -30,7 +30,23 @@ export const NEARLY_THERE = { from: 4, to: 20 };
 export type SyncResult = {
   stored: number;
   window: { from: string; to: string };
+  /** Nothing to read, and that is not a fault. Logged as a SUCCESS. */
   skipped?: string;
+  /**
+   * A READ THAT WORKED AND A WRITE THAT DID NOT — 26 November 2026.
+   *
+   * runAndLog decides success by `"error" in result`, so a failure
+   * returned under any other key is recorded as a GOOD RUN. The store
+   * failure used to come back as `skipped`, which made a lost upsert
+   * indistinguishable from "Google had no searches for this window" —
+   * and the health panel would have shown a clean run for a subsystem
+   * that stored nothing.
+   *
+   * That is the same fault runAndLog itself was written to stop
+   * ("Social Media Auto-Posting at 100% success while almost nothing
+   * reached Facebook"), arriving through a different door.
+   */
+  error?: string;
 };
 
 function day(offsetDays: number, now: Date): string {
@@ -179,7 +195,9 @@ export async function syncSearchQueries(service: any, dealershipId: string, now:
     })),
     { onConflict: "dealership_id,query,window_from,window_to" }
   );
-  if (error) return { stored: 0, window, skipped: `couldn't store the searches: ${error.message}` };
+  // `error`, NOT `skipped`: see SyncResult. The read succeeded and the
+  // write did not, which is a failed run and must be logged as one.
+  if (error) return { stored: 0, window, error: `couldn't store the searches: ${error.message}` };
 
   await recordSearchSignals(service, dealershipId, rows, window);
   return { stored: rows.length, window };
