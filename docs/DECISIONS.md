@@ -5748,3 +5748,81 @@ visitor engine and for 228; and the sentence *this file's own 26
 November entry* wrote — which named V1–V5 as not started — was corrected
 in the same pass, because leaving it would have re-created the staleness
 being fixed.
+
+---
+
+## 2026-11-26 — `with_a_path` was 0 because nothing had written one, and the route could not say so
+
+The owner's query settled the migration question: `page_events.path`
+exists in production, `text`, nullable. **Migration 228 ran.** And 163
+rows carry no path.
+
+**THE CODE PATH WAS MEASURED END TO END AND IT IS CORRECT.** Three
+suspects, all cleared:
+
+| Checked | Result |
+|---|---|
+| Does the client send `path`? | **Yes.** `trackEvent` (`src/lib/utils.ts`) sends `path: visitPath(window.location.pathname)`, and `PageTracker` is the only thing that fires `view`/`click` |
+| Does `visitPath()` ever return a value? | **Yes** — executed, not read. `/site/candle-by-qaaf/products/soy-candle` → unchanged; `?email=…` and `#frag` stripped; null only for empty, non-path and absolute-URL input |
+| Does the route read the right field? | **Yes.** It destructures `path` from the body and re-applies `visitPath` on the server |
+
+**AND THERE IS EXACTLY ONE WRITER.** A grep for inserts into
+`page_events` across `src/` returns one call site. No second tracker
+writes pathless rows.
+
+**SO THE HONEST CONCLUSION IS NOT A BUG.** With the chain verified and
+one writer, 163 rows and 0 paths is what it looks like when **no page
+view has happened since the column was added**. The migration's own
+verify block predicted exactly this: *"Expected right after running
+this: `with_a_path` is 0 and `rows` is whatever you already had. That is
+not a bug — it is the gap becoming visible."* No real business has ever
+used this product, so no organic page view exists to have filled it.
+
+**What would make it a bug** is a `page_events` row created on or after
+13 November with a null path. That is one query, below, and it is the
+only thing that distinguishes the two.
+
+---
+
+### The silent failure, fixed
+
+What the day actually exposed is that **the question could not be
+answered from anything this route produced.** The insert was
+`await supabase.from("page_events").insert({…})` with the result
+discarded, so a refusal and a success looked identical from outside.
+
+That matters more than a missing log line, because **PostgREST refuses
+the whole row when one column is unknown.** A migration committed and
+never run therefore means every page event silently dropped — and
+nothing would have said so.
+
+**IT IS THE USAGE-LOG BUG'S EXACT SHAPE**, which recorded almost nothing
+for ninety days behind a missing policy and an unchecked error, and was
+found by looking rather than by an alarm. `logUsage.ts:73` answered it
+with a `console.error`; this route now does the same, and the error's
+**code** is in the line because `42703` / `PGRST204` names a missing
+column specifically — a migration to run, rather than a row lost for its
+own reason.
+
+**The older rule is not traded away.** Tracking must never break the
+page, so the route still answers `{ ok: true }`. A test holds both
+halves at once, because a fix that started failing visitor requests
+would be worse than the silence it replaced.
+
+**Mutation-checked, both halves:**
+
+| Mutation | Result |
+|---|---|
+| Delete the `if (trackError)` block | **3 tests fail** (the three refusal cases); the status-200 test correctly still passes |
+| Revert to a bare `await …insert(…)` | **4 tests fail**, including the source check that the result is captured |
+| Restored | 9 passed |
+
+`tests/trackInsertError.test.ts` reads source through `code()`, so
+nothing was added to `sourceGrepDiscipline`'s allowlist.
+
+Gates: `tsc` 0, `vitest` 0 (**437 files, 8103 passed**), `next build` 0.
+
+**Unverified:** the log line has not been seen in production. It appears
+only when an insert is actually refused, and on the Hobby plan runtime
+logs last 30 minutes — so the way to see it is to watch during a real
+page view, not to look afterwards.

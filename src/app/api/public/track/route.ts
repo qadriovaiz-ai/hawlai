@@ -78,7 +78,23 @@ export async function POST(request: Request) {
   // That limit is stated on the dashboard rather than papered over.
   const internal = (await isOwnerSession(dealershipId)) || internalFlag === true;
 
-  await supabase.from("page_events").insert({
+  // A REFUSED INSERT USED TO SAY NOTHING, and on 26 November 2026 that
+  // cost a day. `with_a_path` read 0 across 163 rows, and the first
+  // question — is the column missing in production, or has no visit
+  // happened since it was added — could not be answered from anything
+  // this route produced, because the result of this insert was never
+  // captured. A missing column makes PostgREST refuse the WHOLE row, so
+  // the failure mode is every page event silently dropped.
+  //
+  // THIS IS THE USAGE-LOG BUG'S EXACT SHAPE. That one recorded almost
+  // nothing for ninety days behind a missing policy and an unchecked
+  // error, and was found by looking rather than by an alarm. logUsage.ts
+  // answered it the same way this does.
+  //
+  // IT STILL RETURNS ok. Tracking must never break the page — that rule
+  // is older than this fix and is not being traded away. The log line is
+  // the whole change: the row is still lost, but not in silence.
+  const { error: trackError } = await supabase.from("page_events").insert({
     is_internal: internal,
     // THE PAGE, RE-SANITISED HERE — V1. visitPath also runs in the
     // browser, but that one is a convenience and this one is the
@@ -104,6 +120,16 @@ export async function POST(request: Request) {
     // mark a row as consented.
     consent_granted: consentGranted === true && typeof visitorId === "string",
   });
+
+  // THE CODE IS WHAT NAMES THE CAUSE: 42703 / PGRST204 is a column this
+  // route writes and production does not have, which means a migration
+  // was committed and never run. Anything else is a row lost for its own
+  // reason. Both are worth a line; only one is worth a migration.
+  if (trackError) {
+    console.error(
+      `[public/track] page_events insert refused (${trackError.code ?? "no code"}): ${trackError.message}`
+    );
+  }
 
   return NextResponse.json({ ok: true });
 }
