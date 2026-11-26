@@ -23,6 +23,7 @@
 import { claimCheckField } from "@/lib/claims/claimChecks";
 import { generateBrandKit } from "./brandBuildingAgent";
 import { recentCopy } from "@/lib/content/recentCopy";
+import { looksHinglish } from "@/lib/content/language";
 import { generateLogoConcept } from "./brandKitAgent";
 import { planWebsite, generateWebsite, saveGeneratedWebsite } from "./websiteBuilderAgent";
 import { triggerVapiCall } from "./vapiCallAgent";
@@ -548,7 +549,27 @@ export async function executeTool(
         }
       }
       const withApproval = postApprovalId ? { ...withDest, _postApprovalId: postApprovalId } : withDest;
-      return withBrandVoiceCheck(savedId ? { ...withApproval, _savedId: savedId } : withApproval, resolvedBrandVoice);
+      // F-X1 (8 Oct 2026 audit) + the save-status accuracy fix. The tool
+      // result now carries a `note` — the same contract generate_seo has
+      // (seoDraftNote). Until this, the model narrated the save from the
+      // system prompt alone ("Saved is not live, and only the tool can
+      // tell you which one happened", 6146) and said things like "caption
+      // ready to post" for a piece that was only saved as a draft. The note
+      // goes on the tool result (the model reads it there, and genericSummary
+      // picks it up as the card summary on the fallback paths), and
+      // `extractDraft` already skips it so the draft body is unaffected.
+      //
+      // THE NOTE NEVER CLAIMS A SAVE UNLESS `savedId` CONFIRMS IT:
+      // saveGenerated returns null on a failed insert (masterBrainV2.ts:201-209),
+      // so a null savedId means "generated, not saved" — the note says so.
+      const contentNote = savedId
+        ? [
+            `Saved as a draft on the Content Marketing page.`,
+            postApprovalId ? "There is a publish card in this message for it." : "Nothing has been published or sent — no post or live change has happened yet.",
+            "Do NOT say it is live, posted, sent or done unless the card has been approved.",
+          ].join(" ")
+        : "The content was generated, but it could not be saved as a draft. Say plainly that this piece was not saved — there is nothing to view for it on the Content Marketing page.";
+      return withBrandVoiceCheck(savedId ? { ...withApproval, _savedId: savedId, note: contentNote } : { ...withApproval, note: contentNote }, resolvedBrandVoice);
     }
     case "generate_seo": {
       // aeo_check is registered in SEO_TASKS (chat-reachable, appears in
@@ -5802,6 +5823,102 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
  */
 export type ChatSurface = "web" | "whatsapp";
 
+/**
+ * PHASE 1 — Employee Conversation Intelligence (improved).
+ *
+ * Detect the language of the OWNER'S LATEST MESSAGE so the chat can
+ * speak in it. Returns `null` when it cannot name a language — the
+ * system prompt (employeeSection) then tells the AI model to infer it
+ * from context: never force English when detection is uncertain
+ * (requirement 5), and do not assume Devanagari always means Hindi
+ * (requirement 2).
+ *
+ * Detection is a heuristic over the message text, re-derived every turn
+ * by runMasterBrainChat (so language switching within a conversation is
+ * understood — no persistent state, no migrations). Native scripts get
+ * one Unicode block per language below; Latin script uses the existing
+ * `looksHinglish` markers (mirroring CopyLanguage in
+ * src/lib/content/language.ts, the same vocabulary the generated-copy
+ * soundRule uses); anything else returns null.
+ *
+ * Deliberately a heuristic, not a persisted user setting: the owner's
+ * saved language still applies to generated copy (soundSection); this
+ * only tells the employee WHAT language to use when talking.
+ */
+export type ConversationLanguage =
+  | "english"
+  | "hindi"
+  | "hinglish"
+  | "bengali"
+  | "punjabi"
+  | "gujarati"
+  | "marathi"
+  | "tamil"
+  | "telugu"
+  | "kannada"
+  | "malayalam"
+  | "odia"
+  | "assamese"
+  | "urdu";
+
+const CONVERSATION_LANGUAGE_LABELS: Record<ConversationLanguage, string> = {
+  english: "English",
+  hindi: "Hindi (Devanagari)",
+  hinglish: "Hinglish (Roman)",
+  bengali: "Bengali (Bangla)",
+  punjabi: "Punjabi",
+  gujarati: "Gujarati",
+  marathi: "Marathi",
+  tamil: "Tamil",
+  telugu: "Telugu",
+  kannada: "Kannada",
+  malayalam: "Malayalam",
+  odia: "Odia",
+  assamese: "Assamese",
+  urdu: "Urdu",
+};
+
+export function detectConversationLanguage(message: string): ConversationLanguage | null {
+  // Devanagari is shared by Hindi, Marathi and others — do NOT assume it
+  // is Hindi; let the model infer the language from context.
+  if (/[ऀ-ॿ]/.test(message)) return null;
+  if (/[\u0980-\u09FF]/u.test(message)) return "bengali";
+  // URDU NEEDS A URDU LETTER, NOT JUST THE ARABIC BLOCK. Corrected on
+  // 26 November 2026.
+  //
+  // U+0600 to U+06FF carries Arabic, Persian and Urdu alike, so testing
+  // the block alone labelled an Arabic or Persian message "Urdu" and
+  // told the model to answer in a language the owner had not written.
+  //
+  // The code points below are Urdu's own: U+06D2 (bari ye), U+0679,
+  // U+0688 and U+0691 (the retroflexes), U+06BA (nasal nun), U+06BE
+  // (do-chashmi he). Persian SHARES U+06AF, U+0686, U+067E and U+0698,
+  // so those are deliberately not in the set.
+  //
+  // WRITTEN AS CODE POINTS RATHER THAN LETTERS, in the comment too: a
+  // test asserts the Persian-shared ones are absent, and a comment
+  // quoting them as characters is a comment a source-grep test cannot
+  // tell apart from the regex.
+  //
+  // AND ARABIC-BLOCK TEXT WITHOUT ONE RETURNS null, not a guess. The
+  // same choice this function already makes for Devanagari: a wrong
+  // language is worse than an unnamed one, because the prompt's own
+  // fallback tells the model to infer it from the message.
+  if (/[\u06D2\u0679\u0688\u0691\u06BA\u06BE]/u.test(message)) return "urdu";
+  if (/[\u0600-\u06FF]/u.test(message)) return null;
+  if (/[\u0A00-\u0A7F]/u.test(message)) return "punjabi"; // Gurmukhi
+  if (/[\u0A80-\u0AFF]/u.test(message)) return "gujarati";
+  if (/[\u0B00-\u0B7F]/u.test(message)) return "odia"; // Oriya
+  if (/[\u0B80-\u0BFF]/u.test(message)) return "tamil";
+  if (/[\u0C00-\u0C7F]/u.test(message)) return "telugu";
+  if (/[\u0C80-\u0CFF]/u.test(message)) return "kannada";
+  if (/[\u0D00-\u0D7F]/u.test(message)) return "malayalam";
+  // Latin script: existing Hinglish markers, then anything else —
+  // including other Romanized Indian languages — is uncertain → null.
+  if (looksHinglish(message)) return "hinglish";
+  return null;
+}
+
 export async function runMasterBrainChat(
   supabase: any,
   dealershipId: string,
@@ -6119,7 +6236,27 @@ ${soundRule(normaliseLanguage(storeFacts?.brand?.language), ctx.toneOfVoice ?? s
 ## Email and WhatsApp — rules for anything you write or send, and how to answer questions about them
 ${CHANNEL_POLICY_FOR_CHAT}`;
 
-  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}${recentImagesSection}${recallSection}${settledSlotsSection}${soundSection}${channelPolicySection}
+  // PHASE 1 — Employee Conversation Intelligence. Re-derived every turn
+  // from the owner's latest message (detectConversationLanguage above):
+  // the employee speaks in the language the owner is writing now. The
+  // soundSection above already governs GENERATED COPY (the owner's saved
+  // language setting); this section is about what the employee says in
+  // conversation — including when the owner switches language mid-chat.
+  const employeeLanguage = detectConversationLanguage(message);
+  const employeeSection = `
+
+## Employee conversation — your voice, not the brand voice
+- **Match the owner's language:** speak in the language they are writing now${
+  employeeLanguage ? ` — ${CONVERSATION_LANGUAGE_LABELS[employeeLanguage]} —` : " — infer it from their latest message; they may be writing in English or an Indian language (Hindi, Marathi, Bengali, Gujarati, Punjabi, Tamil, Telugu, Kannada, Malayalam, Odia, Assamese, Urdu or anything else) — "
+}write it the way a colleague in that language would write it, not translated English. If they switch languages during this conversation, switch with them; your employee voice stays the same, only the words change.
+- **Never force a guess when uncertain:** if the language cannot be detected from their message, do not assume English — write in the language they are writing in, whatever script it uses.
+- **No robotic repetition:** avoid repeating one sentence shape, avoid "In summary"/"In conclusion" filler, and don't dump raw JSON arrays in your text (cards render those).
+- **Explain complete thoughts:** when you explain what you did or found, state the outcome and why it matters, then give the one next step — end on something that reads as finished.
+- **Ask ONE question at a time** when something is genuinely unclear — a single short question, never a list of follow-ups.
+- **Employee personality is separate from business brand voice:** the voice above is yours. The owner's brand voice (the soundSection) applies to the copy you generate — say nothing about it in conversation.
+`;
+
+  const systemPrompt = `You are Hawlai's AI marketing employee — not a content-generation bot, a senior marketer who happens to work through chat. You're having a direct conversation with the owner of "${ctx.name}" (a ${ctx.category} business${ctx.city ? ` in ${ctx.city}` : ""}). You have tools to actually DO marketing work across every department — strategy, brand, content, graphic design, SEO, social, email, WhatsApp, ads planning, video, competitor research, market research, customer sentiment, CRO, growth advice, influencer outreach, analytics, workflows/automation, monitoring, CRM, website, and reporting — instead of just describing what could be done.${ctx.team.length > 0 ? ` This business has a team: ${ctx.team.map((t) => `${t.role} (${t.email})`).join(", ")}. When a request breaks into sub-tasks and a team member holds a role suited to one of them (e.g. "designer" for a graphic, "content_writer" for copy, "sales" for lead follow-up), delegate that piece to them with assign_task INSTEAD of generating it yourself — write the brief in plain language with the concrete context they need (brand colors, product name, etc.) so they don't have to ask. Only generate a piece yourself if no team member holds a matching role. Never delegate approval-gated pieces (ad launches, publishing) — those stay with the owner.` : ""}${brandVoiceSection}${memorySection}${knowledgeSection}${storeFactsSection}${recentImagesSection}${recallSection}${settledSlotsSection}${soundSection}${channelPolicySection}${employeeSection}
 
 ## How you think, not just what you generate
 
