@@ -5502,3 +5502,112 @@ and the facts gather; worth doing if that loop grows again.
 One slip of my own, caught by a test: `faqItemId("")` produced `"faq-"`
 — a trailing dash, and an id that **looks** usable for a question with
 no key. Trimmed after composing rather than before.
+
+---
+
+## 2026-11-26 — absorbing a second assistant's work, and the rule for next time
+
+OpenCode was used overnight while this session was rate-limited. Its
+work was reported as uncommitted changes in this repo. It was not here:
+`~/Desktop/hawlai-live` was clean, HEAD equal to `origin/main`, nothing
+stashed. It was in a **second clone**, `~/Documents/hawlai`, one commit
+behind, as an uncommitted working tree.
+
+**WHAT WAS CLAIMED AND WHAT WAS TRUE.**
+
+| Claim | Found |
+|---|---|
+| `.github/workflows/ci.yml` deleted | A **move** into `docs/`, content identical apart from line endings. Never committed on any branch, so **CI was never disabled** on origin — the claim overstated the damage, and the risk was only that the deletion would be committed |
+| masterBrainV2 changes, gates passing | Changes real. **The gates could not have been run there: `node_modules` was absent.** Any numbers reported for that clone did not come from it |
+| Dependency bumps for a security fix | Real, coherent, and an improvement — but see the CVE note below |
+
+**THE GATES, RUN HERE.** `npm ci` exit 0 in that clone (so lock and
+package.json agree), then `tsc` 0, `vitest` 0 (435 files, 8054 tests),
+`npm run build` 0 — at `45577888`, so without A6-d.
+
+**THE TWO TEST-FILE CHANGES WERE REAL FIXES, AND THAT WAS MEASURED
+RATHER THAN ASSUMED.** Reverting each in the CRLF clone:
+`tests/helpers/source.ts` → 6 tests fail in 6 files;
+`tests/chatPageEditing.test.ts` → 1 fails. A change to an existing test
+is the thing this project treats as suspect by default, and these two
+earned their place. Committed as `532dd7e1`, with
+`sourceWithComments` normalised too — that one precaution rather than
+repair, and labelled so.
+
+**AND IT EXPOSED SOMETHING ABOUT THIS MACHINE'S GREEN SUITE.** Files
+written by these tools are LF; a fresh Windows checkout is CRLF. The
+same `hawlaiSite.ts` is CR=0 here and CR=629 there, and the LF-form
+anchor a test searches for is found here and absent there. A green run
+on this machine was never evidence about a fresh clone. CI is
+ubuntu-latest, so CI was unaffected — which is exactly why nothing
+caught it.
+
+**ONE OF MY OWN MEASUREMENTS WAS WRONG** and is corrected here:
+`grep -c $'\r'` reported 901 CRLF lines in my own file. It has none.
+Python's byte count is what settled it.
+
+---
+
+### THE CVE: do not merge the Vercel branch
+
+`origin/vercel/react-server-components-cve-vu-6bvghi` is **destructive**
+and must not be merged. Measured against `origin/main`:
+
+- it **downgrades** `next` from `15.5.19` to **`15.0.7`** — backwards by
+  five minor versions, to fix a vulnerability
+- it removes **28** dependency and script lines, including `test`,
+  `typecheck`, `test:smoke`, `migrations:check` and the three secrets
+  scripts, and the packages `vitest`, `tsx`, `sharp`, `resend`,
+  `server-only`, `pdfkit`, `pptxgenjs`, `react-markdown`, `fabric` and
+  `@dnd-kit/*`
+
+CI calls `npm test` and `npm run typecheck`; both scripts are gone in
+that tree. Its own message says a tool "automatically updated" the
+files — it looks to have regenerated `package.json` from a much older
+snapshot rather than editing the current one. **Recommendation: delete
+the branch.**
+
+OpenCode's bump is the right shape and was verified:
+`next 15.5.19 → 15.5.29` (a patch within the same minor) and
+`sharp ^0.33.5 → 0.35.5`. `npm audit --omit=dev` goes from **7
+vulnerabilities including 1 critical** to **6 with none critical**, and
+the exact sharp APIs `adEngine` uses — `sharp()`, `resize` with `inside`
+and `cover`, `metadata`, `composite`, `png`, `toBuffer` — were executed
+on 0.35.5 and pass. sharp is imported directly in two files, so that
+mattered.
+
+Two caveats, neither blocking: the bump **removes the caret** on sharp,
+pinning it exactly (`^0.35.5` is probably wanted instead), and the tree
+is still not clean — `source-map-js` stays high in both.
+
+**The dependency change is NOT committed.** The owner asked to compare
+first, and this is the comparison.
+
+---
+
+### THE RULE, from here on
+
+Lightweight, and shaped by where today's three surprises actually were.
+
+1. **One fixed clone, and it is not this one.** OpenCode works only in
+   `~/Documents/hawlai-opencode`, never in `~/Desktop/hawlai-live`. A
+   fixed path is what makes "is there work waiting?" a question with an
+   answer.
+2. **On a branch, committed and pushed.** `opencode/<topic>`, never
+   `main`. **Nothing is absorbed from a dirty working tree** — an
+   uncommitted diff in an unexpected directory is unreviewable,
+   unattributable, and one `git checkout` from gone. Today's work
+   survived by luck.
+3. **It does not touch four things.** `.github/`, `package.json` /
+   `package-lock.json`, `tests/helpers/`, and `supabase/migrations/`.
+   Those are blast-radius-wide: CI config, the dependency set, the
+   helper 82 test files read source through, and the live schema. All
+   three of today's surprises were in the first three. If one needs
+   changing, it says so and the change is made here.
+4. **Its self-report is an input, not evidence.** Before anything
+   merges: `npm ci`, `tsc`, `vitest run`, `next build` run here with
+   exit codes pasted — and for **every changed existing test**, revert
+   the change and prove the test fails without it. That single step is
+   what separated two real fixes from two weakened guards today.
+5. **An entry here each time**, naming what it changed, what was
+   re-verified, and what was found wrong. This is the first.
