@@ -5611,3 +5611,51 @@ Lightweight, and shaped by where today's three surprises actually were.
    what separated two real fixes from two weakened guards today.
 5. **An entry here each time**, naming what it changed, what was
    re-verified, and what was found wrong. This is the first.
+
+---
+
+## 2026-11-26 — the CVE, decided: next 15.5.29, sharp ^0.35.5, and one branch deleted
+
+The owner took the recommendation in the entry above. Both halves done.
+
+**`vercel/react-server-components-cve-vu-6bvghi` is deleted from
+origin.** It was a second fix for the same CVE that downgraded `next`
+to `15.0.7` and removed 28 dependency and script lines, `test` and
+`typecheck` among them. Two conflicting fixes for one vulnerability is
+worse than one, and this was the destructive one.
+
+**The bump, applied here rather than merged from the second clone:**
+`next 15.5.19 → 15.5.29` and `sharp ^0.33.5 → ^0.35.5`.
+
+**THE CARET IS KEPT ON SHARP.** OpenCode's version pinned it exactly
+(`0.35.5`). sharp ships its binaries as platform-specific optional
+dependencies, and an exact pin means a patch with a rebuilt binary —
+the kind of release that fixes a platform, not an API — needs a commit
+to pick up. Every other dependency in this file carries a caret; one
+that does not would read as deliberate without saying why.
+
+**MEASURED, NOT ASSUMED.** `npm audit --omit=dev` goes from **7
+vulnerabilities including 1 critical** to **6 with none critical**.
+`source-map-js` stays high either way — it is a transitive dependency
+of the toolchain and no upgrade on offer clears it.
+
+**AND THE SHARP CALLS WERE EXECUTED, NOT READ.** sharp is imported
+directly in `src/lib/adEngine.ts` and
+`src/app/api/ads/generate-creative/route.ts`, and 0.33 → 0.35 crosses
+two minors. All four shapes those files use were run on the installed
+0.35.5 (libvips 8.18.7): `resize` with `fit: "inside"` (880x660 out),
+`metadata`, an **SVG input buffer** composited and written as png, and
+`resize` with `fit: "cover"` under an SVG text overlay. SVG input was
+the one worth checking — it is the path that renders every generated
+creative's background and text. All four pass.
+
+The lock keeps `@img/sharp-linux-x64` and `@img/sharp-libvips-linux-x64`,
+so the Vercel build has its binary.
+
+Gates: `tsc` 0, `vitest` 0 (436 files, 8094 passed), `next build` 0.
+The build's one warning is the pre-existing `supabase-js` /
+`process.version` Edge-runtime notice, unrelated to this change.
+
+**Still unverified:** nothing here has run on Vercel yet. A deploy is
+what proves the linux binary and the Next patch, and this entry does
+not claim it.

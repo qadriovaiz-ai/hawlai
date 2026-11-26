@@ -30,7 +30,7 @@
     "iceberg-js": "^1.0.0",
     "lucide-react": "^0.460.0",
     "lucide-static": "^1.27.0",
-    "next": "15.5.19",
+    "next": "15.5.29",
     "papaparse": "^5.4.1",
     "pdfkit": "^0.19.1",
     "pptxgenjs": "^4.0.1",
@@ -41,7 +41,7 @@
     "remark-gfm": "^4.0.0",
     "resend": "^6.18.1",
     "server-only": "^0.0.1",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.5",
     "tailwind-merge": "^2.5.4"
   },
   "devDependencies": {
