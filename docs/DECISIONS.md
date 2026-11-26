@@ -5659,3 +5659,92 @@ The build's one warning is the pre-existing `supabase-js` /
 **Still unverified:** nothing here has run on Vercel yet. A deploy is
 what proves the linux binary and the Next patch, and this entry does
 not claim it.
+
+---
+
+## 2026-11-26 — the visitor engine was closed on 13 November, and the roadmap said "not started"
+
+Second roadmap correction in one day. The first found a claim of
+"not started" that **no document made**; this one found a row that
+genuinely said it, about work that shipped thirteen days earlier.
+
+**ELEVEN COMMITS, not seven.** The independent check named seven. All
+seven are real and on `main`, and four more are too:
+
+| | |
+|---|---|
+| `6b3995ff` | V1 — `page_events.path`, migration 228 |
+| `13081635` | V2 — visit grouping |
+| `a3ddd6dc` | V3 — the intent score |
+| `09b3b17e` `062cca27` `640c2edd` | **V4a-i, ii, iii** — whose slug this is, the visitor's facts kept off the owner's, the agent on the whole shop |
+| `a32046f9` | V4b — the agent knows the page |
+| `b3a29fcb` `2db02665` | V4c and **V4c-ii** — the unanswered question, and it becoming the owner's question |
+| `dd94cf69` | V5a — `leads.visitor_id`, migration 231 |
+| `325d578c` | V5b — the behaviour-triggered follow-up |
+
+`git merge-base --is-ancestor` confirms each of the eleven against
+`main`.
+
+**RE-VERIFIED RATHER THAN TAKEN ON REPORT.** The ten named test files:
+`exit 0, 10 files, 180 tests passed`. `visitor_intent` is dispatched in
+`workflowEngine.ts` and reachable from both the `WorkflowBuilder` UI and
+a chat tool schema — so an owner can actually create one.
+`ChatWidget` is mounted at `src/app/site/[slug]/layout.tsx:115`, on
+every built site.
+
+**ONE NUANCE WORTH RECORDING:** `trigger_type` has **no CHECK
+constraint** in any migration. `visitor_intent` is registered in code
+only. That is how the column already worked for every other trigger, so
+this is not a regression — but it means a typo'd trigger type is accepted
+by the database and simply never fires.
+
+---
+
+### AND THE REAL FIND: migration 228 may never have run
+
+The 13 November entry above verifies **229, 230 and 231** live, each
+with its column list. **228 is not in it**, and nothing else records it.
+228 is the keystone — V2, V3 and V4b all read `page_events.path`.
+
+**WHY THAT IS WORSE THAN A MISSING NOTE.**
+`src/app/api/public/track/route.ts:81` inserts `path` into
+`page_events`. If the column is not there, PostgREST refuses the whole
+insert — and the call is `await supabase.from("page_events").insert({…})`
+with **the result never captured**, so the error is swallowed.
+
+Every page event since 13 November would have been silently dropped,
+and nothing anywhere would have said so.
+
+**THIS IS THE USAGE-LOGGING BUG'S EXACT SHAPE.** That one recorded
+almost nothing for ninety days — a missing INSERT policy plus an
+unchecked error — and was found by looking, not by an alarm. The same
+two ingredients are present here.
+
+So the query is not bookkeeping. It is first:
+
+```sql
+select column_name, data_type, is_nullable
+from information_schema.columns
+where table_name = 'page_events' and column_name = 'path';
+
+select count(*) as rows, count(path) as with_a_path
+from page_events;
+```
+
+Expected if 228 ran: one row — `path / text / YES` — and
+`with_a_path` at least 1 if any visit has happened since. **No row at
+all means 228 never ran and tracking has been dead for thirteen days.**
+`rows` growing while `with_a_path` stays 0 would mean the opposite
+problem: the column exists and the writer is not reaching it.
+
+**The unchecked insert error deserves a fix either way** — a column that
+disappears should not be able to fail in silence — but that is a code
+change and is not in this commit.
+
+**What was corrected in ROADMAP.md:** V1–V5b moved out of "Next, and
+not started" into November's work as **Closed**, with all eleven
+commits; the never-seen-live section gained a fourth bullet for the
+visitor engine and for 228; and the sentence *this file's own 26
+November entry* wrote — which named V1–V5 as not started — was corrected
+in the same pass, because leaving it would have re-created the staleness
+being fixed.

@@ -26,8 +26,9 @@ migrations.
 **Re-verified on 26 November 2026**, because a note from outside this
 repo claimed S5/S6/S7 were "not started". All three are closed, and no such note
 exists in these docs — this page has said **Closed** since 19 November
-(`6abc7cd7`) and the "Next, and not started" section below lists V1-V5,
-A4a and local L3/L4, not the S-stages. What was actually checked:
+(`6abc7cd7`) and the "Next, and not started" section below lists A4a and
+local L3/L4, not the S-stages (it listed V1-V5 too until the correction
+below). What was actually checked:
 `npx vitest run tests/s5ExitTest.test.ts tests/s6ExitTest.test.ts
 tests/s7ExitTest.test.ts` -> **exit 0, 3 files, 46 tests passed**; both S5
 subsystems are wired in `DAILY_RUNNERS` (`decision_results`,
@@ -66,6 +67,7 @@ thing most likely to produce a surprise.
 | **A4a** | Who gets named instead of this business | **Held.** Needs A5 on, with real runs to read |
 | **Auto-reply** | The DM/comment bug: three missing scopes, and nothing ever subscribed a Page | **Fixed in code.** Migrations 226 ✅ and 227 ✅ (227 verified live 13 Nov — four columns, correct types, all nullable) |
 | **R1–R5** | The report becomes on-demand, and carries a before-and-after | **Done** |
+| **V1–V5b** | The Organic Visitor Engine: which page the visitor was on, those pages grouped into a visit, an intent score, the site-wide agent that knows the page, and a follow-up that starts because of what somebody did | **Closed.** Eleven commits, all 13 Nov: `6b3995ff` V1 (migration 228), `13081635` V2, `a3ddd6dc` V3, `09b3b17e` / `062cca27` / `640c2edd` V4a-i–iii, `a32046f9` V4b, `b3a29fcb` / `2db02665` V4c + V4c-ii, `dd94cf69` V5a (migration 231), `325d578c` V5b. Exit-verified 26 Nov: **10 files, 180 tests green**; `visitor_intent` is a live `trigger_type` and `ChatWidget` is mounted on every built site. **Migration 228 has no live-verify record** — see below |
 
 ---
 
@@ -86,13 +88,23 @@ thing most likely to produce a surprise.
 
 **No real business has ever used any of this.** The full list is in
 [AUDIT-PRE-LAUNCH.md](AUDIT-PRE-LAUNCH.md) §8 and it is the section most
-likely to produce the pilot's surprises. The three that matter most:
+likely to produce the pilot's surprises. The four that matter most:
 
 - **The suite mocks Meta.** 6,487 passing tests say nothing about what
   Meta does with our requests.
 - **No Meta webhook has ever reached this product**, by its own
   evidence. The auto-reply fix is reasoned from Meta's documentation and
   pinned by tests; the first real DM is what proves it.
+- **No real visitor has ever been tracked by the visitor engine.** V1–V5b
+  are green on 180 tests and were never watched working: a visit, an
+  intent score and a behaviour-triggered follow-up all need organic
+  traffic on a built site, and there has been none. Worse, **migration
+  228 is the one migration of that batch with no live-verify record** —
+  229, 230 and 231 were each confirmed on 13 Nov and 228 was not. If it
+  never ran, `/api/public/track` names a column production does not
+  have, and its insert error is never read, so **every page event since
+  13 November would have been silently dropped.** One query settles it
+  and it is the first thing to run.
 - **No business has two weekly snapshots**, so nobody has seen a
   before-and-after. A pilot's first report will say so in words, which is
   correct rather than a gap.
@@ -103,6 +115,5 @@ likely to produce the pilot's surprises. The three that matter most:
 
 | | What | Size |
 |---|---|---|
-| **V1–V5** | The Organic Visitor Engine — page-path tracking, visit grouping, a visitor intent score, the site-wide sales agent, and a behaviour-based follow-up sequence. Approved 13 Nov | see [AUDIT-VISITOR-ENGINE.md](AUDIT-VISITOR-ENGINE.md) |
 | **A4a** | Held, above | S |
 | **Local L2 Maps** | Done; L3 (city pages) and L4 (the listing itself) not started | M / L |
