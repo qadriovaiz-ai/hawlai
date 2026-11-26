@@ -251,17 +251,32 @@ export async function runMetaFixLoop(supabase: any, dealershipId: string, now: D
  * already-present check recognises its own work, and the cooldown can
  * tell which question he said no to.
  */
-export function faqItemId(questionKey: string): string {
+export function faqItemId(questionKey: string): string | null {
   const slug = String(questionKey ?? "")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  // TRIMMED AFTER COMPOSING, not before. A blank key produced "faq-"
-  // — a trailing dash, and an id that LOOKS usable for a question that
-  // has no key. The loop already refuses a candidate without one, so
-  // this is the second line of defence rather than the first.
-  return `faq-${slug}`.replace(/-+$/, "");
+  // A KEYLESS QUESTION HAS NO ID, AND null SAYS SO.
+  //
+  // Measured on 26 November 2026: nothing in the real flow can reach
+  // this with an empty key — `answerPlanner` drops a blank
+  // `question_key` before it enters the tally, drops a key with no
+  // registered question, and `proposeFaqAnswers` filters on `d.key`.
+  // Three guards, all upstream.
+  //
+  // THIS ONE IS HERE BECAUSE THE FUNCTION IS EXPORTED, which those
+  // three are not. Before it, an empty key returned a usable-looking
+  // "faq" — ONE id that every keyless question would share, so two
+  // different questions would collide on a single `faq_item` and the
+  // second would come back as "already in the FAQ".
+  //
+  // null RATHER THAN A THROW, and that was this file's own test
+  // telling me so: it asserts the loop cannot throw into the daily
+  // run. An exception for a predictable input would have been the
+  // wrong shape even with a catch around it.
+  if (!slug) return null;
+  return `faq-${slug}`;
 }
 
 /** Has he said no to this exact FAQ entry recently? */
@@ -325,6 +340,13 @@ async function proposeFaqAnswers(
       break;
     }
     const itemId = faqItemId(String(row.key));
+    // Cannot happen through this loop — `answerable` filters on
+    // `d.key` — and handled rather than asserted, because a question
+    // with no id has nothing to propose and nothing to say about it.
+    if (!itemId) {
+      skipped.push(`"${row.question}": no interview key, so no stable FAQ id`);
+      continue;
+    }
     if (faqRejectedRecently(history, itemId, now)) {
       skipped.push(`"${row.question}": you said no to this recently`);
       continue;

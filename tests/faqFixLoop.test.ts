@@ -92,7 +92,37 @@ describe("2. THE ITEM ID IS STABLE, AND THAT IS THREE THINGS AT ONCE", () => {
 
   it("it survives an odd key without producing a broken id", () => {
     expect(faqItemId("  Delivery_Time!! ")).toBe("faq-delivery-time");
-    expect(faqItemId("")).toBe("faq");
+  });
+
+  it("A KEYLESS QUESTION GETS NO ID AT ALL", () => {
+    // 26 November 2026. It used to return "faq" for an empty key — a
+    // usable-looking id that EVERY keyless question would share, so two
+    // different questions would collide on one faq_item and the second
+    // would read as "already in the FAQ".
+    //
+    // Nothing in the real flow can reach it: answerPlanner drops a
+    // blank question_key and an unregistered one, and
+    // proposeFaqAnswers filters on d.key. This guards the EXPORTED
+    // surface, which those three do not.
+    // null RATHER THAN A THROW, because this file's sibling test holds
+    // that the loop cannot throw into the daily run — an exception for
+    // a predictable input is the wrong shape even behind a catch.
+    for (const empty of ["", "   ", "!!!", "---", null as any, undefined as any]) {
+      expect(faqItemId(empty), JSON.stringify(empty)).toBeNull();
+    }
+    // And the call site skips rather than proposing with nothing.
+    expect(code(LOOP)).toMatch(/if \(!itemId\) \{/);
+    expect(code(LOOP)).toMatch(/no interview key, so no stable FAQ id/);
+  });
+
+  it("AND THE THREE UPSTREAM GUARDS ARE STILL THERE", () => {
+    // If any of them went, the throw above would start firing inside
+    // the daily run — correct, but a skipped run rather than a
+    // proposal, and the reason would be a log line nobody reads.
+    const planner = code("src/lib/seo/answerPlanner.ts");
+    expect(planner).toMatch(/if \(key\) times\.set\(key,/);
+    expect(planner).toMatch(/if \(registered\?\.prompt\) asked\.push\(/);
+    expect(code(LOOP)).toMatch(/filter\(\(d\) => d\.draft\.ok && d\.key\)/);
   });
 });
 
