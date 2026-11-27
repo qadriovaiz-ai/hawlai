@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { fetchWooCommerceProducts } from "@/lib/agents/woocommerceAgent";
 import { woocommerceConsumerSecret, clearedWrite, WOOCOMMERCE_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
+import { healthFromFailure, type Health } from "@/lib/integrations/healthState";
 
 export async function GET() {
   const supabase = await createClient();
@@ -16,16 +17,25 @@ export async function GET() {
   const wooSecret = woocommerceConsumerSecret(data);
   const connected = !!(data?.woocommerce_store_url && data?.woocommerce_consumer_key);
 
+  // WHAT THE CALL FOUND — 27 Nov 2026 (H0). The same discarded failure as
+  // the Shopify route: "still report connected: true, just no products".
+  // `connected` keeps meaning "stored"; `health` says whether it works.
   let products: any[] = [];
+  let health: Health | null = null;
   if (connected) {
-    try {
-      products = await fetchWooCommerceProducts(data!.woocommerce_store_url!, data!.woocommerce_consumer_key!, wooSecret!);
-    } catch {
-      // Connection may have gone stale — still report connected: true, just no products
+    if (!wooSecret) {
+      health = { state: "needs_reconnect", reason: "the stored WooCommerce key could not be read" };
+    } else {
+      try {
+        products = await fetchWooCommerceProducts(data!.woocommerce_store_url!, data!.woocommerce_consumer_key!, wooSecret);
+        health = { state: "working", reason: null };
+      } catch (err: any) {
+        health = healthFromFailure(err?.message);
+      }
     }
   }
 
-  return NextResponse.json({ connected, storeUrl: data?.woocommerce_store_url ?? null, products });
+  return NextResponse.json({ connected, storeUrl: data?.woocommerce_store_url ?? null, products, health });
 }
 
 // The POST that took a pasted store URL, consumer key and consumer

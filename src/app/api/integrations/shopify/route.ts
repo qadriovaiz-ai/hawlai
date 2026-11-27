@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { fetchShopifyProducts } from "@/lib/agents/shopifyAgent";
 import { shopifyAccessToken, clearedWrite, SHOPIFY_TOKEN_SELECT } from "@/lib/crypto/commerceSecrets";
 import { getValidShopifyAccessToken } from "@/lib/commerce/shopifyToken";
+import { healthFromFailure, type Health } from "@/lib/integrations/healthState";
 
 export async function GET() {
   const supabase = await createClient();
@@ -20,22 +21,37 @@ export async function GET() {
     .single();
   const connected = !!(data?.shopify_store_url && shopifyAccessToken(data));
 
+  // WHAT THE CALL FOUND, NOT ONLY WHAT IS STORED — 27 Nov 2026 (H0 of
+  // docs/AUDIT-INTEGRATION-HEALTH.md). This route already made a real
+  // call to Shopify, and on failure its comment said "still report
+  // connected: true, just no products" — so a dead store read as
+  // Connected with nothing in it. `connected` keeps meaning "a
+  // connection is stored"; `health` says whether it works.
   let products: any[] = [];
+  let health: Health | null = null;
   if (connected) {
     // Never the stored token directly — expiring offline tokens live
     // 60 minutes, so a token read straight from the row is very likely
     // already dead.
     const token = await getValidShopifyAccessToken(supabase, data as any, data!.shopify_store_url!);
-    if (token.ok) {
+    if (!token.ok) {
+      // BUSY IS NOT BROKEN: another request was refreshing the token at
+      // the same moment. Saying "reconnect" for that would send the
+      // owner to fix something that is fine.
+      health = token.reason === "busy"
+        ? { state: "unchecked", reason: "the connection was being refreshed at the same moment — reload to check again" }
+        : { state: "needs_reconnect", reason: token.detail ?? `Shopify could not renew access (${token.reason})` };
+    } else {
       try {
         products = await fetchShopifyProducts(data!.shopify_store_url!, token.accessToken);
-      } catch {
-        // Connection may have gone stale — still report connected: true, just no products
+        health = { state: "working", reason: null };
+      } catch (err: any) {
+        health = healthFromFailure(err?.message);
       }
     }
   }
 
-  return NextResponse.json({ connected, storeUrl: data?.shopify_store_url ?? null, products });
+  return NextResponse.json({ connected, storeUrl: data?.shopify_store_url ?? null, products, health });
 }
 
 // The POST that took a pasted store URL and Admin API token is GONE,

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Check } from "lucide-react";
+import IntegrationHealthLine from "@/components/settings/IntegrationHealthLine";
+import type { Health } from "@/lib/integrations/healthState";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui";
 
 export default function WooCommerceConnect() {
@@ -11,6 +13,8 @@ export default function WooCommerceConnect() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [productCount, setProductCount] = useState(0);
+  // What the route's real call to the store found (H0, 27 Nov 2026).
+  const [health, setHealth] = useState<Health | null>(null);
 
   useEffect(() => {
     fetch("/api/integrations/woocommerce")
@@ -18,6 +22,7 @@ export default function WooCommerceConnect() {
       .then((data) => {
         setConnected(data.connected);
         setProductCount(data.products?.length ?? 0);
+        setHealth(data.health ?? null);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -59,7 +64,12 @@ export default function WooCommerceConnect() {
   if (connected) {
     return (
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-xs text-green-400"><Check className="w-3.5 h-3.5" /> Connected{productCount > 0 ? ` — ${productCount} products found` : ""}</span>
+        {/* Not a green tick on a stored row: what the call found. A store
+            that refused the call says so, with WooCommerce's own reason. */}
+        <IntegrationHealthLine
+          health={health ?? { state: "unchecked", reason: null }}
+          detail={productCount > 0 ? `${productCount} products found` : null}
+        />
         <button onClick={handleDisconnect} className="text-xs text-slate-400 hover:text-red-400">Disconnect</button>
       </div>
     );
