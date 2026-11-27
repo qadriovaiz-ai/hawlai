@@ -58,7 +58,7 @@ export const INTEGRATIONS: readonly IntegrationEntry[] = [
     columns: ["fb_page_id", "fb_webhook_subscribed_at", "fb_webhook_error"],
     linked: (r) => !!r?.fb_page_id,
     incomplete: (r) => notSubscribed(r?.fb_webhook_subscribed_at, r?.fb_webhook_error, "The Facebook Page"),
-    noProbeYet: "H2 — page read and subscribed_apps",
+    probe: true,
   },
   {
     key: "instagram",
@@ -66,7 +66,7 @@ export const INTEGRATIONS: readonly IntegrationEntry[] = [
     columns: ["instagram_business_id", "ig_webhook_subscribed_at", "ig_webhook_error"],
     linked: (r) => !!r?.instagram_business_id,
     incomplete: (r) => notSubscribed(r?.ig_webhook_subscribed_at, r?.ig_webhook_error, "Instagram"),
-    noProbeYet: "H2 — /me and /me/subscribed_apps",
+    probe: true,
   },
   {
     key: "search_console",
@@ -75,7 +75,7 @@ export const INTEGRATIONS: readonly IntegrationEntry[] = [
     linked: (r) => !!r?.search_console_email,
     incomplete: (r) =>
       r?.search_console_site_url ? null : "No verified property matched this business yet — add your site in Search Console, then press Reconnect",
-    noProbeYet: "H2 — the sites list, with the selected property in it",
+    probe: true,
   },
   { key: "gmail", label: "Gmail", columns: ["gmail_email"], linked: (r) => !!r?.gmail_email, noProbeYet: "H4 — the Gmail profile read" },
   { key: "google_ads", label: "Google Ads", columns: ["google_ads_email"], linked: (r) => !!r?.google_ads_email, noProbeYet: "H4 — listAccessibleCustomers" },

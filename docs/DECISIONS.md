@@ -6253,3 +6253,58 @@ Gates: `tsc` 0, `vitest` 0 (**442 files, 8183 passed**), `next build` 0.
 **Unverified:** migration 239 is not run. Until it is, nothing is
 recorded and every card that is not Shopify or WooCommerce reads "not
 checked yet"; nothing breaks.
+
+
+---
+
+## 2026-11-27 — H2: live checks for Instagram, the Facebook Page and Search Console
+
+Migration 239 run and verified by the owner. H2 adds the first real
+probes (`src/lib/integrations/probes.ts`) — the three integrations where a
+false "Connected" had already been caught.
+
+**Each check asks two questions, because both failures were real:**
+
+| | Does the credential work? | Is it set up to do its job? |
+|---|---|---|
+| Instagram | `graph.instagram.com/me` | `/{id}/subscribed_apps` carries `messages` and `comments` |
+| Facebook Page | `/{page-id}?fields=id` | `/{page-id}/subscribed_apps` has **Hawlai's own app** with `messages` and `feed` |
+| Search Console | the token refresh, then the sites list | the selected property is still in the list; **for its own domain**, the token carries write access (`tokeninfo`) |
+
+**Read-only, never throwing, six-second timeout, and no token in any
+reason.** A Meta or Google that does not answer is `not_responding`, never
+"reconnect".
+
+**When they run:** when the Integrations page opens, for anything not
+checked in ten minutes; and passively on every real use — a DM reply's
+**send** (not the writing of it) and the search sync.
+
+### Judgment calls made without an explicit ask
+
+1. **A probe writes back what it saw of the webhook subscription — to
+   Hawlai's own columns, never to Meta.** H1 decides "not set up" from
+   `ig/fb_webhook_subscribed_at` (migration 227). Without this, a live
+   check saying "working" and a stale column saying "never subscribed"
+   would contradict each other on one card. Now the column is what Meta
+   last said: dated when seen subscribed (only if it was not dated
+   already), nulled with the reason when seen not. H1's rule and its test
+   are unchanged.
+2. **The search sync records its state with `notify: false`.** It already
+   tells the owner through `tellOwnerItDied`, pinned by
+   `tests/searchConsoleDeath.test.ts`; a second notification for the same
+   dead connection would be noise.
+3. **Only the platform property is exempt from the write-scope check** —
+   the platform's service account submits that sitemap, so a read-only
+   owner token there is fine.
+4. **Ten minutes of freshness, six seconds of timeout** — starting
+   numbers, not measured ones.
+
+### Verification
+
+Fourteen mutations, each anchor matching once, all caught. One test of
+mine was wrong first: it sliced the DM send block to the first
+`} else {`, which is the Instagram-or-Page branch *inside* that block, and
+cut away the lines it was looking for. It is now bounded by the rethrow
+that closes the block.
+
+Gates: `tsc` 0, `vitest` 0 (**443 files, 8209 passed**), `next build` 0.

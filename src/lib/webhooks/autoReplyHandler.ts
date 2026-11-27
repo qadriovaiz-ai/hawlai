@@ -8,6 +8,8 @@ import { fetchCatalog, type CatalogProduct } from "@/lib/claims/businessFacts";
 import { bookingPageUrl } from "@/lib/catalog/catalogItem";
 import { siteUrl } from "@/lib/email/consent";
 import { recordDelivery } from "@/lib/webhooks/deliveryLog";
+import { recordHealth } from "@/lib/integrations/health";
+import { healthFromFailure } from "@/lib/integrations/healthState";
 
 const GRAPH_VERSION = "v19.0";
 
@@ -192,10 +194,21 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
         const outcome = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, pastInsights, persona.goals, { supabase, dealershipId: dealership.id }, businessCtx.facts);
         replyText = outcome.reply;
         if (outcome.reply) {
-          if (channel === "instagram") {
-            await sendInstagramDmReply(replyToken, entryId, senderId, outcome.reply);
-          } else {
-            await sendDmReply(replyToken, senderId, outcome.reply);
+          // THE SEND IS EVIDENCE ABOUT THE CONNECTION (H2, 27 Nov 2026).
+          // Only the send: a reply that could not be WRITTEN says nothing
+          // about Instagram or the Page, so it is never recorded here.
+          // recordHealth never throws, so this cannot change the outcome.
+          const connection = channel === "instagram" ? "instagram" : "meta_page";
+          try {
+            if (channel === "instagram") {
+              await sendInstagramDmReply(replyToken, entryId, senderId, outcome.reply);
+            } else {
+              await sendDmReply(replyToken, senderId, outcome.reply);
+            }
+            await recordHealth(supabase, dealership.id, connection, { state: "working", reason: null });
+          } catch (sendErr: any) {
+            await recordHealth(supabase, dealership.id, connection, healthFromFailure(sendErr?.message));
+            throw sendErr;
           }
         } else {
           // ESCALATED, NOT SWALLOWED. "No reply generated" was logged

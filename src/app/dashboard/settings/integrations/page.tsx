@@ -18,7 +18,8 @@ import { buttonClasses } from "@/components/ui";
 import { hasToken } from "@/lib/crypto/oauthSecrets";
 import IntegrationHealthLine from "@/components/settings/IntegrationHealthLine";
 import { readHealth } from "@/lib/integrations/health";
-import { registryColumns, statusFor } from "@/lib/integrations/registry";
+import { INTEGRATIONS, registryColumns, statusFor } from "@/lib/integrations/registry";
+import { refreshStaleProbes } from "@/lib/integrations/probes";
 
 // All four ad platforms (Meta, Google, Pinterest, Snapchat, LinkedIn)
 // now have real connect cards above — the old "Pending Platform
@@ -39,16 +40,33 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   // Every one confirmed to exist in production on 27 Nov 2026 before
   // this read named it: a select naming a missing column fails whole,
   // and every card would read "not connected".
-  const { data: dealershipRow } = await supabase
-    .from("dealerships")
-    .select([...registryColumns(), "owner_whatsapp_number", "google_ads_customer_id"].join(", "))
-    .eq("id", dealershipId)
-    .single();
-  const dealership = dealershipRow as Record<string, any> | null;
+  const readRow = async () =>
+    (await supabase
+      .from("dealerships")
+      .select([...registryColumns(), "owner_whatsapp_number", "google_ads_customer_id"].join(", "))
+      .eq("id", dealershipId)
+      .single()).data as Record<string, any> | null;
+  let dealership = await readRow();
 
   // WHAT EACH CONNECTION LAST DID, not what it stored (H1, 27 Nov 2026).
   // A card is drawn "Connected" only from a state a real call confirmed.
-  const stored = await readHealth(supabase, dealershipId);
+  let stored = await readHealth(supabase, dealershipId);
+
+  // H2: OPENING THIS PAGE IS WHEN THE OWNER WANTS THE TRUTH. Anything
+  // with a live check that has not been checked in ten minutes is asked
+  // now. A check can also correct the stored webhook subscription, so
+  // both are read again — the page never draws from a row the check
+  // just proved wrong.
+  const linkedKeys = INTEGRATIONS.filter((i) => !i.shownOn && i.probe && i.linked(dealership)).map((i) => i.key);
+  const probed = await refreshStaleProbes(
+    dealershipId,
+    linkedKeys,
+    new Map([...stored].map(([k, v]) => [k, v.checked_at]))
+  );
+  if (probed.length) {
+    dealership = await readRow();
+    stored = await readHealth(supabase, dealershipId);
+  }
   const shown = (key: string) => statusFor(key, dealership, stored.get(key));
 
   const isMetaConnected = !!dealership?.fb_page_id;

@@ -36,7 +36,13 @@ export async function recordHealth(
   dealershipId: string,
   key: string,
   health: Health,
-  now: Date = new Date()
+  now: Date = new Date(),
+  /**
+   * false for a caller that already tells the owner its own way — the
+   * search sync's tellOwnerItDied, pinned by tests/searchConsoleDeath.
+   * Two notifications for one dead connection would be noise.
+   */
+  opts: { notify?: boolean } = {}
 ): Promise<RecordResult> {
   const label = integration(key).label;
   try {
@@ -73,7 +79,7 @@ export async function recordHealth(
     // Silence for one check is cheaper than a notification per refresh.
     let notified = false;
     const wasBroken = !readError && isBroken(previous?.state as HealthState | undefined);
-    if (isBroken(health.state) && !wasBroken && !writeError) {
+    if (opts.notify !== false && isBroken(health.state) && !wasBroken && !writeError) {
       notified = await tellOwner(service, dealershipId, label, health);
     }
     return { recorded: !writeError, notified };
@@ -135,10 +141,15 @@ export async function readHealth(supabase: any, dealershipId: string): Promise<M
  * owner's session — a status route. Creating the client happens inside
  * the guard, so a missing server key is a logged line, not a failed page.
  */
-export async function recordHealthAsService(dealershipId: string, key: string, health: Health): Promise<RecordResult> {
+export async function recordHealthAsService(
+  dealershipId: string,
+  key: string,
+  health: Health,
+  opts: { notify?: boolean } = {}
+): Promise<RecordResult> {
   try {
     const { createServiceClient } = await import("@/lib/supabase/service");
-    return await recordHealth(createServiceClient(), dealershipId, key, health);
+    return await recordHealth(createServiceClient(), dealershipId, key, health, new Date(), opts);
   } catch (err: any) {
     console.error(`[integration-health] couldn't record ${key} for ${dealershipId}: ${err?.message ?? err}`);
     return { recorded: false, notified: false };

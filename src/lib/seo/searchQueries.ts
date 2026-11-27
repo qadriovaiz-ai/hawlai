@@ -6,6 +6,8 @@
 // the reason this exists is that the SEO work it replaces was guessed.
 
 import { recordSignal, fingerprintOf } from "@/lib/signals/signals";
+import { recordHealth } from "@/lib/integrations/health";
+import { healthFromFailure } from "@/lib/integrations/healthState";
 import {
   searchConsoleSelect,
   readConnection,
@@ -164,11 +166,23 @@ export async function syncSearchQueries(service: any, dealershipId: string, now:
     refreshed = valid.refreshed;
   } catch (err: any) {
     await tellOwnerItDied(service, dealershipId, String(err?.message ?? err));
+    // RECORDED, NOT TOLD AGAIN (H2): tellOwnerItDied above is the owner's
+    // message, pinned by tests/searchConsoleDeath; this keeps the
+    // Integrations page honest without a second notification.
+    await recordHealth(service, dealershipId, "search_console", healthFromFailure(err?.message), new Date(), { notify: false });
     throw err;
   }
   if (refreshed) await saveRefreshed(service, dealershipId, refreshed);
 
-  const rows = await fetchQueries(accessToken, conn.siteUrl, window, pageFilter);
+  let rows: Awaited<ReturnType<typeof fetchQueries>>;
+  try {
+    rows = await fetchQueries(accessToken, conn.siteUrl, window, pageFilter);
+  } catch (err: any) {
+    await recordHealth(service, dealershipId, "search_console", healthFromFailure(err?.message), new Date(), { notify: false });
+    throw err;
+  }
+  // Google answered, with or without searches: the connection works.
+  await recordHealth(service, dealershipId, "search_console", { state: "working", reason: null }, new Date(), { notify: false });
   if (rows.length === 0) {
     await recordNoDataSignal(service, dealershipId, window);
     return { stored: 0, window, skipped: "Google returned no searches for this window" };
