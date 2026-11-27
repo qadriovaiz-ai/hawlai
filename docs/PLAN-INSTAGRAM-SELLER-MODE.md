@@ -1,6 +1,109 @@
 # PLAN — Instagram Seller Mode
 
-**Sized plan only. No code until the priority is confirmed.** Written
+> ## REVISION, 28 November 2026 — the founder replaced O4: UPI direct, no gateway
+>
+> **This section supersedes O4, its Rule 6 rows and the payment-link
+> migration below.** Payment goes straight to the seller's own UPI ID:
+> zero setup, zero cut, money straight into the seller's account. There
+> is **no automatic payment detection** — accepted as a trade-off; the
+> seller confirms on WhatsApp instead. Razorpay Route is reconsidered at
+> scale, not now. Shopify/WordPress stay post-pilot.
+>
+> ### The new flow
+>
+> 1. Customer confirms the read-back → order `new` (shown **Pending**),
+>    no side effects.
+> 2. Customer is sent the UPI request: the seller's VPA, the amount, the
+>    order reference.
+> 3. **Seller is told on WhatsApp at once**: order details + "Payment
+>    received?" with a Yes / Not yet answer. **One reminder after 15
+>    minutes** if there is no answer.
+> 4. Seller says yes → order **confirmed**, `applyOrderSideEffects` runs —
+>    **stock moves here, at payment confirmation**, not before.
+> 5. Customer gets a plain-text invoice: order #, items, amount, business
+>    name, date. PDF is phase 2.
+>
+> ### Four things measured that this flow has to respect
+>
+> | Fact | Evidence | What it means |
+> |---|---|---|
+> | **A WhatsApp sender to the owner EXISTS** — the founder's note said it did not | `sendWhatsAppText` in `src/lib/whatsapp/metaClient.ts:115`, used today to message the **owner** (connection codes, task lists — `api/webhooks/whatsapp/route.ts:59-96`) | Not a new sender. **What is missing is different, and bigger:** |
+> | **A business-initiated WhatsApp needs an approved TEMPLATE** outside 24 hours of the person's last message | Meta's rule, met on this product already (M4, the `approval_waiting_v2` / `approval_pending_notice` submissions) | The seller has usually not written to Hawlai in the last 24 hours, so **"payment received?" must be a template** — and the template sender was **deleted on 26 Nov** (`49cf3d8f`) when H3 moved to email. **A new Utility template must be submitted to Meta — a queue, like App Review**, and each send is a per-message charge |
+> | **WhatsApp replies can already resolve pending items** | `src/lib/whatsapp/suggestionReply.ts` — "a second place to say yes" | The seller's "haan"/"1" reuses this pattern instead of a new one. Buttons on the template carry the **order id**, so two pending orders can never be confused; a typed "haan" with more than one pending order is answered with the list, never guessed |
+> | **A `upi://` link may not be tappable inside an Instagram DM** | **unverified** — Instagram links `http(s)`; a custom scheme may show as plain text | The DM carries **three ways to pay, so one always works**: the VPA and amount as copyable text (works in every UPI app), the `upi://pay` link, and a **QR image** (a customer can scan it from their gallery). **No QR library is installed** — one dependency, and the image is served by an API route, **not a new page** (Rule 5) |
+>
+> ### Rule 6 — the revised rows
+>
+> | Action | Key | Kind / risk | Runs |
+> |---|---|---|---|
+> | Send the **UPI payment request** to the customer | `send_upi_request` | send, requests money / high | **Automatic, after the customer's own "yes" to the read-back** — the founder's flow. Stated plainly because it is a money request: Hawlai never holds money, the payee is the seller's own saved VPA, and the amount is catalog price × quantity − a live offer, through the claims guard and **confirmed by the customer** before it is sent |
+> | Tell the **seller** on WhatsApp, and remind once at 15 min | `notify_seller_order` | send / low | **Automatic** — to the business's own verified number, about its own order. A per-message charge |
+> | **Seller confirms payment** | `confirm_dm_payment` | edit + money / high | **The seller's own answer IS the approval.** One `pending_approvals` record, resolved from WhatsApp **or** the dashboard card — whichever comes first |
+> | Invoice text to the customer | `dm_order_update` | send / medium | **Automatic inside 24 hours**; outside, seller-tapped with `HUMAN_AGENT` (FU2) |
+>
+> **A risk the flow accepts, and the agent must not hide:** stock moves at
+> payment confirmation, so two customers can pay for the last unit. The
+> agent checks stock when it quotes and never says "payment received"
+> before the seller does; an oversell is refunded by the seller.
+>
+> ### Revised pieces and estimates
+>
+> Hours are this session's pace — build, tests, mutation checks, gates
+> and the DECISIONS entry. Owner queues are not in them.
+>
+> | Piece | Size | Hours |
+> |---|---|---|
+> | F1 Conversation memory | S | 1.5–2 |
+> | F2 Honest escalation | S | 1.5–2 |
+> | F3 Token encryption + refresh | S/M | 3–4 |
+> | F4 Seller Mode switch + seller's UPI ID (saved, format-checked) | S | 2 |
+> | **WA-T** WhatsApp **template** sender to the seller + the template text to submit | S | 2 + **Meta's template queue** |
+> | **UPI** request: VPA text + `upi://pay` link + QR image route | S | 2 |
+> | O2 Order-creation function, `orders.channel` | S/M | 3 |
+> | O1 Order capture in the conversation | M | 5–6 |
+> | O3 One confirm record, resolvable from WhatsApp or the dashboard | M | 4–5 |
+> | O4′ Payment confirm by WhatsApp reply, 15-min reminder, invoice text | S/M | 3 |
+> | O5 Shipped / delivered | S | 1.5 |
+> | V1 Variants as separate products | S | 1.5 |
+> | FU1 One nudge inside 24 h | S/M | 3 |
+> | FU2 24 h – 7 d, seller-sent | M | 4–5 |
+> | T1 Shared post / story reply (payload checked first) | S/M | 3 |
+> | T2 Caption-tag sync | M | 5–6 |
+> | T3 Vision fallback | M | 5–6 |
+> | W1 WhatsApp photo → product | M | 5–6 |
+> | **Stats** Order summary on the existing Orders tab, by channel | S | 1.5 |
+> | AR Meta App Review | XS | 0.5 + **weeks of queue** |
+>
+> **Roughly 65–75 hours of build — eight to ten working days** — plus two
+> owner-side queues that should start **today**: the WhatsApp template
+> and Meta App Review. No piece is L.
+>
+> ### Migrations, revised — four files
+>
+> 1. **Seller Mode**: `dealerships.instagram_selling_enabled`,
+>    `dealerships.seller_upi_vpa`, `orders.channel`, `orders.upi_reference`
+> 2. `dealerships.instagram_access_token_encrypted` (F3)
+> 3. notification kinds `dm_needs_reply`, `dm_order_received` —
+>    **`pg_get_constraintdef` on the live table first**
+> 4. `instagram_media_products` (T2)
+>
+> `orders.razorpay_payment_link_id` / `payment_link_url` are **dropped**.
+>
+> ### Two new decisions for the founder
+>
+> 7. **An order the seller never confirms** — leave it pending, or cancel
+>    it automatically after (say) 48 hours and tell the customer?
+> 8. **The template's words** (drafted below) — submitted as Utility. The
+>    earlier `approval_waiting_v2` was reclassified as Marketing for
+>    wording; this one avoids it.
+>
+> > *Template `order_payment_check` (Utility, en):* "New order {{1}} for
+> > ₹{{2}} from {{3}}. Has this payment reached your UPI account?" —
+> > quick-reply buttons **Yes, received** / **Not yet**.
+>
+> ---
+
+**Original plan, 28 November 2026.** Written
 28 November 2026 on top of `docs/RESEARCH-INSTAGRAM-DM-SELLING.md`, after
 the DM reply chain was made to work in production (signature fix
 `da7cfa3e`, account-id fix `b2509a75`).
