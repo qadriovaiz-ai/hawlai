@@ -40,7 +40,12 @@ export async function GET(request: Request) {
   const authorizeUrl = new URL("https://api.instagram.com/oauth/authorize");
   authorizeUrl.searchParams.set("client_id", appId);
   authorizeUrl.searchParams.set("redirect_uri", redirectUri);
-  authorizeUrl.searchParams.set("scope", "instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments");
+  // NO COMMENT PERMISSION — 28 Nov 2026, the founder's decision before App
+  // Review. Replying to Instagram comments is not built (the reply
+  // handler answers comments on Facebook only), and Meta's reviewers
+  // reject a permission the app does not visibly use. It comes back WITH
+  // comment replies; tests/subscribeWebhooks.test.ts ties the two.
+  authorizeUrl.searchParams.set("scope", "instagram_business_basic,instagram_business_manage_messages");
   authorizeUrl.searchParams.set("response_type", "code");
   authorizeUrl.searchParams.set("state", profile.dealership_id);
 

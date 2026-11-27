@@ -41,8 +41,13 @@ const IG_GRAPH_VERSION = "v26.0";
 /** The Page fields the auto-reply needs. `feed` is what carries a comment. */
 export const FB_WEBHOOK_FIELDS = ["messages", "feed"] as const;
 
-/** The Instagram fields. `comments` here, NOT `feed`. */
-export const IG_WEBHOOK_FIELDS = ["messages", "comments"] as const;
+/**
+ * The Instagram fields. MESSAGES ONLY since 28 Nov 2026: comment replies on
+ * Instagram are not built and the comment permission is no longer asked
+ * for (see the start route). When they are built, Instagram comments
+ * arrive on `comments` — NOT `feed`, which subscribes and delivers nothing.
+ */
+export const IG_WEBHOOK_FIELDS = ["messages"] as const;
 
 export type SubscribeResult =
   | { ok: true }

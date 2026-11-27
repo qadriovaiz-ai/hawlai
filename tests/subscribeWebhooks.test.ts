@@ -103,12 +103,16 @@ describe("2. THE INSTAGRAM REQUEST IS A DIFFERENT API, not the same one renamed"
     expect(calls[0].url).not.toContain("tok-ig");
   });
 
-  it("SUBSCRIBES messages AND comments — `comments` HERE, NOT `feed`", async () => {
-    // Instagram comments arrive on their own field. Asking for `feed`
-    // here subscribes successfully and delivers nothing.
+  // CHANGED 28 NOVEMBER 2026, ON THE FOUNDER'S EXPLICIT SIGN-OFF (Rule 7).
+  // This was "SUBSCRIBES messages AND comments". Instagram comment replies
+  // are not built and Meta's App Review rejects unused permissions, so
+  // the comment permission and field were dropped until they are. The
+  // lesson the old test held still stands for that day: comments arrive
+  // on `comments`, never `feed`.
+  it("SUBSCRIBES messages ONLY — and never `feed`", async () => {
     await subscribeInstagramAccount("ig-1", "tok-ig", meta({ success: true }));
-    expect(new URL(calls[0].url).searchParams.get("subscribed_fields")).toBe("messages,comments");
-    expect([...IG_WEBHOOK_FIELDS]).toContain("comments");
+    expect(new URL(calls[0].url).searchParams.get("subscribed_fields")).toBe("messages");
+    expect([...IG_WEBHOOK_FIELDS]).not.toContain("comments");
     expect([...IG_WEBHOOK_FIELDS]).not.toContain("feed");
   });
 
@@ -268,10 +272,24 @@ describe("5. THE THREE SCOPES THAT WERE MISSING", () => {
     expect(src).toMatch(/APP REVIEW/);
   });
 
-  it("Instagram already asked for its own two, so it is not blocked on this", () => {
+  // CHANGED 28 NOVEMBER 2026 (Rule 7, founder's sign-off): the comment
+  // permission is no longer asked for. Messages still are.
+  it("Instagram asks for messages — and NOT for comments, which are not built", () => {
     const start = code("src/app/api/auth/instagram/start/route.ts");
     expect(start).toMatch(/instagram_business_manage_messages/);
-    expect(start).toMatch(/instagram_business_manage_comments/);
+    expect(start).not.toMatch(/instagram_business_manage_comments/);
+  });
+
+  // THE TIE, so the two can only move together. While the reply handler
+  // answers comments on Facebook alone, Instagram must ask for neither the
+  // comment permission nor the field. Whoever builds Instagram comment
+  // replies changes that line — and this test sends them here to add both.
+  it("COMMENTS ARE ASKED FOR ONLY ONCE INSTAGRAM COMMENT REPLIES EXIST", () => {
+    const handler = code("src/lib/webhooks/autoReplyHandler.ts");
+    const instagramCommentsBuilt = !/comment_auto_reply_enabled && channel === "facebook"/.test(handler);
+    const start = code("src/app/api/auth/instagram/start/route.ts");
+    expect(/instagram_business_manage_comments/.test(start)).toBe(instagramCommentsBuilt);
+    expect([...IG_WEBHOOK_FIELDS].includes("comments" as any)).toBe(instagramCommentsBuilt);
   });
 });
 

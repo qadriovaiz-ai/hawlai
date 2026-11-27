@@ -75,9 +75,10 @@ the app — the founder's own. Every other business needs this.
 |---|---|---|
 | `instagram_business_basic` | Read the connected account's id and username | **Yes** |
 | `instagram_business_manage_messages` | Receive a customer's DM and send the business's reply (auto-reply, Seller Mode) | **Yes — the one that matters** |
-| `instagram_business_manage_comments` | Reply to comments | **Not yet — see below** |
+| `instagram_business_manage_comments` | Reply to comments | **No — removed from the app on 28 Nov** |
 
-**A DECISION BEFORE SUBMITTING.** The connect screen
+**DECIDED 28 NOV — the comments permission and field are removed** until
+comment replies are built (the founder's call). What was weighed: The connect screen
 (`src/app/api/auth/instagram/start/route.ts:43`) also asks for
 `instagram_business_manage_comments`, and the webhook subscription asks
 for `comments` — but **replying to Instagram comments is not built**.

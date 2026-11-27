@@ -6509,3 +6509,33 @@ just made to work. The migration went first; the code waits for it.
 Eight mutations, each anchor matching once, all caught.
 
 Gates: `tsc` 0, `vitest` 0 (**449 files, 8274 passed**), `next build` 0.
+
+---
+
+## 2026-11-28 — Instagram no longer asks for the comment permission
+
+**The founder's decision, before App Review.** The Instagram connect
+screen asked for `instagram_business_manage_comments` and the webhook
+subscription asked for `comments` — but **replying to Instagram comments
+is not built**: the reply handler answers comments on Facebook only.
+Meta's reviewers commonly reject a submission that requests a permission
+the app does not visibly use.
+
+- The connect scope is now `instagram_business_basic,
+  instagram_business_manage_messages`.
+- `IG_WEBHOOK_FIELDS` is `["messages"]`. The health probe reads it, so a
+  messages-only subscription is "working".
+- **Two existing assertions changed, on the founder's sign-off (Rule 7)**
+  — `tests/subscribeWebhooks.test.ts` pinned "messages AND comments" and
+  "asks for manage_comments". They now pin the opposite, and keep the
+  old lesson for the day comments return: `comments`, never `feed`.
+- **A tie, so the two only move together:** while the handler answers
+  comments on Facebook alone, Instagram asks for neither the permission
+  nor the field. Building Instagram comment replies without adding them
+  fails the suite — mutation-checked.
+
+Existing connections keep the scope they were granted until they
+reconnect; nothing reads it.
+
+Three mutations, all caught. Gates: `tsc` 0, `vitest` 0 (**449 files,
+8275 passed**), `next build` 0.
