@@ -47,7 +47,14 @@ const WORKING: Health = { state: "working", reason: null };
  * so the stored record of "subscribed" stays what Meta last said, and the
  * screen can never contradict the live answer.
  */
-export type ProbeResult = Health & { subscribed?: { ok: boolean; error: string | null } };
+export type ProbeResult = Health & {
+  subscribed?: { ok: boolean; error: string | null };
+  /**
+   * Set when the stored Instagram account id is not the one Meta puts in
+   * webhooks (28 Nov 2026). The runner corrects Hawlai's own column.
+   */
+  accountId?: { stored: string; actual: string };
+};
 
 /** A GET that never throws: the parsed body, or the reason it failed. */
 async function read(url: string, headers: Record<string, string> = {}): Promise<{ ok: true; body: any } | { ok: false; reason: string }> {
@@ -91,6 +98,14 @@ export async function probeInstagram(service: any, dealershipId: string): Promis
   const me = await read(`${IG_GRAPH}/me?fields=user_id,username`, auth);
   if (!me.ok) return healthFromFailure(me.reason);
 
+  // THE ID META ROUTES BY (28 Nov 2026). Webhooks name the account by its
+  // `user_id`; connections made before that date stored the app-scoped
+  // `id` instead, so every DM came back "no_business_matched". Reported
+  // here, corrected by the runner — the same split as the subscription.
+  const actualId = me.body?.user_id != null ? String(me.body.user_id) : "";
+  const storedId = String(row.instagram_business_id);
+  const accountId = actualId && actualId !== storedId ? { stored: storedId, actual: actualId } : undefined;
+
   // THE WEBHOOK. Without `messages` here, Meta never sends a DM to Hawlai —
   // which is exactly what happened in production until 27 Nov 2026.
   // The same `/{id}/subscribed_apps` edge the connect callback POSTs to.
@@ -103,9 +118,9 @@ export async function probeInstagram(service: any, dealershipId: string): Promis
     const reason = apps.length
       ? `Instagram is connected but not sending ${missing.join(" and ")} to Hawlai — reconnect it once to fix this`
       : "Instagram is connected but was never set up to send messages to Hawlai, so DMs never arrive — reconnect it once to fix this";
-    return { state: "incomplete", reason, subscribed: { ok: false, error: `not subscribed to ${missing.join(", ")}` } };
+    return { state: "incomplete", reason, subscribed: { ok: false, error: `not subscribed to ${missing.join(", ")}` }, accountId };
   }
-  return { ...WORKING, subscribed: { ok: true, error: null } };
+  return { ...WORKING, subscribed: { ok: true, error: null }, accountId };
 }
 
 // ---------------------------------------------------------------------
@@ -255,7 +270,16 @@ const SUBSCRIPTION_COLUMNS: Record<string, { at: string; error: string }> = {
 export async function probeAndRecord(service: any, dealershipId: string, key: string, now: Date = new Date()) {
   const { recordHealth } = await import("@/lib/integrations/health");
   const found = await runProbe(service, dealershipId, key);
-  const { subscribed, ...health } = found;
+  const { subscribed, accountId, ...probed } = found;
+  let health: Health = probed;
+
+  // THE STORED ACCOUNT ID, CORRECTED TO THE ONE META ROUTES BY. A write to
+  // Hawlai's own column, never to Meta. Refused when another business
+  // already holds that id: one account's DMs routed to two businesses is
+  // worse than routed to none, and that case needs a person.
+  if (key === "instagram" && accountId) {
+    health = await correctInstagramId(service, dealershipId, accountId.actual, health);
+  }
   await recordHealth(service, dealershipId, key, health, now);
 
   const cols = SUBSCRIPTION_COLUMNS[key];
@@ -273,6 +297,30 @@ export async function probeAndRecord(service: any, dealershipId: string, key: st
     }
   }
   return health;
+}
+
+/** Point the stored Instagram account id at the one webhooks use. */
+async function correctInstagramId(service: any, dealershipId: string, actualId: string, health: Health): Promise<Health> {
+  const unroutable = (why: string): Health => ({
+    state: "incomplete",
+    reason: `Instagram messages can't be matched to this business: ${why}`,
+  });
+  try {
+    const { data: holder, error: holderError } = await service
+      .from("dealerships")
+      .select("id")
+      .eq("instagram_business_id", actualId)
+      .neq("id", dealershipId)
+      .maybeSingle();
+    if (holderError) return unroutable(`couldn't check the account id (${holderError.message})`);
+    if (holder) return unroutable("this Instagram account is already linked to another business on Hawlai");
+    const { error } = await service.from("dealerships").update({ instagram_business_id: actualId }).eq("id", dealershipId);
+    if (error) return unroutable(`the stored account id is out of date and couldn't be corrected (${error.message})`);
+    console.error(`[integration-health] corrected ${dealershipId}'s Instagram account id to the one Meta's webhooks use`);
+    return health;
+  } catch (err: any) {
+    return unroutable(`the account id couldn't be corrected (${err?.message ?? err})`);
+  }
 }
 
 /**

@@ -70,14 +70,31 @@ export async function GET(request: Request) {
     const longLivedData = await longLivedRes.json();
     const finalToken = longLivedRes.ok && longLivedData.access_token ? longLivedData.access_token : shortLivedData.access_token;
 
-    // Step 3: fetch the real Instagram Business Account ID this token represents.
-    const meRes = await fetch(`https://graph.instagram.com/me?fields=id,username&access_token=${finalToken}`);
+    // Step 3: the account this token represents.
+    //
+    // `user_id`, NOT `id` — 28 November 2026. Instagram Login's /me answers
+    // with TWO ids for one account: `id` is app-scoped, `user_id` is the
+    // professional account's own id, and THAT is what Meta puts in every
+    // webhook's entry.id. This stored `id`, so when DMs finally arrived
+    // (after the signature fix) every one was "no_business_matched": Meta
+    // sent 17841432344301688, the row held 28844011251865336, and /me
+    // showed both belonging to the same account. Both ids work on the
+    // read and subscription edges (checked live), so `user_id` is safe for
+    // every reader of this column.
+    //
+    // A MISSING user_id FAILS THE CONNECTION rather than falling back to
+    // `id`: a fallback would quietly re-create exactly this bug.
+    const meRes = await fetch(`https://graph.instagram.com/me?fields=id,user_id,username&access_token=${finalToken}`);
     const meData = await meRes.json();
     if (!meRes.ok || !meData.id) throw new Error("Couldn't verify the connected Instagram account");
+    const igUserId = meData.user_id != null ? String(meData.user_id) : "";
+    if (!igUserId) {
+      throw new Error("Instagram didn't say which professional account this is, so its messages couldn't be matched to your business. Try connecting again.");
+    }
 
     const service = createServiceClient();
     const { error: dbError } = await service.from("dealerships").update({
-      instagram_business_id: meData.id,
+      instagram_business_id: igUserId,
       instagram_access_token: finalToken,
     }).eq("id", dealershipId);
     if (dbError) throw new Error(dbError.message);
@@ -93,7 +110,7 @@ export async function GET(request: Request) {
     // account with no subscription is still better than no account, and
     // the reason is recorded on the business (migration 227).
     const subscription = await subscribeAndRecord(service, dealershipId, "instagram", {
-      id: meData.id,
+      id: igUserId,
       token: finalToken,
     });
 

@@ -6358,3 +6358,47 @@ Gates: `tsc` 0, `vitest` 0 (**445 files, 8227 passed**), `next build` 0.
 
 **Unverified:** a real DM through the deployed fix has not been watched
 yet.
+
+
+---
+
+## 2026-11-28 — Instagram is stored by the id Meta's webhooks use
+
+**The second thing behind "the test DM got no reply", found the moment the
+first was fixed.** With signatures verifying, two deliveries came back
+`no_business_matched`. Compared exactly, in production:
+
+| | id |
+|---|---|
+| Meta's webhook `entry.id` | `17841432344301688` |
+| stored `instagram_business_id` | `28844011251865336` |
+| Instagram `/me` → `id` | `28844011251865336` (app-scoped) |
+| Instagram `/me` → `user_id` | `17841432344301688` (the professional account) |
+
+**The reconnect had updated the row correctly.** The callback has always
+stored the wrong one of the two: it asked `/me` for `id,username` and
+saved `id`, while Meta names the account in webhooks by `user_id`.
+
+**Both ids work on both edges the product calls** — `?fields=username`
+and `/subscribed_apps` — checked live, read-only, with the stored token.
+So storing `user_id` is safe for every reader of the column (the webhook
+match, the health probe, the subscribe call; the reply already sends with
+the id Meta named).
+
+**The fix, in two halves:**
+
+1. **The callback stores `user_id`** and subscribes with it. **A missing
+   `user_id` fails the connection** with a sentence — it never falls back
+   to `id`, which would quietly re-create exactly this.
+2. **Existing connections are corrected by the Instagram health check**,
+   which already reads `/me`: if the stored id is not `user_id`, Hawlai's
+   own column is corrected. **Refused when another business already holds
+   that id** — one account's DMs routed to two businesses is worse than
+   routed to none — and then the state is "incomplete" with the reason.
+   No reconnect, no hand-run SQL.
+
+Five mutations, each anchor matching once, all caught.
+
+Gates: `tsc` 0, `vitest` 0 (**446 files, 8233 passed**), `next build` 0.
+
+**Unverified:** a DM routed and answered end to end.
