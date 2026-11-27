@@ -6,6 +6,7 @@
 // and viral trend detection (uses Claude's web_search tool so trends
 // are actually current instead of guessed from training data).
 
+import { threadBlock, type DmTurn } from "@/lib/dm/thread";
 import { webSearchTool } from "@/lib/ai/searchCaps";
 import { formatDuration } from "../catalog/catalogItem";
 import { getModel } from "../models";
@@ -130,7 +131,13 @@ export async function generateAutoReply(
    * Null here means the records could not be read, and this path FAILS
    * CLOSED: no reply at all. Nothing else sends without review.
    */
-  facts?: BusinessFacts | null
+  facts?: BusinessFacts | null,
+  /**
+   * F1, 28 Nov 2026: the earlier turns of THIS private conversation
+   * (src/lib/dm/thread.ts). Never used for a comment — a comment
+   * thread is public and anonymous.
+   */
+  history?: DmTurn[] | null
 ): Promise<AutoReplyResult> {
   // An auto-reply is sent to a customer with nobody reading it first —
   // if any copy follows the owner's chosen language, this does.
@@ -172,6 +179,9 @@ export async function generateAutoReply(
   // P3 piece 5 — what this reply is trying to achieve, per the
   // persona the owner assigned to this channel. Advisory framing on
   // top of the hard safety rules below, never a replacement for them.
+  // F1 — what was already said in this DM, so "the red one" means
+  // something and an order can be taken over several messages.
+  const historyContext = channel === "dm" ? threadBlock(history ?? []) : "";
   const personaContext = personaGoals?.trim()
     ? `\nWhat you're here to do, in priority order:\n${personaGoals.trim()}`
     : "";
@@ -207,7 +217,7 @@ export async function generateAutoReply(
       messages: [{
         role: "user",
         content: `You are auto-replying as "${dealershipName}", a ${businessCategory} business in India, to a ${channel === "dm" ? "private DM" : "public comment"}.
-${brandContext}${truthBlock(facts, "customer")}${catalogContext}${knowledgeContext}${insightsContext}${personaContext}
+${brandContext}${truthBlock(facts, "customer")}${catalogContext}${knowledgeContext}${insightsContext}${personaContext}${historyContext}
 ${safety}
 Incoming message: "${incomingText}"
 

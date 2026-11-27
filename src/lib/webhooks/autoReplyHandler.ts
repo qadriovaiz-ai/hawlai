@@ -9,6 +9,7 @@ import { bookingPageUrl } from "@/lib/catalog/catalogItem";
 import { siteUrl } from "@/lib/email/consent";
 import { recordDelivery } from "@/lib/webhooks/deliveryLog";
 import { recordHealth } from "@/lib/integrations/health";
+import { readDmThread } from "@/lib/dm/thread";
 import { healthFromFailure } from "@/lib/integrations/healthState";
 
 const GRAPH_VERSION = "v19.0";
@@ -183,6 +184,9 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
         console.error("[auto-reply] resolveDmLead failed:", err.message);
       }
       const pastInsights = leadId ? await getLeadMemory(supabase, dealership.id, leadId) : [];
+      // F1 — this sender's earlier turns. Read BEFORE this message is
+      // logged below, so the thread is what came before it.
+      const thread = await readDmThread(supabase, dealership.id, channel, senderId);
 
       let replyText: string | null = null;
       let success = true;
@@ -191,7 +195,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
         // businessCtx.facts was already gathered for this request and
         // was the one thing this call never received (G-5). Null means
         // the records are unreadable and generateAutoReply refuses.
-        const outcome = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, pastInsights, persona.goals, { supabase, dealershipId: dealership.id }, businessCtx.facts);
+        const outcome = await generateAutoReply("dm", text, dealership.dealership_name, dealership.business_category ?? "business", brandProfile, productCatalog, businessCtx.knowledgeFacts, pastInsights, persona.goals, { supabase, dealershipId: dealership.id }, businessCtx.facts, thread.turns);
         replyText = outcome.reply;
         if (outcome.reply) {
           // THE SEND IS EVIDENCE ABOUT THE CONNECTION (H2, 27 Nov 2026).
