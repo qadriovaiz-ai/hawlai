@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { fetchWooCommerceProducts } from "@/lib/agents/woocommerceAgent";
 import { woocommerceConsumerSecret, clearedWrite, WOOCOMMERCE_SECRET_SELECT } from "@/lib/crypto/commerceSecrets";
 import { healthFromFailure, type Health } from "@/lib/integrations/healthState";
+import { recordHealthAsService } from "@/lib/integrations/health";
 
 export async function GET() {
   const supabase = await createClient();
@@ -34,6 +35,10 @@ export async function GET() {
       }
     }
   }
+
+  // WHAT IT FOUND IS RECORDED (H1), so the Integrations page, the daily
+  // run and the owner's notification all read one answer.
+  if (health) await recordHealthAsService(dealershipId, "woocommerce", health);
 
   return NextResponse.json({ connected, storeUrl: data?.woocommerce_store_url ?? null, products, health });
 }

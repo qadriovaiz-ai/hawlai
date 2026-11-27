@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import type { ShownHealth } from "@/lib/integrations/healthState";
+import IntegrationHealthLine from "@/components/settings/IntegrationHealthLine";
 import Link from "next/link";
-import { CheckCircle, MessageCircle, Lock } from "lucide-react";
+import { MessageCircle, Lock } from "lucide-react";
 import { Button } from "@/components/ui";
 
-export default function ConnectWhatsAppCard({ initiallyConnected, connectedNumber, allowed }: { initiallyConnected: boolean; connectedNumber?: string | null; allowed: boolean }) {
+export default function ConnectWhatsAppCard({ initiallyConnected, connectedNumber, allowed, health = null }: { initiallyConnected: boolean; connectedNumber?: string | null; allowed: boolean; health?: ShownHealth | null }) {
   const [connected, setConnected] = useState(initiallyConnected);
   const [step, setStep] = useState<"idle" | "waiting_code">("idle");
   const [phone, setPhone] = useState("");
@@ -72,7 +74,10 @@ export default function ConnectWhatsAppCard({ initiallyConnected, connectedNumbe
         </div>
       ) : connected ? (
         <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({connectedNumber})</span>
+          <div className="space-y-0.5">
+            <IntegrationHealthLine health={health ?? { state: "unchecked", reason: null }} checkedAt={health?.checkedAt ?? null} />
+            {connectedNumber && <p className="text-xs text-slate-400">{connectedNumber}</p>}
+          </div>
           {/* TURNING IT OFF IS NEVER THE SLOW PATH — H4. No
               confirmation step and no second screen: the safe
               direction must not be the difficult one, the same rule

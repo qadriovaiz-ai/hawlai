@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import SearchConsoleActions from "@/components/settings/SearchConsoleActions";
-import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, CheckCircle, ArrowRight, Globe, FileText, Radio, Star, Search } from "lucide-react";
+import { Plug, Facebook, Mail, MessageSquare, ShoppingBag, Store, ArrowRight, Globe, FileText, Radio, Star, Search } from "lucide-react";
 import SlackConnect from "@/components/settings/SlackConnect";
 import InstagramBusinessLoginConnect from "@/components/settings/InstagramBusinessLoginConnect";
 import ShopifyConnect from "@/components/settings/ShopifyConnect";
@@ -16,6 +16,9 @@ import ProductFeedCard from "@/components/settings/ProductFeedCard";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 import { buttonClasses } from "@/components/ui";
 import { hasToken } from "@/lib/crypto/oauthSecrets";
+import IntegrationHealthLine from "@/components/settings/IntegrationHealthLine";
+import { readHealth } from "@/lib/integrations/health";
+import { registryColumns, statusFor } from "@/lib/integrations/registry";
 
 // All four ad platforms (Meta, Google, Pinterest, Snapchat, LinkedIn)
 // now have real connect cards above — the old "Pending Platform
@@ -32,11 +35,21 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
   const dealershipId = profile?.dealership_id;
   if (!dealershipId) redirect("/dashboard");
 
-  const { data: dealership } = await supabase
+  // THE REGISTRY SAYS WHICH COLUMNS — src/lib/integrations/registry.ts.
+  // Every one confirmed to exist in production on 27 Nov 2026 before
+  // this read named it: a select naming a missing column fails whole,
+  // and every card would read "not connected".
+  const { data: dealershipRow } = await supabase
     .from("dealerships")
-    .select("fb_page_id, gmail_email, search_console_email, search_console_site_url, google_ads_email, google_ads_customer_id, youtube_channel_title, owner_whatsapp_number, owner_whatsapp_verified, pinterest_access_token, pinterest_access_token_encrypted, snapchat_access_token, snapchat_access_token_encrypted, linkedin_access_token, linkedin_access_token_encrypted")
+    .select([...registryColumns(), "owner_whatsapp_number", "google_ads_customer_id"].join(", "))
     .eq("id", dealershipId)
     .single();
+  const dealership = dealershipRow as Record<string, any> | null;
+
+  // WHAT EACH CONNECTION LAST DID, not what it stored (H1, 27 Nov 2026).
+  // A card is drawn "Connected" only from a state a real call confirmed.
+  const stored = await readHealth(supabase, dealershipId);
+  const shown = (key: string) => statusFor(key, dealership, stored.get(key));
 
   const isMetaConnected = !!dealership?.fb_page_id;
   const isGmailConnected = !!dealership?.gmail_email;
@@ -108,7 +121,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             </div>
           </div>
           {isMetaConnected ? (
-            <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected</span>
+            <IntegrationHealthLine health={shown("meta_page")!} checkedAt={shown("meta_page")?.checkedAt ?? null} />
           ) : (
             <Link href="/dashboard/settings/connect-facebook" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
@@ -133,7 +146,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             </div>
           </div>
           {isGmailConnected ? (
-            <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected</span>
+            <IntegrationHealthLine health={shown("gmail")!} checkedAt={shown("gmail")?.checkedAt ?? null} />
           ) : (
             <Link href="/dashboard/settings/connect-facebook" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
@@ -159,6 +172,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             connected={isSearchConsoleConnected}
             email={(dealership?.search_console_email as string | null) ?? null}
             property={searchConsoleProperty ?? null}
+            health={shown("search_console")}
           />
         </div>
 
@@ -174,7 +188,10 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             </div>
           </div>
           {isGoogleAdsConnected ? (
-            <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({dealership?.google_ads_email})</span>
+            <div className="space-y-0.5">
+              <IntegrationHealthLine health={shown("google_ads")!} checkedAt={shown("google_ads")?.checkedAt ?? null} />
+              <p className="text-xs text-slate-400 break-all">{dealership?.google_ads_email}</p>
+            </div>
           ) : (
             <a href="/api/auth/google-ads/connect" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
@@ -194,7 +211,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             </div>
           </div>
           {isPinterestConnected ? (
-            <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected</span>
+            <IntegrationHealthLine health={shown("pinterest")!} checkedAt={shown("pinterest")?.checkedAt ?? null} />
           ) : (
             <a href="/api/auth/pinterest/start" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
@@ -214,7 +231,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             </div>
           </div>
           {isSnapchatConnected ? (
-            <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected</span>
+            <IntegrationHealthLine health={shown("snapchat")!} checkedAt={shown("snapchat")?.checkedAt ?? null} />
           ) : (
             <a href="/api/auth/snapchat/start" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
@@ -234,7 +251,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             </div>
           </div>
           {isLinkedinConnected ? (
-            <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected</span>
+            <IntegrationHealthLine health={shown("linkedin")!} checkedAt={shown("linkedin")?.checkedAt ?? null} />
           ) : (
             <a href="/api/auth/linkedin/start" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
@@ -254,7 +271,10 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
             </div>
           </div>
           {isYoutubeConnected ? (
-            <span className="flex items-center gap-1.5 text-xs text-green-400"><CheckCircle className="w-3.5 h-3.5" /> Connected ({dealership?.youtube_channel_title})</span>
+            <div className="space-y-0.5">
+              <IntegrationHealthLine health={shown("youtube")!} checkedAt={shown("youtube")?.checkedAt ?? null} />
+              <p className="text-xs text-slate-400">{dealership?.youtube_channel_title}</p>
+            </div>
           ) : (
             <a href="/api/auth/youtube/connect" className={buttonClasses("secondary", "sm", "w-full justify-center")}>
               Connect <ArrowRight className="w-3 h-3" />
@@ -262,7 +282,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
           )}
         </div>
 
-        <ConnectWhatsAppCard initiallyConnected={!!dealership?.owner_whatsapp_verified} connectedNumber={dealership?.owner_whatsapp_number} allowed={whatsappAutomationAllowed} />
+        <ConnectWhatsAppCard initiallyConnected={!!dealership?.owner_whatsapp_verified} connectedNumber={dealership?.owner_whatsapp_number} allowed={whatsappAutomationAllowed} health={shown("whatsapp_owner")} />
 
         {/* Website (any platform) */}
         <div className="card p-5 space-y-3">
@@ -289,7 +309,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
               <p className="text-xs text-slate-400">Publish blog posts directly</p>
             </div>
           </div>
-          <WordPressConnect />
+          <WordPressConnect health={shown("wordpress")} />
         </div>
 
         {/* Slack */}
@@ -303,9 +323,12 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
               <p className="text-xs text-slate-400">Get notified for hot leads</p>
             </div>
           </div>
-          <SlackConnect />
-          <InstagramBusinessLoginConnect />
+          <SlackConnect health={shown("slack")} />
         </div>
+
+        {/* Instagram — its own card. It sat INSIDE the Slack card until
+            27 Nov 2026, under Slack's heading. */}
+        <InstagramBusinessLoginConnect health={shown("instagram")} />
 
         {/* Shopify */}
         <div className="card p-5 space-y-3">
@@ -332,7 +355,7 @@ export default async function IntegrationsPage({ searchParams }: { searchParams:
               <p className="text-xs text-slate-400">Surface your public rating in CRO</p>
             </div>
           </div>
-          <GoogleReviewsConnect />
+          <GoogleReviewsConnect health={shown("google_reviews")} />
         </div>
 
         {/* WooCommerce */}

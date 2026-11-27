@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { ShownHealth } from "@/lib/integrations/healthState";
+import IntegrationHealthLine from "@/components/settings/IntegrationHealthLine";
 import { Loader2, Check, Search, Star, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui";
 
@@ -23,7 +25,7 @@ type Candidate = {
   reviewCount: number | null;
 };
 
-export default function GoogleReviewsConnect() {
+export default function GoogleReviewsConnect({ health = null }: { health?: ShownHealth | null }) {
   const [loading, setLoading] = useState(true);
   const [connectedPlaceId, setConnectedPlaceId] = useState("");
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
@@ -93,9 +95,7 @@ export default function GoogleReviewsConnect() {
     <div className="space-y-2">
       {connectedPlaceId && !candidates ? (
         <div className="space-y-2">
-          <div className="flex items-center gap-1.5 text-xs text-green-600">
-            <Check className="w-3.5 h-3.5" /> Google reviews connected
-          </div>
+          <IntegrationHealthLine health={health ?? { state: "unchecked", reason: null }} checkedAt={health?.checkedAt ?? null} />
           {snapshotNote && <p className="text-xs text-slate-500">{snapshotNote}</p>}
           <p className="text-xs text-slate-400">Your rating, review count and recent reviews show up in CRO.</p>
           <Button variant="secondary" size="sm" onClick={handleSearch} loading={searching} className="w-full justify-center">
@@ -157,7 +157,7 @@ export default function GoogleReviewsConnect() {
         </div>
       )}
 
-      {saved && <p className="text-xs text-green-600">Connected.</p>}
+      {saved && <p className="text-xs text-green-600">Saved.</p>}
       {error && <p className="text-xs text-red-400">{error}</p>}
     </div>
   );

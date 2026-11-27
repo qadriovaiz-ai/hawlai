@@ -6176,3 +6176,80 @@ businesses, so nothing is waiting on it yet.
 
 **Unverified:** nothing here has run against Google or a real Shopify or
 WordPress site.
+
+
+---
+
+## 2026-11-27 — H0 and H1: "Connected" now means a real call said so
+
+The founder approved H0 and H1 of `docs/AUDIT-INTEGRATION-HEALTH.md`.
+
+**H0 (`b8f31743`).** Shopify and WooCommerce already called the store,
+and on failure said "still report connected: true". They now return
+`health` beside `connected`: `connected` keeps meaning "stored", which
+other code asks; `health` says whether it works. One rule,
+`healthFromFailure`, separates a refused credential (reconnect is the
+fix) from a store that is down (it may pass by itself).
+
+**H1 — the shared pattern.**
+
+- **`integration_health`** (migration **239**): one row per business per
+  integration, server-written only, owners read their own.
+- **`recordHealth`**: the one writer. It reads every write's error.
+- **`statusFor`**: the one rule for what the owner sees. A refusal
+  outranks everything; then "not set up to work" (no webhook
+  subscription, no Search Console property — evidence already stored by
+  migration 227 and the connect callback); then working; and a linked
+  integration nobody has checked is **"Linked · not checked yet" — never
+  "Connected"**.
+- **The registry** lists all seventeen, each saying how it is checked:
+  a probe, none yet (and which piece adds it), or impossible (and why).
+- **Every card** on the Integrations page draws its state through one
+  component, `IntegrationHealthLine`. No card draws its own "Connected".
+
+### Judgment calls made without an explicit ask
+
+1. **The owner is told only when the new state was STORED.** The "already
+   told" memory is the row. If it cannot be written — the migration not
+   yet run, a refused write — the next check cannot know it already
+   notified, and a broken store would raise a notification on **every
+   page load**. One silent check is cheaper than one message per refresh.
+   This narrows Search Console's "an unreadable history tells him
+   anyway" rule, deliberately.
+2. **Razorpay and Canva are in the registry but not read on this page.**
+   Their cards live elsewhere, and Razorpay's Connect columns arrive with
+   migration 178, which is unconfirmed live — naming a missing column
+   fails the whole page select. Their `linked` **throws** rather than
+   answering false, so nothing can read "not connected" from them.
+   They get the shared status on their own screens in H3/H4.
+3. **The owner's WhatsApp and Slack are `unverifiable`, and say why.** The
+   WhatsApp entry is the owner's verified phone, not a login; any call to
+   a Slack incoming webhook posts a message.
+4. **Instagram got its own card.** It was rendered inside the Slack
+   card, under Slack's heading.
+5. **Google Reviews' "Connected." after saving a location now says
+   "Saved."** — a save is not a check.
+6. **Every one of the 25 columns the page now selects was confirmed to
+   exist in production** before the page named it.
+
+### What H1 does NOT do yet
+
+**No probes.** Until H2, only Shopify and WooCommerce (checked live by
+their own routes) can reach "working". Everything else shows "Linked ·
+not checked yet" — which is the honest answer, and a visible change for
+the owner: **cards that said Connected will now say "not checked yet"**.
+Instagram and the Facebook Page will show **"not set up to work yet"**
+straight away, from the subscription columns, before any probe exists.
+
+### Verification
+
+Thirteen mutations for H1, each anchor matching once, all caught;
+seven for H0. The existing Search Console card test renders the card
+without a status and still finds "No verified property matched" — kept,
+and not drawn twice when the shared status already says it.
+
+Gates: `tsc` 0, `vitest` 0 (**442 files, 8183 passed**), `next build` 0.
+
+**Unverified:** migration 239 is not run. Until it is, nothing is
+recorded and every card that is not Shopify or WooCommerce reads "not
+checked yet"; nothing breaks.

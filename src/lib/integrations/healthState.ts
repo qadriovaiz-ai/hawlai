@@ -31,6 +31,9 @@ export type HealthState = (typeof HEALTH_STATES)[number];
 
 export type Health = { state: HealthState; reason: string | null };
 
+/** What a card is handed: the state, and when it was last confirmed. */
+export type ShownHealth = Health & { checkedAt?: string | null };
+
 /** The states that mean "this is not working", as opposed to "not known". */
 export const BROKEN_STATES: readonly HealthState[] = ["needs_reconnect", "not_responding"];
 

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Check } from "lucide-react";
+import type { ShownHealth } from "@/lib/integrations/healthState";
+import IntegrationHealthLine from "@/components/settings/IntegrationHealthLine";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui";
 
-export default function WordPressConnect() {
+export default function WordPressConnect({ health = null }: { health?: ShownHealth | null }) {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [siteUrl, setSiteUrl] = useState("");
@@ -50,7 +52,7 @@ export default function WordPressConnect() {
   if (connected) {
     return (
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-xs text-green-400"><Check className="w-3.5 h-3.5" /> Connected</span>
+        <IntegrationHealthLine health={health ?? { state: "unchecked", reason: null }} checkedAt={health?.checkedAt ?? null} />
         <button onClick={handleDisconnect} className="text-xs text-slate-400 hover:text-red-400">Disconnect</button>
       </div>
     );

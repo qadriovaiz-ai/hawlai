@@ -11,18 +11,23 @@
 // for every one of those cases.
 
 import { useState } from "react";
+import type { ShownHealth } from "@/lib/integrations/healthState";
+import IntegrationHealthLine from "@/components/settings/IntegrationHealthLine";
 import { useRouter } from "next/navigation";
-import { CheckCircle, ArrowRight, RotateCw, Trash2, XCircle } from "lucide-react";
+import { ArrowRight, RotateCw, Trash2, XCircle } from "lucide-react";
 import { buttonClasses } from "@/components/ui";
 
 export default function SearchConsoleActions({
   connected,
   email,
   property,
+  health = null,
 }: {
   connected: boolean;
   email: string | null;
   property: string | null;
+  /** What was last FOUND, from the shared registry (H1). Null: not checked. */
+  health?: ShownHealth | null;
 }) {
   const router = useRouter();
   const [isConnected, setIsConnected] = useState(connected);
@@ -67,16 +72,17 @@ export default function SearchConsoleActions({
 
   return (
     <div className="space-y-2">
-      <span className="flex items-center gap-1.5 text-xs text-green-400">
-        <CheckCircle className="w-3.5 h-3.5" /> Connected{email ? ` (${email})` : ""}
-      </span>
+      <IntegrationHealthLine health={health ?? { state: "unchecked", reason: null }} checkedAt={health?.checkedAt ?? null} />
+      {email && <p className="text-xs text-slate-400 break-all">Account: {email}</p>}
 
       {/* Connected and READING are different states, and the card says
           which one this is — "Connected" over a property that reads
           nothing would be a quiet lie. */}
+      {/* The shared status already says this when it is "incomplete";
+          drawn here only when it does not, so it is never said twice. */}
       {property ? (
         <p className="text-xs text-slate-400 break-all">Reading: {property}</p>
-      ) : (
+      ) : health?.state === "incomplete" ? null : (
         <p className="text-xs text-amber-400">
           No verified property matched this business yet — add your site in Search Console, then press Reconnect.
         </p>
