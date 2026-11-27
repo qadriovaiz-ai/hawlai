@@ -125,3 +125,51 @@ export function rejectionDiagnosis(rawBody: string, signatureHeader: string | nu
     ? "it DOES match INSTAGRAM_APP_SECRET — this delivery was signed with the Instagram app's secret"
     : "it matches neither FACEBOOK_APP_SECRET nor INSTAGRAM_APP_SECRET";
 }
+
+/** Which secret a delivery was verified with, when it was. */
+export type DeliverySignature =
+  | { valid: true; signedWith: "facebook" | "instagram" }
+  | Extract<SignatureResult, { valid: false }>;
+
+/**
+ * Verify a delivery to a Meta webhook route with THE RIGHT SECRET FOR ITS
+ * KIND — 27 November 2026.
+ *
+ * MEASURED, NOT ASSUMED. After Instagram was reconnected, every delivery
+ * was rejected as "signature did not match". rejectionDiagnosis (above)
+ * was shipped first, accepting nothing, and the owner's next three test
+ * DMs all recorded "it DOES match INSTAGRAM_APP_SECRET" — none matched
+ * FACEBOOK_APP_SECRET. An app using Instagram Login signs Instagram's
+ * webhooks with the Instagram app's own secret.
+ *
+ * THE DELIVERY'S `object` CHOOSES THE KEY, AND THAT IS SAFE even though
+ * the body is not trusted yet: a claimed object only decides which secret
+ * to check, and nothing is accepted unless it is signed with that secret.
+ *
+ *   object "instagram"   INSTAGRAM_APP_SECRET, then FACEBOOK_APP_SECRET —
+ *                        the second because Instagram connected through
+ *                        Facebook Login is signed with the Facebook app's
+ *                        secret, which is how this route always verified
+ *   anything else        FACEBOOK_APP_SECRET ONLY
+ *
+ * So the Instagram secret can never admit a Page or lead-ads delivery: a
+ * payload signed with it is accepted only if it says it is Instagram, and
+ * then the handler treats it as Instagram.
+ */
+export function verifyMetaDelivery(rawBody: string, signatureHeader: string | null): DeliverySignature {
+  let object: unknown;
+  try {
+    object = JSON.parse(rawBody)?.object;
+  } catch {
+    object = undefined;
+  }
+  if (object === "instagram") {
+    const instagramSecret = process.env.INSTAGRAM_APP_SECRET;
+    if (instagramSecret) {
+      const asInstagram = verifyMetaSignature(rawBody, signatureHeader, instagramSecret);
+      if (asInstagram.valid) return { valid: true, signedWith: "instagram" };
+    }
+  }
+  const asFacebook = verifyMetaSignature(rawBody, signatureHeader);
+  return asFacebook.valid ? { valid: true, signedWith: "facebook" } : asFacebook;
+}

@@ -55,8 +55,17 @@ describe("1. THE DIAGNOSIS SAYS WHICH SECRET MATCHES", () => {
   });
 });
 
-describe("2. AND IT IS NOT A DOOR — the Instagram-signed delivery is still rejected", () => {
-  it("VERIFICATION STILL USES FACEBOOK_APP_SECRET ONLY", () => {
+// CHANGED 27 NOVEMBER 2026, ON THE OWNER'S EXPLICIT INSTRUCTION, after this
+// diagnosis did its job: three real deliveries all matched
+// INSTAGRAM_APP_SECRET. This section used to hold that the routes call
+// verifyMetaSignature once with no override — "not a door" — because the
+// evidence was not in yet. The routes now verify with verifyMetaDelivery,
+// whose own tests (tests/metaDeliveryVerification.test.ts) hold the new,
+// narrower rule: the Instagram secret opens ONLY deliveries that say they
+// are Instagram. What stays pinned here: the diagnosis feeds nothing but
+// the recorded reason, and a rejection is still a 401.
+describe("2. THE DIAGNOSIS FEEDS ONLY THE RECORDED REASON", () => {
+  it("verifyMetaSignature ITSELF STILL DEFAULTS TO FACEBOOK_APP_SECRET", () => {
     process.env.FACEBOOK_APP_SECRET = FB;
     process.env.INSTAGRAM_APP_SECRET = IG;
     expect(verifyMetaSignature(body, sign(body, IG))).toEqual({ valid: false, reason: "mismatch" });
@@ -74,9 +83,12 @@ describe("2. AND IT IS NOT A DOOR — the Instagram-signed delivery is still rej
       // could change the outcome.
       expect(block).toMatch(/rejectionDiagnosis\(rawBody, request\.headers\.get\("x-hub-signature-256"\)\)/);
       expect(block).toMatch(/outcome: "signature_rejected", detail: why/);
-      // The verification itself is unchanged: one call, no override.
-      expect(src.match(/verifyMetaSignature\(/g)).toHaveLength(1);
-      expect(src).toMatch(/verifyMetaSignature\(rawBody, request\.headers\.get\("x-hub-signature-256"\)\)/);
+      // ONE verification, through the one function that knows which secret
+      // goes with which kind of delivery — and no direct call that could
+      // pass a secret of its own.
+      expect(src.match(/verifyMetaDelivery\(/g)).toHaveLength(1);
+      expect(src).toMatch(/verifyMetaDelivery\(rawBody, request\.headers\.get\("x-hub-signature-256"\)\)/);
+      expect(src).not.toMatch(/verifyMetaSignature\(/);
     });
   }
 });

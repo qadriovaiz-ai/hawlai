@@ -6308,3 +6308,53 @@ cut away the lines it was looking for. It is now bounded by the rethrow
 that closes the block.
 
 Gates: `tsc` 0, `vitest` 0 (**443 files, 8209 passed**), `next build` 0.
+
+
+---
+
+## 2026-11-27 — Instagram deliveries are verified with the Instagram app's secret
+
+**Measured before fixed.** After Instagram was reconnected, Meta delivered
+— and every delivery was rejected, "signature did not match", so the
+owner's test DMs never reached the reply. Both Meta routes verified with
+`FACEBOOK_APP_SECRET`. Meta's documentation says "your app's App Secret"
+without saying which, so a diagnosis shipped first (`21ae2ee0`) that
+accepted nothing and recorded which secret matched. **The owner's next
+three test DMs all recorded "it DOES match INSTAGRAM_APP_SECRET", none
+FACEBOOK_APP_SECRET.** On that evidence, and on his explicit instruction,
+the fix:
+
+**`verifyMetaDelivery`** — the delivery's `object` chooses the key:
+
+| `object` | Checked against |
+|---|---|
+| `"instagram"` | `INSTAGRAM_APP_SECRET`, then `FACEBOOK_APP_SECRET` |
+| anything else | `FACEBOOK_APP_SECRET` **only** |
+
+Reading `object` from a not-yet-trusted body is safe: it only chooses
+which secret to check, and nothing is accepted unless signed with that
+secret. **The Instagram secret can never admit a Page or lead-ads
+delivery** — a test signs a Page delivery with it and requires a 401.
+Facebook stays as the fallback for Instagram because Instagram connected
+through Facebook Login is signed with the Facebook app's secret, which is
+how these routes always verified.
+
+**An existing test changed, on the owner's instruction.**
+`tests/metaSignatureDiagnosis.test.ts` section 2 held that the routes call
+`verifyMetaSignature` once with no override — "not a door" — because the
+evidence was not in yet. It now holds that each route verifies through
+`verifyMetaDelivery` exactly once and calls `verifyMetaSignature`
+directly nowhere, and still that the diagnosis feeds only the recorded
+reason and a rejection is still a 401. The narrower rule itself is pinned
+in `tests/metaDeliveryVerification.test.ts`, including the route end to
+end.
+
+**Mutation-checked five ways**, each anchor matching once: the Instagram
+secret opening every kind of delivery (3 fail), never tried (2), the
+Facebook fallback dropped (2), failing open (7), a route verifying the
+wrong bytes (2).
+
+Gates: `tsc` 0, `vitest` 0 (**445 files, 8227 passed**), `next build` 0.
+
+**Unverified:** a real DM through the deployed fix has not been watched
+yet.

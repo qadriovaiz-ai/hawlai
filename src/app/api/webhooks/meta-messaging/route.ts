@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
-import { verifyMetaSignature, describeRejection, rejectionDiagnosis } from "@/lib/webhooks/metaSignature";
+import { verifyMetaDelivery, describeRejection, rejectionDiagnosis } from "@/lib/webhooks/metaSignature";
 import { recordDelivery, recordDeliveryStandalone } from "@/lib/webhooks/deliveryLog";
 
 // Kept as a standalone endpoint in case a separate Callback URL is
@@ -32,10 +32,13 @@ export async function POST(request: Request) {
   // payload here is not just fake data — it makes the product send
   // messages on a dealer's behalf to whoever the payload names. Fails
   // closed, including when FACEBOOK_APP_SECRET is unset.
-  const signature = verifyMetaSignature(rawBody, request.headers.get("x-hub-signature-256"));
+  // THE RIGHT SECRET FOR THE DELIVERY'S KIND (27 Nov 2026): Instagram
+  // Login signs with INSTAGRAM_APP_SECRET, measured on three real
+  // deliveries. Everything else is FACEBOOK_APP_SECRET only.
+  const signature = verifyMetaDelivery(rawBody, request.headers.get("x-hub-signature-256"));
   if (!signature.valid) {
-    // WHICH SECRET IT WAS SIGNED WITH, for a mismatch (27 Nov 2026): a
-    // diagnosis recorded beside the reason, never a second way in.
+    // WHICH SECRET IT WAS SIGNED WITH, for a mismatch (27 Nov 2026) —
+    // recorded beside the reason. It is what found the Instagram secret.
     const why =
       signature.reason === "mismatch"
         ? `${describeRejection(signature)}; ${rejectionDiagnosis(rawBody, request.headers.get("x-hub-signature-256"))}`

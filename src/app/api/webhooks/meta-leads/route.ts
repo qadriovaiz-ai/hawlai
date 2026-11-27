@@ -2,7 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { mapLeadAnswers, scoreNewLead } from "@/lib/leads/leadIntake";
 import { loadBusinessModels } from "@/lib/leads/leadProfile";
 import { NextResponse } from "next/server";
-import { verifyMetaSignature, describeRejection, rejectionDiagnosis } from "@/lib/webhooks/metaSignature";
+import { verifyMetaDelivery, describeRejection, rejectionDiagnosis } from "@/lib/webhooks/metaSignature";
 import { sendSlackNotification } from "@/lib/agents/slackAgent";
 import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
 import { recordDelivery, recordDeliveryStandalone } from "@/lib/webhooks/deliveryLog";
@@ -61,10 +61,13 @@ export async function POST(request: Request) {
   // unverifiable payload is not trustworthy just because the server is
   // misconfigured — and the log line for that case says explicitly
   // that leads will not arrive until it is set.
-  const signature = verifyMetaSignature(rawBody, request.headers.get("x-hub-signature-256"));
+  // THE RIGHT SECRET FOR THE DELIVERY'S KIND (27 Nov 2026): Instagram
+  // Login signs with INSTAGRAM_APP_SECRET, measured on three real
+  // deliveries. Everything else is FACEBOOK_APP_SECRET only.
+  const signature = verifyMetaDelivery(rawBody, request.headers.get("x-hub-signature-256"));
   if (!signature.valid) {
-    // WHICH SECRET IT WAS SIGNED WITH, for a mismatch (27 Nov 2026): a
-    // diagnosis recorded beside the reason, never a second way in.
+    // WHICH SECRET IT WAS SIGNED WITH, for a mismatch (27 Nov 2026) —
+    // recorded beside the reason. It is what found the Instagram secret.
     const why =
       signature.reason === "mismatch"
         ? `${describeRejection(signature)}; ${rejectionDiagnosis(rawBody, request.headers.get("x-hub-signature-256"))}`
