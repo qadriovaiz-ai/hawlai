@@ -23,7 +23,7 @@
 //   * Never the token in a result, a log or a reason.
 
 import { healthFromFailure, type Health } from "@/lib/integrations/healthState";
-import { META_PAGE_TOKEN_SELECT, readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { INSTAGRAM_TOKEN_SELECT, META_PAGE_TOKEN_SELECT, readInstagramToken, readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { FB_WEBHOOK_FIELDS, IG_WEBHOOK_FIELDS } from "@/lib/webhooks/subscribeWebhooks";
 import {
   isPlatformProperty,
@@ -86,13 +86,18 @@ export function missingFields(subscribed: unknown, needed: readonly string[]): s
 export async function probeInstagram(service: any, dealershipId: string): Promise<ProbeResult> {
   const { data: row, error } = await service
     .from("dealerships")
-    .select("instagram_business_id, instagram_access_token")
+    .select(`instagram_business_id, ${INSTAGRAM_TOKEN_SELECT}`)
     .eq("id", dealershipId)
     .maybeSingle();
   if (error) return { state: "not_responding", reason: `couldn't read the stored connection: ${error.message}` };
-  const token = row?.instagram_access_token;
+  let token: string | null = null;
+  try {
+    token = readInstagramToken(row);
+  } catch (err: any) {
+    return { state: "needs_reconnect", reason: `the stored Instagram token could not be read: ${err?.message ?? err}` };
+  }
   if (!row?.instagram_business_id) return { state: "unchecked", reason: "no Instagram account is linked" };
-  if (!token) return { state: "needs_reconnect", reason: "an Instagram account is linked but no access token is stored" };
+  if (!token) return { state: "needs_reconnect", reason: "an Instagram account is linked but its token is missing or has expired" };
 
   const auth = { Authorization: `Bearer ${token}` };
   const me = await read(`${IG_GRAPH}/me?fields=user_id,username`, auth);

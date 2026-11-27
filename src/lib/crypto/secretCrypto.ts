@@ -34,13 +34,14 @@
 // columns, the plaintext originals dropped by migration 164), and
 // twelve marketing OAuth columns.
 //
-// STILL PLAINTEXT, deliberately deferred: fb_page_access_token and
-// instagram_access_token. Neither ever refreshes, and the Meta token
-// spans 13 files across lead ingestion, ad launch and analytics —
-// touching that surface immediately before the pending live tests
-// would make any regression impossible to attribute. Scheduled for
-// after those tests pass. Stated here so nobody reads this file and
-// concludes the database is encrypted generally.
+// THE TWO META TOKENS THIS ONCE LISTED AS STILL PLAINTEXT have since
+// moved (corrected 28 Nov 2026 — the old note had gone stale):
+// fb_page_access_token reads encrypted-first and writes encrypted via
+// META_PAGE_TOKEN_SELECT / metaPageTokenWrite; instagram_access_token
+// via INSTAGRAM_TOKEN_SELECT / instagramTokenWrite (migration 241).
+// Both keep a plaintext fallback column until each row is rewritten.
+// Stated so nobody reads this file and concludes the database is
+// encrypted generally, or that these two are not.
 //
 // What this protects against: a dump of the dealerships table, a leaked
 // backup, a read-only SQL compromise. What it does NOT protect against:

@@ -28,6 +28,8 @@ export type SubsystemKey =
   | "email_automation" | "workflows" | "competitor_alerts" | "topic_alerts" | "google_reviews"
   | "budget_alerts" | "seasonal_calendar" | "churn_detection" | "cold_lead_detection"
   | "lead_scoring" | "stale_approvals" | "lead_export" | "site_audit" | "search_console_sync" | "content_performance" | "strategy_signals"
+  // F3, 28 Nov 2026 — keeps the Instagram token alive (src/lib/instagram/tokenRefresh.ts).
+  | "instagram_token_refresh"
   // S-a/b/c — turns two of site_audit's own findings into proposals the
   // owner can approve. In `signals` because it calls NO model: a title
   // is the page's title plus the business name, a description is the
@@ -166,6 +168,8 @@ export const GROUPS: Record<string, SubsystemKey[]> = {
     "report_snapshots",
     "output_monitor",
     "search_console_sync",
+    // F3 — a network call to Instagram, so heavy, not signals.
+    "instagram_token_refresh",
     // After search_console_sync, so if a run is cut short the searches
     // are already in — they are what every other piece reads.
     "page_speed",

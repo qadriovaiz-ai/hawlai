@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { instagramTokenWrite, instagramTokenClear } from "@/lib/crypto/oauthSecrets";
 import { NextResponse } from "next/server";
 
 async function getDealership(supabase: any, userId: string) {
@@ -31,7 +32,9 @@ export async function POST(request: Request) {
 
   const { error } = await supabase.from("dealerships").update({
     instagram_business_id: instagramBusinessId.trim(),
-    instagram_access_token: accessToken.trim(),
+    // Encrypted (F3). A pasted token's expiry is unknown, so the daily
+    // refresh treats it as due.
+    ...instagramTokenWrite(accessToken.trim(), null),
   }).eq("id", dealershipId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -45,7 +48,7 @@ export async function DELETE() {
   const dealershipId = await getDealership(supabase, user.id);
   if (!dealershipId) return NextResponse.json({ error: "No dealership" }, { status: 400 });
 
-  const { error } = await supabase.from("dealerships").update({ instagram_business_id: null, instagram_access_token: null }).eq("id", dealershipId);
+  const { error } = await supabase.from("dealerships").update({ instagram_business_id: null, ...instagramTokenClear() }).eq("id", dealershipId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }

@@ -1,6 +1,7 @@
 // The function each daily-cron subsystem runs, by key — one table, so
 // the run order is decided by cronGroups.ts and nothing else.
 
+import { refreshInstagramToken } from "@/lib/instagram/tokenRefresh";
 import { runDailyAutopilot } from "@/lib/agents/autopilotAgent";
 import { runResultsJob } from "@/lib/growth/resultsJob";
 import { runMonthlyReview } from "@/lib/growth/monthlyReview";
@@ -120,6 +121,8 @@ export const DAILY_RUNNERS: Record<SubsystemKey, (supabase: any, dealershipId: s
   // Search Console connection return a reason and stop.
   // Then the business's own sitemap — see syncThenSubmitSitemap above.
   search_console_sync: (s, id) => syncThenSubmitSitemap(s, id),
+  // F3 — refreshes a due Instagram token; skips everyone else.
+  instagram_token_refresh: (s, id) => refreshInstagramToken(s, id),
   // Arithmetic over stored attribution rows — no AI, no third party — so
   // it sits with the database-only work. Says what it can't tell yet as
   // readily as what it can (lib/attribution/performanceBrain.ts).

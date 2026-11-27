@@ -60,7 +60,14 @@ vi.mock("@/lib/claims/businessFacts", () => ({
 vi.mock("@/lib/email/consent", () => ({ siteUrl: () => "https://example.test" }));
 vi.mock("@/lib/leads/dmLeadLinking", () => ({ resolveDmLead: async () => "lead-1" }));
 vi.mock("@/lib/businessMemory/getLeadMemory", () => ({ getLeadMemory: async () => [] }));
-vi.mock("@/lib/crypto/oauthSecrets", () => ({ readMetaPageToken: (d: any) => d?.fb_page_access_token ?? null }));
+// The Instagram pair added 28 Nov 2026 (F3, migration 241) in the same
+// shape as the Page token's: the handler now reads Instagram's token
+// through oauthSecrets too. No assertion below changed.
+vi.mock("@/lib/crypto/oauthSecrets", () => ({
+  readMetaPageToken: (d: any) => d?.fb_page_access_token ?? null,
+  INSTAGRAM_TOKEN_SELECT: "instagram_access_token, instagram_access_token_encrypted, instagram_token_expires_at",
+  readInstagramToken: (d: any) => d?.instagram_access_token ?? null,
+}));
 vi.mock("@/lib/agents/socialManagementAgent", () => ({
   generateAutoReply: async () => ({ reply: "Yes, we are open." }),
 }));

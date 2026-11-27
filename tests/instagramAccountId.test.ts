@@ -16,6 +16,11 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+// Since F3 (28 Nov 2026) the callback ENCRYPTS the token, and refuses to
+// store one it cannot encrypt. A throwaway key, as every test that touches
+// stored secrets uses, so encryption runs for real. No assertion changed.
+process.env.MARKETING_ENCRYPTION_KEY = process.env.MARKETING_ENCRYPTION_KEY ?? "a".repeat(64);
+
 const APP_SCOPED = "28844011251865336";
 const USER_ID = "17841432344301688";
 

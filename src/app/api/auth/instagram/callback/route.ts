@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { instagramTokenWrite } from "@/lib/crypto/oauthSecrets";
 import { NextResponse } from "next/server";
 import { subscribeAndRecord } from "@/lib/webhooks/subscribeWebhooks";
 
@@ -69,6 +70,10 @@ export async function GET(request: Request) {
     const longLivedRes = await fetch(longLivedUrl.toString());
     const longLivedData = await longLivedRes.json();
     const finalToken = longLivedRes.ok && longLivedData.access_token ? longLivedData.access_token : shortLivedData.access_token;
+    // F3: how long the token Instagram gave actually lives. A long-lived
+    // one says ~60 days; if the exchange failed this is the short-lived
+    // token, and its real (one-hour) life is recorded rather than hidden.
+    const expiresIn = longLivedRes.ok && longLivedData.access_token ? Number(longLivedData.expires_in) || null : Number(shortLivedData.expires_in) || 3600;
 
     // Step 3: the account this token represents.
     //
@@ -95,7 +100,8 @@ export async function GET(request: Request) {
     const service = createServiceClient();
     const { error: dbError } = await service.from("dealerships").update({
       instagram_business_id: igUserId,
-      instagram_access_token: finalToken,
+      // Encrypted, plaintext nulled, expiry kept (F3, migration 241).
+      ...instagramTokenWrite(finalToken, expiresIn),
     }).eq("id", dealershipId);
     if (dbError) throw new Error(dbError.message);
 

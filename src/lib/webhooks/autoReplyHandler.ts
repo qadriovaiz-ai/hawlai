@@ -3,7 +3,7 @@ import { resolveDmLead } from "@/lib/leads/dmLeadLinking";
 import { getBusinessContext } from "@/lib/businessBrain";
 import { resolvePersona } from "@/lib/agents/personas";
 import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
-import { readMetaPageToken } from "@/lib/crypto/oauthSecrets";
+import { INSTAGRAM_TOKEN_SELECT, readInstagramToken, readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { fetchCatalog, type CatalogProduct } from "@/lib/claims/businessFacts";
 import { bookingPageUrl } from "@/lib/catalog/catalogItem";
 import { siteUrl } from "@/lib/email/consent";
@@ -104,7 +104,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
   if (!dealership) {
     const igResult = await supabase
       .from("dealerships")
-      .select("id, dealership_name, business_category, instagram_access_token, dm_auto_reply_enabled, comment_auto_reply_enabled")
+      .select(`id, dealership_name, business_category, ${INSTAGRAM_TOKEN_SELECT}, dm_auto_reply_enabled, comment_auto_reply_enabled`)
       .eq("instagram_business_id", entryId)
       .maybeSingle();
     if (igResult.data) {
@@ -123,7 +123,8 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
     });
     return;
   }
-  const replyToken = channel === "instagram" ? dealership.instagram_access_token : readMetaPageToken(dealership);
+  // F3: encrypted first, plaintext fallback, null past a known expiry.
+  const replyToken = channel === "instagram" ? readInstagramToken(dealership) : readMetaPageToken(dealership);
   if (!replyToken) {
     await recordDelivery(supabase, {
       source, entryId, dealershipId: dealership.id, outcome: "no_reply_token",

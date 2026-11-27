@@ -6459,3 +6459,53 @@ Gates: `tsc` 0, `vitest` 0 (**448 files, 8260 passed**), `next build` 0.
 
 **Migration 240 is not run.** Until it is, the seller notification insert
 fails and is logged; the holding line and the answer gap still work.
+
+
+---
+
+## 2026-11-28 — F3: the Instagram token, encrypted and kept alive
+
+**The last Meta credential in the clear.** `oauthSecrets.ts` had deferred
+it "to the next pass"; it now answers customers with nobody watching.
+And an Instagram long-lived token dies after ~60 days with nothing
+refreshing it — every connection went silent on a schedule.
+
+- **Migration 241:** `instagram_access_token_encrypted`,
+  `instagram_token_expires_at`.
+- **The Page token's rule:** read encrypted-first with a plaintext
+  fallback; every write — connect, manual entry, refresh — encrypts and
+  **nulls the plaintext** in the same statement. Past a **known** expiry
+  the token reads as none.
+- **A daily refresh** (`instagram_token_refresh`, heavy group) when the
+  token has under 10 days left **or an unknown expiry** — every
+  connection made before 241. That refresh is what moves each row out of
+  the clear.
+- **A failed refresh is recorded** through `recordHealth` (the owner told
+  once). **A successful one is not recorded as "working"**: it proves the
+  token, not the webhook or the account id, and overwriting the health
+  check's "not set up" would hide a real problem.
+- **The connect callback now records the token's real life** — including
+  the one-hour life of a short-lived token when the long-lived exchange
+  failed, which it used to store silently.
+
+**A guard now walks `src/`** and fails on any file other than
+`oauthSecrets.ts` naming the plaintext column. The Page token's own
+comment claims `metaTokenSelect.test.ts` does this for it — **that file
+does not exist**. Not fixed here (out of scope); flagged separately.
+
+**A stale comment corrected:** `secretCrypto.ts` still said both Meta
+tokens were "STILL PLAINTEXT". Neither is now.
+
+**Two existing tests needed their setup, not their assertions, changed:**
+`instagramAccountId.test.ts` gained the throwaway encryption key every
+secret-touching test uses (the callback now refuses to store a token it
+cannot encrypt), and `webhookDeliveryLog.test.ts`'s `oauthSecrets` mock
+gained the two Instagram helpers in the same shape as its Page-token one.
+
+**Deployed in two steps, on purpose.** A query naming the new columns
+fails whole in production until 241 is run — including the DM routing
+just made to work. The migration went first; the code waits for it.
+
+Eight mutations, each anchor matching once, all caught.
+
+Gates: `tsc` 0, `vitest` 0 (**449 files, 8274 passed**), `next build` 0.

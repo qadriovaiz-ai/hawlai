@@ -17,8 +17,8 @@
 // ad-platform credential left in the clear, and the only one that can
 // spend money — see META_PAGE_TOKEN_SELECT below.
 //
-// STILL NOT IN SCOPE: instagram_access_token. Same treatment, next
-// pass; it is read at exactly one site and never spends.
+// instagram_access_token: DONE on 28 Nov 2026 (migration 241) — see the
+// Instagram section at the end of this file.
 //
 // WHY A BACKFILL IS THE WHOLE JOB, not a remainder. The original plan
 // assumed most values would migrate naturally as tokens refreshed.
@@ -201,4 +201,63 @@ export function metaUserTokenWrite(value: string, expiresInSeconds: number | nul
     fb_user_access_token_encrypted: encryptSecret(value, "marketing"),
     fb_user_token_expires_at: expiresInSeconds ? new Date(Date.now() + expiresInSeconds * 1000).toISOString() : null,
   };
+}
+
+// ---------------------------------------------------------------
+// Instagram Login token — migration 241, F3 of
+// docs/PLAN-INSTAGRAM-SELLER-MODE.md, 28 November 2026.
+//
+// The pass this file's header deferred ("STILL NOT IN SCOPE:
+// instagram_access_token ... next pass"). It matters more now than when
+// it was deferred: this token answers customers with nobody watching.
+//
+// THE PAGE TOKEN'S RULE: encrypted first, plaintext fallback, and every
+// write encrypts and NULLS the plaintext in the same statement. Plus an
+// expiry, because an Instagram long-lived token dies after ~60 days and
+// nothing refreshed it (src/lib/instagram/tokenRefresh.ts now does).
+// ---------------------------------------------------------------
+
+/**
+ * All three columns, for a SELECT.
+ *
+ * MUST be used by every query that reads the Instagram token —
+ * tests/instagramTokenEncrypted.test.ts walks src/ and fails on a query
+ * naming the plaintext column alone, which would return null the moment
+ * a row is migrated.
+ */
+export const INSTAGRAM_TOKEN_SELECT = "instagram_access_token, instagram_access_token_encrypted, instagram_token_expires_at";
+
+/** Encrypted first, plaintext fallback. Null when absent, or past a KNOWN expiry. */
+export function readInstagramToken(row: Row, now: number = Date.now()): string | null {
+  const expires = row?.instagram_token_expires_at ? new Date(row.instagram_token_expires_at).getTime() : null;
+  if (expires !== null && Number.isFinite(expires) && expires <= now) return null;
+  return resolveSecret(
+    row?.instagram_access_token_encrypted,
+    row?.instagram_access_token,
+    "marketing",
+    "instagram access token"
+  );
+}
+
+/** True when a token is stored, WITHOUT decrypting it. */
+export function hasInstagramToken(row: Row): boolean {
+  return Boolean(row?.instagram_access_token_encrypted || row?.instagram_access_token);
+}
+
+/**
+ * Update payload for storing the Instagram token: encrypted, plaintext
+ * nulled, and the expiry when Instagram said it (null = unknown, which
+ * the daily refresh treats as due).
+ */
+export function instagramTokenWrite(value: string, expiresInSeconds: number | null | undefined, now: number = Date.now()) {
+  return {
+    instagram_access_token_encrypted: encryptSecret(value, "marketing"),
+    instagram_access_token: null,
+    instagram_token_expires_at: expiresInSeconds ? new Date(now + expiresInSeconds * 1000).toISOString() : null,
+  };
+}
+
+/** Update payload for disconnecting: every Instagram token column cleared. */
+export function instagramTokenClear() {
+  return { instagram_access_token: null, instagram_access_token_encrypted: null, instagram_token_expires_at: null };
 }
