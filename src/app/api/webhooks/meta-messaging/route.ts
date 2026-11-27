@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
-import { verifyMetaSignature, describeRejection } from "@/lib/webhooks/metaSignature";
+import { verifyMetaSignature, describeRejection, rejectionDiagnosis } from "@/lib/webhooks/metaSignature";
 import { recordDelivery, recordDeliveryStandalone } from "@/lib/webhooks/deliveryLog";
 
 // Kept as a standalone endpoint in case a separate Callback URL is
@@ -34,7 +34,12 @@ export async function POST(request: Request) {
   // closed, including when FACEBOOK_APP_SECRET is unset.
   const signature = verifyMetaSignature(rawBody, request.headers.get("x-hub-signature-256"));
   if (!signature.valid) {
-    const why = describeRejection(signature);
+    // WHICH SECRET IT WAS SIGNED WITH, for a mismatch (27 Nov 2026): a
+    // diagnosis recorded beside the reason, never a second way in.
+    const why =
+      signature.reason === "mismatch"
+        ? `${describeRejection(signature)}; ${rejectionDiagnosis(rawBody, request.headers.get("x-hub-signature-256"))}`
+        : describeRejection(signature);
     console.error("[meta-messaging]", why);
     // RECORDED, NOT ONLY LOGGED (migration 226). A console line in
     // Vercel is invisible to the owner, and "FACEBOOK_APP_SECRET is not

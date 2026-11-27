@@ -2,7 +2,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { mapLeadAnswers, scoreNewLead } from "@/lib/leads/leadIntake";
 import { loadBusinessModels } from "@/lib/leads/leadProfile";
 import { NextResponse } from "next/server";
-import { verifyMetaSignature, describeRejection } from "@/lib/webhooks/metaSignature";
+import { verifyMetaSignature, describeRejection, rejectionDiagnosis } from "@/lib/webhooks/metaSignature";
 import { sendSlackNotification } from "@/lib/agents/slackAgent";
 import { handleAutoReplyEntry } from "@/lib/webhooks/autoReplyHandler";
 import { recordDelivery, recordDeliveryStandalone } from "@/lib/webhooks/deliveryLog";
@@ -63,7 +63,12 @@ export async function POST(request: Request) {
   // that leads will not arrive until it is set.
   const signature = verifyMetaSignature(rawBody, request.headers.get("x-hub-signature-256"));
   if (!signature.valid) {
-    const why = describeRejection(signature);
+    // WHICH SECRET IT WAS SIGNED WITH, for a mismatch (27 Nov 2026): a
+    // diagnosis recorded beside the reason, never a second way in.
+    const why =
+      signature.reason === "mismatch"
+        ? `${describeRejection(signature)}; ${rejectionDiagnosis(rawBody, request.headers.get("x-hub-signature-256"))}`
+        : describeRejection(signature);
     console.error("[meta-leads]", why);
     // RECORDED, NOT ONLY LOGGED (migration 226). This is the URL Meta
     // actually calls, so this is the rejection that matters: an unset

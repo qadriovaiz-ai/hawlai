@@ -101,3 +101,27 @@ export function describeRejection(result: Extract<SignatureResult, { valid: fals
       return "rejected: signature did not match";
   }
 }
+
+/**
+ * WHICH SECRET A REJECTED DELIVERY WAS ACTUALLY SIGNED WITH — a diagnosis,
+ * never a door. 27 November 2026.
+ *
+ * After Instagram was reconnected, Meta began delivering — and every
+ * delivery was rejected with "signature did not match": 20 in 13 minutes,
+ * the owner's test DMs among them, so none reached the reply. Both Meta
+ * routes verify against FACEBOOK_APP_SECRET, while an app using Instagram
+ * Login also has its own Instagram app secret. Meta's documentation says
+ * "your app's App Secret" without saying which, so the fix is not guessed:
+ * this records which one matches, and the fix follows the evidence.
+ *
+ * IT ACCEPTS NOTHING. The caller still rejects; this only adds a sentence
+ * to the recorded reason. Never names a secret's value or the body.
+ */
+export function rejectionDiagnosis(rawBody: string, signatureHeader: string | null): string {
+  const instagramSecret = process.env.INSTAGRAM_APP_SECRET;
+  if (!instagramSecret) return "INSTAGRAM_APP_SECRET is not set, so the other secret could not be compared";
+  const alt = verifyMetaSignature(rawBody, signatureHeader, instagramSecret);
+  return alt.valid
+    ? "it DOES match INSTAGRAM_APP_SECRET — this delivery was signed with the Instagram app's secret"
+    : "it matches neither FACEBOOK_APP_SECRET nor INSTAGRAM_APP_SECRET";
+}
