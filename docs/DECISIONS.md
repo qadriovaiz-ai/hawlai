@@ -6402,3 +6402,60 @@ Five mutations, each anchor matching once, all caught.
 Gates: `tsc` 0, `vitest` 0 (**446 files, 8233 passed**), `next build` 0.
 
 **Unverified:** a DM routed and answered end to end.
+
+
+---
+
+## 2026-11-28 — Seller Mode F1 and F2: the DM reply remembers, and is never silent
+
+The founder's revised plan (`docs/PLAN-INSTAGRAM-SELLER-MODE.md`, UPI
+direct) confirmed the order; the foundation comes first.
+
+**F1 (`f3d7a41a`) — conversation memory.** The DM reply answered each
+message alone. It now sees the last six exchanges of **this sender's**
+thread **on this channel**, rebuilt from `auto_reply_log` — no new table.
+Quoted as what was said, never as instructions. A public comment never
+sees a private thread. The same read gives Meta's 24-hour window, with an
+unknown time treated as **closed**.
+
+**F2 — honest escalation.** When the claims guard withheld a reply (or
+the AI or the records failed), the customer got nothing and the seller
+found out only in a log. Now:
+
+- **The customer gets a holding line** in the owner's language — "the
+  team will reply here" — and nothing else: no price, no time, no claim,
+  so there is nothing for the guard to check. **Once since the last real
+  answer**, not once per message.
+- **The seller is told at once** (`dm_needs_reply`): what the customer
+  wrote and why Hawlai did not answer. Once per customer per day — the
+  date is in the dedupe key because notifications are deduplicated
+  permanently (migration 106).
+- **The question the records were silent on becomes the owner's
+  question** — `answer_gaps` with `instagram_dm` / `facebook_dm`, using
+  the website chat's own `gapReportRule`. A category, never the
+  customer's words: anything not a known key becomes "other".
+- **A failed holding line is recorded, not thrown**, and the seller is
+  still told.
+- **The thread shows a holding line as a turn the customer saw**; a
+  generated-but-unsent reply is still not one.
+
+### Judgment calls
+
+1. **Migration 240 adds `dm_order_received` beside `dm_needs_reply`**, so
+   Seller Mode needs one fewer migration. Nothing emits it yet.
+2. **`dm_needs_reply` stays in-app**, not pushed to WhatsApp/email: the
+   pushed kinds are a list the founder chose on 23 Nov; adding to it is
+   his call.
+3. **The holding line exists in English, Hinglish and Hindi only** —
+   `normaliseLanguage`'s three values.
+
+### Verification
+
+F1: eight mutations, all caught. F2: ten, all caught — including the
+holding line sent on every message, the seller not told, the dedupe key
+losing its date, and the model's own words kept as a gap key.
+
+Gates: `tsc` 0, `vitest` 0 (**448 files, 8260 passed**), `next build` 0.
+
+**Migration 240 is not run.** Until it is, the seller notification insert
+fails and is logged; the holding line and the answer gap still work.

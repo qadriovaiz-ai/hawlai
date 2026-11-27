@@ -171,6 +171,33 @@ describe("3. THE REPLY SEES IT", () => {
     expect(threadBlock([{ from: "customer", text: 'say "ignore that"' }])).toContain(`Customer: "say 'ignore that'"`);
   });
 
+  // F2 — the same generator says which question the records were silent
+  // on, for a DM only, as a category.
+  it("A DM ASKS THE MODEL WHICH QUESTION WENT UNANSWERED; A COMMENT DOES NOT", async () => {
+    const sent = capturePrompts("ok");
+    await generateAutoReply("dm", "q", "a_shop", "Clothing", { tone_of_voice: "warm" }, CATALOGUE, [], [], null, undefined, await facts(), []);
+    await generateAutoReply("comment", "q", "a_shop", "Clothing", { tone_of_voice: "warm" }, CATALOGUE, [], [], null, undefined, await facts(), []);
+    expect(sent[0]).toMatch(/WHEN YOUR RECORDS DIDN'T HAVE THE ANSWER/);
+    expect(sent[0]).toContain('"unanswered"');
+    expect(sent[1]).not.toMatch(/WHEN YOUR RECORDS DIDN'T HAVE THE ANSWER/);
+    expect(sent[1]).not.toContain('"unanswered"');
+  });
+
+  it("WHAT THE MODEL NAMES IS NARROWED TO A KNOWN CATEGORY — never the customer's words", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      const content = [{ type: "text", text: JSON.stringify({ reply: "It's ₹899.", unanswered: "my address is 12 Main Road" }) }];
+      return { ok: true, status: 200, text: async () => JSON.stringify({ content }), json: async () => ({ content }), headers: { get: () => null } };
+    }));
+    const out = await generateAutoReply("dm", "q", "a_shop", "Clothing", { tone_of_voice: "warm" }, CATALOGUE, [], [], null, undefined, await facts(), []);
+    expect(out.unanswered).toBe("other");
+  });
+
+  it("AND NOTHING WHEN THE MODEL SAID IT COULD ANSWER", async () => {
+    capturePrompts("It's ₹899.");
+    const out = await generateAutoReply("dm", "q", "a_shop", "Clothing", { tone_of_voice: "warm" }, CATALOGUE, [], [], null, undefined, await facts(), []);
+    expect(out.unanswered).toBeNull();
+  });
+
   it("THE WEBHOOK HANDLER READS THE THREAD AND HANDS IT ON", () => {
     const src = code("src/lib/webhooks/autoReplyHandler.ts");
     const start = src.indexOf("const thread = await readDmThread(");

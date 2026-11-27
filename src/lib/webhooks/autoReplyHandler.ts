@@ -10,6 +10,9 @@ import { siteUrl } from "@/lib/email/consent";
 import { recordDelivery } from "@/lib/webhooks/deliveryLog";
 import { recordHealth } from "@/lib/integrations/health";
 import { readDmThread } from "@/lib/dm/thread";
+import { holdingLine } from "@/lib/dm/holdingLine";
+import { shouldSendHoldingLine, tellSellerCustomerIsWaiting } from "@/lib/dm/escalation";
+import { recordAnswerGap } from "@/lib/chat/answerGaps";
 import { healthFromFailure } from "@/lib/integrations/healthState";
 
 const GRAPH_VERSION = "v19.0";
@@ -226,6 +229,27 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
           errorMsg = [outcome.escalate ?? "No reply generated.", (outcome.withheld ?? []).join("; ")]
             .filter(Boolean)
             .join(" ");
+
+          // F2 (28 Nov 2026): NEVER SILENT ON EITHER SIDE. The customer gets
+          // the honest holding line - once since the last real answer -
+          // and the seller is told at once. A failed holding line is
+          // recorded, never thrown: the seller is still told.
+          if (shouldSendHoldingLine(thread.turns)) {
+            const hold = holdingLine(brandProfile.preferred_language);
+            try {
+              if (channel === "instagram") await sendInstagramDmReply(replyToken, entryId, senderId, hold);
+              else await sendDmReply(replyToken, senderId, hold);
+              replyText = hold;
+              errorMsg = `${errorMsg} - the customer was told the team will reply.`;
+            } catch (holdErr: any) {
+              errorMsg = `${errorMsg} - the holding reply also failed: ${holdErr?.message ?? holdErr}`;
+            }
+          }
+          await tellSellerCustomerIsWaiting(supabase, { dealershipId: dealership.id, channel, senderId, customerSaid: text, why: outcome.escalate });
+        }
+        // F2 - the question the records were silent on, from a DM.
+        if (outcome.unanswered) {
+          await recordAnswerGap(supabase, dealership.id, outcome.unanswered, channel === "instagram" ? "instagram_dm" : "facebook_dm");
         }
       } catch (err: any) {
         success = false;

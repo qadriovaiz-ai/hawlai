@@ -41,7 +41,10 @@
 import { INTERVIEW_QUESTIONS } from "@/lib/onboarding/interview";
 
 /** Where the question was asked. */
-export type GapSource = "website_chat";
+// The DM sources arrived with F2 (28 Nov 2026). The column is free text
+// (migration 230) and was kept apart for exactly this: a gap raised in a
+// DM is a different strength of signal from one on the website.
+export type GapSource = "website_chat" | "instagram_dm" | "facebook_dm";
 
 /**
  * Every question key the interview can ask about.

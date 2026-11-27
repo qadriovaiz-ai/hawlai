@@ -52,7 +52,10 @@ export type NotificationKind =
   // A connected account stopped working and needs reconnecting
   // (migration 219). Generic: Gmail, YouTube and Ads hold refresh
   // tokens from the same Google app and can die the same way.
-  | "integration_disconnected";
+  | "integration_disconnected"
+  // F2 (28 Nov 2026) and Seller Mode — migration 240.
+  | "dm_needs_reply"
+  | "dm_order_received";
 
 /**
  * The kinds that leave the app — P-a.

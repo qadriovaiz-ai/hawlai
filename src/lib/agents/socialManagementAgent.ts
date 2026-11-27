@@ -6,6 +6,7 @@
 // and viral trend detection (uses Claude's web_search tool so trends
 // are actually current instead of guessed from training data).
 
+import { gapReportRule, questionKeyFrom } from "@/lib/chat/answerGaps";
 import { threadBlock, type DmTurn } from "@/lib/dm/thread";
 import { webSearchTool } from "@/lib/ai/searchCaps";
 import { formatDuration } from "../catalog/catalogItem";
@@ -47,13 +48,15 @@ export type { SocialTaskMeta };
  * tell a quiet failure from a deliberate withholding.
  */
 export type AutoReplyResult =
-  | { reply: string; withheld?: never; escalate?: never }
+  | { reply: string; withheld?: never; escalate?: never; unanswered?: string | null }
   | {
       reply: null;
       /** What was taken out, when the guard took something out. */
       withheld?: string[];
       /** The sentence the owner reads in the log. */
       escalate: string;
+      /** F2: which question the records were silent on, when the model said. */
+      unanswered?: string | null;
     };
 
 /**
@@ -221,7 +224,8 @@ ${brandContext}${truthBlock(facts, "customer")}${catalogContext}${knowledgeConte
 ${safety}
 Incoming message: "${incomingText}"
 
-Return JSON only: {"reply":"the reply text, under 200 characters, no markdown"}`,
+${channel === "dm" ? gapReportRule() : ""}
+Return JSON only: ${channel === "dm" ? '{"reply":"the reply text, under 200 characters, no markdown","unanswered":"<a question key, or other> or null"}' : '{"reply":"the reply text, under 200 characters, no markdown"}'}`,
       }],
     }, { operation: "auto_reply", logContext });
     // No reply goes out rather than a guessed one.
@@ -239,6 +243,9 @@ Return JSON only: {"reply":"the reply text, under 200 characters, no markdown"}`
       return { reply: null, escalate: "The AI's answer couldn't be read, so nothing was sent. Reply yourself." };
     }
     const spoken = String(parsedReply.value?.reply ?? "").trim();
+    // F2 - a DM only. A category, never the customer's words (gapReportRule).
+    const rawGap = parsedReply.value?.unanswered;
+    const unanswered = channel === "dm" && rawGap != null && String(rawGap).trim() ? questionKeyFrom(rawGap) : null;
     if (!spoken) {
       return { reply: null, escalate: "The AI returned nothing to send. Reply yourself." };
     }
@@ -289,6 +296,7 @@ Return JSON only: {"reply":"the reply text, under 200 characters, no markdown"}`
       return {
         reply: null,
         withheld: checked.removed,
+        unanswered,
         escalate: !safeReply
           ? `Hawlai had an answer but it claimed something your records don't back, so nothing was sent${why}. Reply yourself.`
           : `Hawlai had an answer but the part your records don't back${why} WAS the answer — what was left is just "${safeReply}", which would read as a yes to the wrong thing. Nothing was sent. Reply yourself.`,
@@ -297,7 +305,7 @@ Return JSON only: {"reply":"the reply text, under 200 characters, no markdown"}`
     if (checked.removed.length) {
       console.error(`[auto-reply] withheld ${checked.removed.length} unsupported claim(s) from a customer reply: ${checked.removed.join("; ")}`);
     }
-    return { reply: safeReply };
+    return { reply: safeReply, unanswered };
   } catch (err: any) {
     console.error("[auto-reply] error:", err.message);
     return { reply: null, escalate: "Something went wrong writing the reply, so nothing was sent. Reply yourself." };

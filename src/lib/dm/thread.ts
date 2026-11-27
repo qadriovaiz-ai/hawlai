@@ -16,6 +16,8 @@
 // last message is the newest row here, so the follow-up (FU1) and the
 // invoice (O4) read the window from this file rather than guessing it.
 
+import { isHoldingLine } from "@/lib/dm/holdingLine";
+
 /** How many earlier exchanges the reply sees. Enough for an order, not a novel. */
 export const THREAD_EXCHANGES = 6;
 
@@ -64,7 +66,9 @@ export async function readDmThread(
     for (const r of rows) {
       const said = clip(r.incoming_text);
       if (said) turns.push({ from: "customer", text: said });
-      const answered = r.success ? clip(r.reply_text) : "";
+      // A withheld reply was never seen - but the HOLDING LINE sent in its
+      // place was (F2), so it is a turn like any other.
+      const answered = r.success || isHoldingLine(r.reply_text) ? clip(r.reply_text) : "";
       if (answered) turns.push({ from: "business", text: answered });
     }
     return { turns, lastCustomerAt: (data ?? [])[0]?.created_at ?? null };
