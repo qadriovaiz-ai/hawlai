@@ -43,8 +43,10 @@ describe("the card, as WhatsApp can show it", () => {
   });
 
   it("THE WEBHOOK SENDS THEM AFTER THE CHAT'S REPLY — read with comments stripped", () => {
+    // Since the DD23 fix (28 Nov 2026) the cards are computed first, so the
+    // chat's history remembers them with the reply — then both are sent.
     expect(code("src/app/api/webhooks/whatsapp/route.ts")).toMatch(
-      /await sendWhatsAppText\(phone, result\.reply\);\s*const cards = cardsForWhatsApp\(result\.artifacts as any\[\]\);\s*if \(cards\) await sendWhatsAppText\(phone, cards\);/
+      /const cards = cardsForWhatsApp\(result\.artifacts as any\[\]\);[\s\S]*?await sendWhatsAppText\(phone, result\.reply\);\s*if \(cards\) await sendWhatsAppText\(phone, cards\);/
     );
   });
 });

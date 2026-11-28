@@ -12,6 +12,7 @@ import { pendingSuggestions } from "@/lib/onboarding/suggestions";
 import { verifyWhatsAppSender, describeWhatsAppRejection, whatsappChallenge } from "@/lib/whatsapp/verifySender";
 import { recordDeliveryStandalone } from "@/lib/webhooks/deliveryLog";
 import { readButtonTaps, handlePaymentTap } from "@/lib/whatsapp/paymentButton";
+import { rememberInWhatsAppChat } from "@/lib/whatsapp/sessionHistory";
 import { readPhotoMessages, addProductFromPhoto, readCaption, storeProductPhoto, type PhotoMessage } from "@/lib/whatsapp/photoProduct";
 import { downloadWhatsAppMedia } from "@/lib/whatsapp/metaClient";
 import { NextResponse } from "next/server";
@@ -114,6 +115,18 @@ async function handleOneMessage(phone: string, text: string, supabase: ReturnTyp
     // containing "no" is still an ordinary message.
     const reply = parseDecision(text);
     if (reply) {
+      // REMEMBERED IN THE CHAT (28 Nov 2026, the founder's bug): this
+      // decision is handled here, before Master Chat, so the chat never
+      // heard about it — and told him an approved price card was still
+      // waiting. Each reply below is sent AND written into the chat's
+      // history, with his own words before it.
+      const tell = async (said: string) => {
+        await sendWhatsAppText(phone, said);
+        await rememberInWhatsAppChat(supabase, dealership.id, phone, [
+          { role: "user", content: text },
+          { role: "assistant", content: said },
+        ]);
+      };
       // ───────────────────────────────────────────────────────────────
       // ONE POOL, AND THAT IS THE WHOLE POINT — D4
       // ───────────────────────────────────────────────────────────────
@@ -150,7 +163,7 @@ async function handleOneMessage(phone: string, text: string, supabase: ReturnTyp
         // NEVER A BEST GUESS. Every failure is a question back, which
         // costs him one message; guessing costs him whatever the wrong
         // one did.
-        await sendWhatsAppText(phone, cannotTell(found.reason, pending));
+        await tell(cannotTell(found.reason, pending));
         return;
       }
 
@@ -164,17 +177,17 @@ async function handleOneMessage(phone: string, text: string, supabase: ReturnTyp
           (s) => String((answers ?? []).find((r: any) => r.question_key === s.questionKey)?.id ?? s.questionKey) === found.row.id
         );
         if (!match) {
-          await sendWhatsAppText(phone, "That one isn't waiting any more.");
+          await tell("That one isn't waiting any more.");
           return;
         }
         const outcome = await applySuggestionDecision(service, dealership.id, match, reply.decision, answers ?? []);
-        await sendWhatsAppText(phone, outcome.said);
+        await tell(outcome.said);
         return;
       }
 
       const approval = (approvals ?? []).find((a: any) => String(a.id) === found.row.id);
       if (!approval) {
-        await sendWhatsAppText(phone, "That one isn't waiting any more.");
+        await tell("That one isn't waiting any more.");
         return;
       }
 
@@ -191,11 +204,10 @@ async function handleOneMessage(phone: string, text: string, supabase: ReturnTyp
 
       const said = describeApproval(approval);
       if (!outcome.ok) {
-        await sendWhatsAppText(phone, `Couldn't do that one (${said}): ${result?.error ?? "something went wrong"}`);
+        await tell(`Couldn't do that one (${said}): ${result?.error ?? "something went wrong"}`);
         return;
       }
-      await sendWhatsAppText(
-        phone,
+      await tell(
         reply.decision === "approved"
           ? `Done — approved ${said}.${result?.publish?.message ? `
 
@@ -230,14 +242,16 @@ ${result.produced.note}` : ""}`
     // conversation either.
     const result = await runMasterBrainChat(supabase, dealership.id, history, text, null, "whatsapp");
 
-    const newHistory = [...history, { role: "user", content: text }, { role: "assistant", content: result.reply }];
+    // E2 (28 Nov 2026): a card made in this turn, shown the way WhatsApp
+    // can — its code, and how to say yes or no. Without it the owner had
+    // nothing to type. Remembered WITH the reply, so a later "haan" and the
+    // chat's own memory agree on which card had which code.
+    const cards = cardsForWhatsApp(result.artifacts as any[]);
+    const assistantSaid = cards ? `${result.reply}\n\n${cards}` : result.reply;
+    const newHistory = [...history, { role: "user", content: text }, { role: "assistant", content: assistantSaid }];
     await supabase.from("whatsapp_chat_sessions").upsert({ dealership_id: dealership.id, phone_number: phone, history: newHistory, updated_at: new Date().toISOString() }, { onConflict: "phone_number" });
 
     await sendWhatsAppText(phone, result.reply);
-    // E2 (28 Nov 2026): a card made in this turn, shown the way WhatsApp
-    // can — its code, and how to say yes or no. Without it the owner had
-    // nothing to type.
-    const cards = cardsForWhatsApp(result.artifacts as any[]);
     if (cards) await sendWhatsAppText(phone, cards);
     for (const artifact of result.artifacts) {
       if (artifact.type === "image" && artifact.url) await sendWhatsAppImage(phone, artifact.url, artifact.label);
@@ -279,7 +293,16 @@ async function handleOneTap(phone: string, payload: string, supabase: ReturnType
       return;
     }
     const reply = await handlePaymentTap(supabase, dealership, phone, payload);
-    if (reply) await sendWhatsAppText(phone, reply);
+    if (reply) {
+      await sendWhatsAppText(phone, reply);
+      // Remembered, like a typed decision: the chat must know this payment
+      // was confirmed (or not yet) when he next writes to it.
+      const tapped = /^pay_yes:/i.test(payload) ? "Yes, received" : /^pay_no:/i.test(payload) ? "Not yet" : "a button";
+      await rememberInWhatsAppChat(supabase, dealership.id, phone, [
+        { role: "user", content: `[Tapped "${tapped}" on a payment check]` },
+        { role: "assistant", content: reply },
+      ]);
+    }
   } catch (err: any) {
     console.error("[whatsapp] button tap failed:", err?.message ?? err);
     try { await sendWhatsAppText(phone, "Something went wrong confirming that — open the Orders tab in Hawlai to check the order."); } catch {}

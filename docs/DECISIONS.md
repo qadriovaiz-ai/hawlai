@@ -7569,3 +7569,43 @@ Eight mutations, all caught. Gates with every file staged: `tsc` 0,
 `vitest` 0 (**472 files, 8616 passed**), `next build` 0. The page's UI has
 no DOM tests in this repo; its parts are pinned by bounded `code()` reads
 and the pure helpers are tested directly. **Unverified live.**
+
+---
+
+## 2026-11-28 — Bug: an approved card the WhatsApp chat thought was still waiting
+
+**What the founder saw.** Price card DD23 (Lavender candle, ₹999 → ₹499)
+was approved with "haan DD23" on WhatsApp and the website showed ₹499.
+Then "stock 20 karo": the chat said the price card was still waiting for
+approval, and **no stock card was made**.
+
+**What the records showed (read-only):** DD23 was approved and its publish
+action executed (12:55–12:56 UTC), the product read ₹499, and the audit
+trail named the actor as `whatsapp:<number>`. **The database was right
+throughout.** No stock card existed: none had been requested. The publish
+pipeline keys a request by its action, so price and stock never collide.
+
+**The mechanism.** A "haan CODE" is handled *before* Master Chat (an
+approval is a decision about a record, not a sentence for a model), and
+**that exchange was never written into the WhatsApp chat's history**
+(`whatsapp_chat_sessions.history`). The chat's memory ended at "I made a
+price card", so it told the owner the card was waiting. The card's code
+line (E2) wasn't remembered either.
+
+**The fix** (`src/lib/whatsapp/sessionHistory.ts`): every exchange handled
+outside the chat is written into it, the owner's words and the reply
+exactly as sent. That covers approve and reject, a suggestion answered, a
+"that one isn't waiting", a payment button tap, and the code line beside
+a chat reply. All six replies in the decision branch now go through one
+`tell()` that sends **and** remembers, and a test holds that none is sent
+and forgotten. Never throws, and an unreadable history is never
+overwritten.
+
+**Not repaired in the data.** The founder's current WhatsApp history still
+lacks DD23's approval, because the fix applies from the next decision.
+Telling the chat once ("DD23 approve ho chuka hai, ab stock 20 karo") is
+enough.
+
+Five mutations, all caught (one first run with a broken anchor, then run
+properly). Gates with every file staged: `tsc` 0, `vitest` 0 (**473 files,
+8625 passed**), `next build` 0.
