@@ -18,6 +18,7 @@
 // one did.
 
 import type { ResolvedTarget } from "@/lib/publish/resolve";
+import { soldOn } from "@/lib/catalog/salesChannel";
 
 export type ProductSource = "shopify" | "hawlai_shop";
 
@@ -76,7 +77,7 @@ export async function searchHawlaiProducts(
 
   const { data: rows, error } = await supabase
     .from("products")
-    .select("id, name, price, images, is_active")
+    .select("id, name, price, images, is_active, sales_channel")
     .eq("dealership_id", dealershipId)
     .ilike("name", `%${cleaned.replace(/[%_]/g, "")}%`)
     .limit(limit);
@@ -96,7 +97,9 @@ export async function searchHawlaiProducts(
     // Null when the business has no published storefront: the product
     // is real but has no page to send anyone to, and the destination
     // resolver has to see that rather than build a URL to nowhere.
-    productUrl: site?.slug ? hawlaiProductUrl(site.slug, p.id) : null,
+    // And null for an Instagram-only product (migration 249): it is not on
+    // the website, so its page would be a 404.
+    productUrl: site?.slug && soldOn(p.sales_channel, "website") ? hawlaiProductUrl(site.slug, p.id) : null,
     active: p.is_active !== false,
   }));
 

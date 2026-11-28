@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { NextResponse } from "next/server";
 import { buildGoogleFeed, buildMetaFeed, type FeedProduct } from "@/lib/ads/productFeed";
+import { soldOn } from "@/lib/catalog/salesChannel";
 
 // Public product feeds for dynamic remarketing — piece 7/7.
 //
@@ -50,7 +51,7 @@ export async function GET(
 
   const { data: products } = await supabase
     .from("products")
-    .select("id, name, description, price, images, inventory_count, brand, condition, gtin, category")
+    .select("id, name, description, price, images, inventory_count, brand, condition, gtin, category, sales_channel")
     .eq("dealership_id", website.dealership_id)
     .eq("is_active", true)
     // Shopping feeds list goods; Google and Meta reject services in them.
@@ -63,7 +64,9 @@ export async function GET(
     businessName: (website as any).dealerships?.dealership_name ?? "Our Store",
   };
 
-  const rows = (products ?? []) as unknown as FeedProduct[];
+  // Every feed item links to its website page, so an Instagram-only
+  // product (migration 249), which has none, is left out.
+  const rows = (products ?? []).filter((p: any) => soldOn(p.sales_channel, "website")) as unknown as FeedProduct[];
 
   if (platform === "google") {
     return new NextResponse(buildGoogleFeed(rows, ctx), {

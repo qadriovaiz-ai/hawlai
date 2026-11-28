@@ -112,3 +112,13 @@ describe("4. THE SWITCH", () => {
     expect(fn).toMatch(/if \(!res\?\.ok\) \{[\s\S]*sales_channel: before[\s\S]*setError\(/);
   });
 });
+
+describe("5. WHAT LINKS TO THE WEBSITE PAGE — an Instagram-only product has none", () => {
+  it("SHOPPING FEEDS LEAVE IT OUT — read with comments stripped", () => {
+    expect(code("src/app/api/feeds/[platform]/[slug]/route.ts")).toMatch(/const rows = \(products \?\? \[\]\)\.filter\(\(p: any\) => soldOn\(p\.sales_channel, "website"\)\)/);
+  });
+
+  it("AN AD GETS NO PAGE TO SEND PEOPLE TO, as for a business with no store", () => {
+    expect(code("src/lib/ads/productSource.ts")).toMatch(/productUrl: site\?\.slug && soldOn\(p\.sales_channel, "website"\) \? hawlaiProductUrl\(site\.slug, p\.id\) : null,/);
+  });
+});
