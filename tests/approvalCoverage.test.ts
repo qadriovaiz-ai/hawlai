@@ -373,6 +373,10 @@ describe("the registries stay honest", () => {
       // confirmation is itself approval-gated, confirm_dm_payment), and
       // only inside Meta's 24-hour window.
       "dm_order_update",
+      // 2026-11-28, Seller Mode FU1 — automatic in the owner-approved plan
+      // ("one automated nudge inside the 24 hours"): one message, to a
+      // customer who asked for a quote, re-checked against Meta's window.
+      "dm_order_nudge",
     ]);
     const ungated = Object.entries(ACTION_POLICIES)
       .filter(([key, p]) => ["send", "publish", "spend"].includes(p.actionType) && !p.requiresApproval && !EXPLAINED_EXCEPTIONS.has(key))

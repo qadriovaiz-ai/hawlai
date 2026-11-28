@@ -107,6 +107,8 @@ export type OrderTurnDeps = {
   placeOrder(readback: Readback): Promise<DmOrderResult>;
   paymentRequest(order: PlacedOrder): { text: string; qrUrl: string };
   notifySeller(order: PlacedOrder): Promise<void>;
+  /** FU1: schedule the one nudge for a read-back just sent. Never throws. */
+  scheduleNudge?(readbackSentAt: string): Promise<void>;
 };
 
 // ---- the words ----------------------------------------------------------
@@ -258,6 +260,7 @@ export async function handleOrderTurn(text: string, deps: OrderTurnDeps): Promis
     if (!sameQuote(pending, repriced.total, repriced.resolvedItems)) {
       const again: Readback = { ...pending, items: repriced.resolvedItems, subtotal: repriced.subtotal, shippingAmount: repriced.shippingAmount, total: repriced.total };
       await deps.saveDraft({ draft, readback: again, readback_sent_at: deps.now.toISOString(), status: "open" });
+      await deps.scheduleNudge?.(deps.now.toISOString());
       return { handled: true, messages: [{ text: `${L.priceMoved}\n${readbackText(again, deps.language)}` }], note: "price moved before the yes" };
     }
 
@@ -362,6 +365,7 @@ export async function handleOrderTurn(text: string, deps: OrderTurnDeps): Promis
     address: next.address,
   };
   await save({ readback, readback_sent_at: deps.now.toISOString() });
+  await deps.scheduleNudge?.(deps.now.toISOString());
   return { handled: true, messages: [{ text: readbackText(readback, deps.language) }] };
 }
 

@@ -7161,3 +7161,50 @@ match.
 Gates with every file staged: `tsc` 0, `vitest` 0 (**461 files, 8482
 passed**), `next build` 0. **Unverified live**: no business has Seller
 Mode on yet. The founder's live test is waiting on migration 246.
+
+
+---
+
+## 2026-11-28 — FU1: one nudge to a customer who was quoted and went quiet
+
+`src/lib/dm/orderNudge.ts`. When an order is read back (or read back
+again because its price moved), a task is scheduled on `agent_tasks`
+(migration 130). When the 2-minute dispatcher runs it, it sends **one**
+message, "your order (₹950) is ready to place, reply YES…", **only if
+all of this is still true at that moment**: Seller Mode is still on with
+a UPI ID; that same read-back is still waiting; the customer has not
+written since; and Meta's 24-hour window, from the customer's own last
+message, is still open. Otherwise it does nothing and says why.
+
+### Judgment calls
+
+1. **Four hours after the read-back.** That is long enough to be a nudge
+   rather than pressure, and well inside Meta's 24. A constant
+   (`NUDGE_AFTER_MS`) if the founder wants it changed.
+2. **At most one a day per customer.** A nudge is not scheduled while
+   another for the same customer was scheduled in the last 24 hours. If
+   that history cannot be read, none is risked. The plan said "never
+   more than one per conversation"; this reads it per Meta window, so a
+   returning customer next week can be nudged again.
+3. **Claimed before it sends.** The dispatcher has no claim of its own
+   (pending stays pending until done), so the executor moves its task
+   pending → processing with a conditional update first. Two overlapping
+   runs cannot both send. A refused send throws, so the dispatcher's
+   retry runs, and the retry re-checks everything.
+4. **Logged with no incoming text**, like the invoice: the business
+   started it, so it never reopens the window (thread.ts).
+5. **`dm_order_nudge`** is registered: send, medium, automatic, as the
+   plan's "one automated nudge inside the 24 hours" says.
+6. **The owner's language**, like the rest of the order flow on main. The
+   customer-language work is paused on `wip/dm-multilingual`.
+
+### Verification
+
+Twelve mutations, all caught: not claimed, Seller Mode not re-checked, an
+answered quote nudged, a newer quote nudged, a customer who wrote since
+nudged, the window not checked, more than one a day, unreadable history
+treated as none, the read-back not scheduling, the executor or the
+registry entry dropped, and the nudge logged as if the customer wrote.
+
+Gates with every file staged: `tsc` 0, `vitest` 0 (**462 files, 8500
+passed**), `next build` 0. **Unverified live.**

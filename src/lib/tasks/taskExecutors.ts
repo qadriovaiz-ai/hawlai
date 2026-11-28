@@ -20,6 +20,14 @@ import { gatherBusinessFactsSafely } from "../claims/businessFacts";
 export type TaskExecutor = (supabase: any, task: { id: string; dealership_id: string; action_type: string; action_details: Record<string, any>; title: string }) => Promise<any>;
 
 export const TASK_EXECUTORS: Record<string, TaskExecutor> = {
+  // Seller Mode FU1 (28 Nov 2026): the one "shall I place it?" to a
+  // customer who was quoted and went quiet. Re-checks the quote, the
+  // customer's silence and Meta's 24-hour window when it runs; claims the
+  // task before it sends. src/lib/dm/orderNudge.ts.
+  dm_order_nudge: async (supabase, task) => {
+    const { runOrderNudge } = await import("../dm/orderNudge");
+    return runOrderNudge(supabase, task);
+  },
   // P1 8a — the first real producer (goal decomposition,
   // goalPlanningAgent.ts) queues these. Saves to the same
   // content_pieces table Content Marketing's own page reads from, same

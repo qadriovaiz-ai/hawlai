@@ -76,6 +76,10 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // Seller Mode O4' (28 Nov 2026): the text invoice to the customer,
   // automatic and only inside Meta's 24-hour window, once the seller has
   // confirmed the payment.
+  // Seller Mode FU1 (28 Nov 2026): ONE nudge to a customer quoted and gone
+  // quiet, only inside Meta's 24-hour window, at most one a day per
+  // customer — the plan's follow-up, within Meta's rule.
+  dm_order_nudge: { actionType: "send", riskLevel: "medium", description: "Remind an Instagram customer, once, about an order they were quoted and haven't answered", requiresApproval: false },
   dm_order_update: { actionType: "send", riskLevel: "medium", description: "Send an Instagram customer their invoice after the seller confirmed the payment", requiresApproval: false },
   notify_seller_order: { actionType: "send", riskLevel: "low", description: "Tell the seller on WhatsApp about a new Instagram order and ask whether the UPI payment arrived", requiresApproval: false },
 

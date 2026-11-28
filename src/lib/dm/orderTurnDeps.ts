@@ -9,6 +9,7 @@ import { createDmOrder } from "@/lib/orders/createDmOrder";
 import { formatRupees, upiQrPath, upiRequestText } from "@/lib/payments/upiRequest";
 import { requestApproval } from "@/lib/chat/requestApproval";
 import { notifySellerOfOrder } from "@/lib/dm/sellerOrderNotice";
+import { scheduleOrderNudge } from "@/lib/dm/orderNudge";
 import { businessDisplayName } from "@/lib/business/displayName";
 import { siteUrl } from "@/lib/email/consent";
 import type { CopyLanguage } from "@/lib/content/language";
@@ -109,6 +110,10 @@ export function buildOrderTurnDeps(
         text: upiRequestText({ vpa: ctx.upiVpa, payeeName: payee, amount: order.total, orderId: order.orderId, language: ctx.language, withQr: true }),
         qrUrl: `${siteUrl()}${upiQrPath(order.orderId)}`,
       };
+    },
+
+    async scheduleNudge(readbackSentAt) {
+      await scheduleOrderNudge(supabase, { dealershipId: ctx.dealershipId, senderId: ctx.senderId, readbackSentAt, now });
     },
 
     async notifySeller(order) {
