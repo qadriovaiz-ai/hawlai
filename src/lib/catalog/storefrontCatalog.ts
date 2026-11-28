@@ -2,6 +2,7 @@
 // carrying where its "Book" button goes.
 
 import { bookingPageUrl, serviceBookingHref } from "./catalogItem";
+import { soldOn } from "./salesChannel";
 
 export interface StorefrontProduct {
   id: string;
@@ -17,7 +18,7 @@ export interface StorefrontProduct {
   book_href?: string | null;
 }
 
-export const STOREFRONT_COLUMNS = "id, name, description, price, compare_at_price, images, inventory_count, kind, duration_minutes, booking_url";
+export const STOREFRONT_COLUMNS = "id, name, description, price, compare_at_price, images, inventory_count, kind, duration_minutes, booking_url, sales_channel";
 
 export function toStorefrontProduct(row: Record<string, any>, bookingSlug: string | null | undefined): StorefrontProduct {
   const service = row.kind === "service";
@@ -40,5 +41,6 @@ export async function loadStorefrontItems(supabase: any, dealershipId: string): 
     supabase.from("products").select(STOREFRONT_COLUMNS).eq("dealership_id", dealershipId).eq("is_active", true).order("order_index", { ascending: true }),
     supabase.from("dealerships").select("booking_slug").eq("id", dealershipId).maybeSingle(),
   ]);
-  return (rows ?? []).map((r: Record<string, any>) => toStorefrontProduct(r, dealership?.booking_slug));
+  // An Instagram-only product is not on the website (migration 249).
+  return (rows ?? []).filter((r: Record<string, any>) => soldOn(r.sales_channel, "website")).map((r: Record<string, any>) => toStorefrontProduct(r, dealership?.booking_slug));
 }

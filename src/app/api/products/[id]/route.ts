@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { serviceFieldsFromBody } from "@/lib/catalog/catalogItem";
+import { isSalesChannel } from "@/lib/catalog/salesChannel";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
@@ -27,6 +28,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.inventoryCount !== undefined) update.inventory_count = body.inventoryCount === "" || body.inventoryCount == null ? null : Number(body.inventoryCount);
   if (body.isActive !== undefined) update.is_active = !!body.isActive;
   if (body.orderIndex !== undefined) update.order_index = Number(body.orderIndex);
+  // Where it is sold (migration 249). An unknown value is refused, never
+  // read as "both" — a typo must not quietly put a product back on sale.
+  if (body.salesChannel !== undefined) {
+    if (!isSalesChannel(body.salesChannel)) return NextResponse.json({ error: 'Sold on must be "both", "website" or "instagram".' }, { status: 400 });
+    update.sales_channel = body.salesChannel;
+  }
 
   // Product or service. Whether stock applies depends on the item's
   // current kind when this update doesn't change it.

@@ -1,6 +1,7 @@
 import { validateDiscountCode } from "@/lib/discounts";
 import { computeShippingAmount } from "@/lib/shipping";
 import { isService } from "@/lib/catalog/catalogItem";
+import { soldOn, type Channel } from "@/lib/catalog/salesChannel";
 
 // Shared by both order-creation paths (COD, and Razorpay's
 // initiate + verify steps) so prices/discounts are always recomputed
@@ -22,6 +23,7 @@ interface ResolvedProduct {
   is_active: boolean;
   inventory_count: number | null;
   kind?: string | null;
+  sales_channel?: string | null;
 }
 
 export type OrderPricingResult =
@@ -54,7 +56,7 @@ export async function resolveOrderPricing(
     .maybeSingle();
   if (!website || !website.published) return { ok: false, status: 404, error: "This store isn't accepting orders right now" };
 
-  const priced = await priceItems(supabase, website.dealership_id, website, items, discountCode);
+  const priced = await priceItems(supabase, website.dealership_id, website, items, discountCode, "website");
   if (!priced.ok) return priced;
   return { ...priced, website };
 }
@@ -87,7 +89,7 @@ export async function resolveBusinessOrderPricing(
   if (!Number.isFinite(flatShippingFee) || flatShippingFee < 0) return { ok: false, status: 500, error: "The delivery fee setting isn't a valid amount" };
 
   const rules = flatShippingFee > 0 ? { shipping_mode: "flat", shipping_rate: flatShippingFee } : { shipping_mode: "free" };
-  return priceItems(supabase, dealershipId, rules, items, discountCode);
+  return priceItems(supabase, dealershipId, rules, items, discountCode, "instagram");
 }
 
 type PricedItems =
@@ -100,12 +102,13 @@ async function priceItems(
   dealershipId: string,
   shippingRules: Parameters<typeof computeShippingAmount>[0],
   items: any[],
-  discountCode?: string | null
+  discountCode: string | null | undefined,
+  channel: Channel
 ): Promise<PricedItems> {
   const productIds = items.map((it: any) => it.productId).filter(Boolean);
   const { data: products, error: productsError } = await supabase
     .from("products")
-    .select("id, name, price, is_active, inventory_count, kind")
+    .select("id, name, price, is_active, inventory_count, kind, sales_channel")
     .in("id", productIds)
     .eq("dealership_id", dealershipId);
   if (productsError) return { ok: false, status: 500, error: "Couldn't verify products" };
@@ -118,6 +121,17 @@ async function priceItems(
     const product = productMap.get(raw.productId);
     if (!product || !product.is_active) {
       return { ok: false, status: 400, error: "An item in your cart is no longer available" };
+    }
+    // WHERE IT IS SOLD (migration 249). An Instagram-only product cannot
+    // be bought from the website cart, nor a Website-only one through a
+    // DM — checked here, where the price is decided, so no path that
+    // prices an order can skip it.
+    if (!soldOn(product.sales_channel, channel)) {
+      return {
+        ok: false,
+        status: 400,
+        error: channel === "website" ? "An item in your cart is no longer available" : `"${product.name}" is sold on the website only, not through Instagram`,
+      };
     }
     // A service is booked, not bought through the cart — and would
     // otherwise be charged shipping.

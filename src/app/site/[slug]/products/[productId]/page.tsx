@@ -5,6 +5,7 @@ import { renderRichText } from "@/lib/richText";
 import { BookServiceButton, ProductImageGallery } from "@/components/website/ProductCatalog";
 import { STOREFRONT_COLUMNS, toStorefrontProduct } from "@/lib/catalog/storefrontCatalog";
 import { formatDuration } from "@/lib/catalog/catalogItem";
+import { soldOn } from "@/lib/catalog/salesChannel";
 import ProductAddToCart from "@/components/website/ProductAddToCart";
 import ProductReviews from "@/components/website/ProductReviews";
 import { productPageJsonLd } from "@/lib/seo/structuredData";
@@ -29,7 +30,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     .eq("id", productId)
     .eq("dealership_id", website.dealership_id)
     .maybeSingle();
-  if (!product || !product.is_active) notFound();
+  // An Instagram-only product has no website page (migration 249).
+  if (!product || !product.is_active || !soldOn(product.sales_channel, "website")) notFound();
 
   const theme = getTheme(website.theme_key);
   const service = product.kind === "service";

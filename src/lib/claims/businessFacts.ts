@@ -25,6 +25,7 @@ import { discountUsable } from "@/lib/discounts";
 import { hawlaiProductUrl } from "@/lib/ads/productSource";
 import { effectiveBusinessModels, describeBusinessModels, type BusinessModel } from "@/lib/business/businessModel";
 import { bookingPageUrl, formatDuration, isService } from "@/lib/catalog/catalogItem";
+import { readSalesChannel, type SalesChannel } from "@/lib/catalog/salesChannel";
 import { isFactCategory } from "@/lib/business/businessStory";
 import { splitStories, withheldNote } from "./personalStories";
 // Which recorded rows a prompt may use: the founder's rule that story
@@ -70,6 +71,8 @@ export type CatalogProduct = {
   inventory: number | null;
   category: string | null;
   active: boolean;
+  /** Where it is sold (migration 249). Missing reads as "both". */
+  salesChannel?: SalesChannel;
 };
 
 export type KnowledgeFact = {
@@ -186,7 +189,7 @@ export const PAID_ORDER_STATUSES = new Set(["confirmed", "shipped", "delivered"]
 export const UNKNOWN_CATEGORY = "business";
 
 /** One column list, so every path sees the same product fields. */
-export const CATALOG_COLUMNS = "id, name, kind, duration_minutes, booking_url, price, description, images, inventory_count, category, is_active, order_index";
+export const CATALOG_COLUMNS = "id, name, kind, duration_minutes, booking_url, price, description, images, inventory_count, category, is_active, order_index, sales_channel";
 
 function imageList(images: unknown): string[] {
   return Array.isArray(images) ? images.filter((i): i is string => typeof i === "string" && i.trim().length > 0).map((i) => i.trim()) : [];
@@ -205,6 +208,7 @@ export function toCatalogProduct(row: Row): CatalogProduct {
     inventory: row.inventory_count == null ? null : Number(row.inventory_count),
     category: row.category ?? null,
     active: row.is_active !== false,
+    salesChannel: readSalesChannel(row.sales_channel),
   };
 }
 

@@ -5,6 +5,7 @@ import { resolvePersona } from "@/lib/agents/personas";
 import { getLeadMemory } from "@/lib/businessMemory/getLeadMemory";
 import { INSTAGRAM_TOKEN_SELECT, readInstagramToken, readMetaPageToken } from "@/lib/crypto/oauthSecrets";
 import { fetchCatalog, type CatalogProduct } from "@/lib/claims/businessFacts";
+import { soldOn } from "@/lib/catalog/salesChannel";
 import { bookingPageUrl } from "@/lib/catalog/catalogItem";
 import { siteUrl } from "@/lib/email/consent";
 import { recordDelivery } from "@/lib/webhooks/deliveryLog";
@@ -209,7 +210,11 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
   // The one catalogue every path shares (src/lib/claims) — same columns,
   // same active rule, same shape as the facts the guard checks copy
   // against. This used to be its own query with its own field list.
-  const catalogItems = await fetchCatalog(supabase, dealership.id);
+  // WHERE EACH PRODUCT IS SOLD (migration 249). On Instagram a Website-
+  // only product is not offered — not in the reply's catalogue, not
+  // matched from a shared post, not orderable. Filtered once, here, so
+  // every Instagram path below reads the same list. Facebook is unchanged.
+  const catalogItems = (await fetchCatalog(supabase, dealership.id)).filter((p) => channel !== "instagram" || soldOn(p.salesChannel, "instagram"));
   const bookingPage = catalogItems.some((p) => p.kind === "service")
     ? bookingPageUrl((await supabase.from("dealerships").select("booking_slug").eq("id", dealership.id).maybeSingle()).data?.booking_slug, siteUrl())
     : null;

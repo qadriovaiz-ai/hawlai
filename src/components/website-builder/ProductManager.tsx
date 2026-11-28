@@ -6,6 +6,7 @@ import ImageUploader from "./ImageUploader";
 import RichTextArea from "./RichTextArea";
 import { Button } from "@/components/ui/Button";
 import { cleanBookingUrl, cleanDuration, formatDuration } from "@/lib/catalog/catalogItem";
+import { SALES_CHANNELS, readSalesChannel, type SalesChannel } from "@/lib/catalog/salesChannel";
 
 interface Product {
   id: string;
@@ -21,6 +22,7 @@ interface Product {
   kind?: "product" | "service" | null;
   duration_minutes?: number | null;
   booking_url?: string | null;
+  sales_channel?: string | null;
 }
 
 // A catalogue item is a product (bought, maybe shipped) or a service
@@ -153,6 +155,21 @@ export default function ProductManager() {
     await fetch(`/api/products/${p.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isActive: !p.is_active }) });
   }
 
+  // WHERE IT IS SOLD (migration 249) — the same control in Website
+  // Builder and Instagram Store, since both show this list. Shown as
+  // saved only once the server says so; a refusal puts it back.
+  async function changeSalesChannel(p: Product, next: SalesChannel) {
+    const before = p.sales_channel;
+    setError(null);
+    setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, sales_channel: next } : x)));
+    const res = await fetch(`/api/products/${p.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ salesChannel: next }) }).catch(() => null);
+    if (!res?.ok) {
+      const body = await res?.json().catch(() => null);
+      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, sales_channel: before } : x)));
+      setError(`Couldn't change where "${p.name}" is sold: ${body?.error ?? "the server didn't answer"}. Nothing was changed.`);
+    }
+  }
+
   async function toggleReviews(productId: string) {
     if (reviewsOpenFor === productId) { setReviewsOpenFor(null); return; }
     setReviewsOpenFor(productId);
@@ -263,6 +280,8 @@ export default function ProductManager() {
           </div>
         )}
 
+        {!adding && error && <p role="alert" className="text-xs text-red-400">{error}</p>}
+
         <div className="space-y-2">
           {products.map((p, pi) => (
             <div key={p.id}>
@@ -290,6 +309,17 @@ export default function ProductManager() {
                     <p className="text-xs text-amber-600">No way to book yet — add a booking link or turn on your booking page.</p>
                   )}
                 </div>
+                <select
+                  value={readSalesChannel(p.sales_channel)}
+                  onChange={(e) => changeSalesChannel(p, e.target.value as SalesChannel)}
+                  aria-label={`Where ${p.name} is sold`}
+                  title="Where this is sold"
+                  className="text-[10px] bg-white text-slate-50 border border-slate-300 rounded-full px-2 py-1"
+                >
+                  {SALES_CHANNELS.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
                 <button onClick={() => toggleActive(p)} className={`text-[10px] px-2 py-1 rounded-full ${p.is_active ? "bg-green-100 text-green-600" : "bg-slate-200 text-slate-500"}`}>
                   {p.is_active ? "Active" : "Hidden"}
                 </button>

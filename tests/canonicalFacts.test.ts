@@ -102,6 +102,8 @@ describe("the canonical facts carry everything a generation needs", () => {
       inventory: 12,
       category: "Candles",
       active: true,
+      // No sales_channel stored = sold everywhere (migration 249's default).
+      salesChannel: "both",
     });
     expect(f.products[1].inventory).toBe(0); // tracked and empty, not "unknown"
   });
