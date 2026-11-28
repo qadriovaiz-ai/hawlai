@@ -7540,3 +7540,32 @@ mistaken change is fixed with another card.
 Eight mutations, all caught. Gates with every file staged: `tsc` 0,
 `vitest` 0 (**471 files, 8606 passed**), `next build` 0. **Unverified
 live.**
+
+---
+
+## 2026-11-28 — S1–S5: the Instagram Store page
+
+**Rule 5's written reason is the founder's own request** (decision A): a
+new dashboard page, **`/dashboard/instagram-store`**, under Store in the
+navigation, with four tabs. It sits behind login like every dashboard page,
+there is no public page, and team members can use it (decision B, S6
+skipped). **Every tab reuses what exists:**
+
+| Tab | What it is |
+|---|---|
+| **Products** | The same `ProductManager` as Website & Products: **one catalog**, said on the tab. Above it, each product's **`#HawlaiTag: <name>` line** with a copy button. A test round-trips the copied line through T1's `productFromCaption`. |
+| **Shipping** | The Seller Mode **flat delivery fee** (migration 243), moved from the Auto-Reply card, with a pointer to the website's own shipping rules. |
+| **Policies** | **The existing `business_knowledge` policy rows** (decision C), the same titles and category the onboarding interview writes and the DM reply and claims guard read. Saved through `/api/business-knowledge`, the route the Business Knowledge page already uses, so **no new write path and no new fields**. An existing row is updated in place; a missing one is created with the interview's own title. An empty or over-long policy is refused. A test holds the titles to the interview's. |
+| **Settings** | The **Seller Mode switch and the UPI ID**, moved from the Auto-Reply card, on the same route and the same rules. |
+
+The Auto-Reply card keeps the DM and comment switches and now says
+whether Seller Mode is on, with a link to the new page.
+`useSellerSettings` is the one way these settings are read and saved (the
+server's answer, never a hope). **The F4 / migration-246 "Saved." pin
+moved with the code**: same property, now held on the new files. A note
+only follows a save the server accepted, and is never left over.
+
+Eight mutations, all caught. Gates with every file staged: `tsc` 0,
+`vitest` 0 (**472 files, 8616 passed**), `next build` 0. The page's UI has
+no DOM tests in this repo; its parts are pinned by bounded `code()` reads
+and the pure helpers are tested directly. **Unverified live.**

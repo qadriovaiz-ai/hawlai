@@ -74,6 +74,18 @@ export const NAV_TREE: NavSection[] = [
           { label: "Domain", href: "/dashboard/website-builder", tab: "domain" },
         ],
       },
+      // S1 (28 Nov 2026): selling in Instagram DMs — the founder's own
+      // request is Rule 5's written reason (docs/DECISIONS.md).
+      {
+        label: "Instagram Store",
+        href: "/dashboard/instagram-store",
+        children: [
+          { label: "Products", href: "/dashboard/instagram-store", tab: "products" },
+          { label: "Shipping", href: "/dashboard/instagram-store", tab: "shipping" },
+          { label: "Policies", href: "/dashboard/instagram-store", tab: "policies" },
+          { label: "Settings", href: "/dashboard/instagram-store", tab: "settings" },
+        ],
+      },
       {
         label: "Leads & CRM",
         href: "/dashboard/leads-hub",

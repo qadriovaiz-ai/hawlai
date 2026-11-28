@@ -184,27 +184,40 @@ describe("3. THE DASHBOARD", () => {
     expect(bad.body.error).toMatch(/no spaces/);
   });
 
-  it("THE CARD CLEARS EVERY 'Saved.' NOTE BEFORE ANY SAVE — a failed UPI save never sits beside the fee's old one", () => {
-    // 28 Nov 2026: the founder saw an error and "Saved." together. save()
-    // already read the server's answer; the "Saved." was the delivery
-    // fee's, left over, because each field cleared only its own note.
-    // There is no DOM test setup here, so the function is read, bounded at
-    // both ends (Rule 8).
-    const src = code("src/components/social/AutoReplySettings.tsx");
-    const start = src.indexOf("async function save(change: Record<string, unknown>): Promise<boolean> {");
-    const end = src.indexOf("async function saveVpa()", start);
+  it("A 'Saved.' NOTE ONLY EVER FOLLOWS A SAVE THE SERVER ACCEPTED — and is never left over", () => {
+    // 28 Nov 2026: the founder saw an error and "Saved." together — the
+    // delivery fee's old note beside a failed UPI save. S5 (same day) moved
+    // the UPI ID and the fee onto separate Instagram Store tabs, each with
+    // its own note, saved through one shared hook. The property is the same
+    // and is now held where the code lives. No DOM test setup here, so the
+    // code is read with comments stripped and bounded (Rule 8).
+    const hook = code("src/components/instagram-store/useSellerSettings.ts");
+    const start = hook.indexOf("async function save(change: Record<string, unknown>): Promise<boolean> {");
+    const end = hook.indexOf("return { s, loading, saving, error, save };", start);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
-    const save = src.slice(start, end);
-    const fetchAt = save.indexOf("await fetch(");
-    expect(save.indexOf("setVpaNote(null);")).toBeGreaterThan(-1);
-    expect(save.indexOf("setFeeNote(null);")).toBeGreaterThan(-1);
-    expect(save.indexOf("setVpaNote(null);")).toBeLessThan(fetchAt);
-    expect(save.indexOf("setFeeNote(null);")).toBeLessThan(fetchAt);
-    // And a note is set only after save() reports success.
-    expect(src).toMatch(/if \(await save\(\{ upiVpa: vpaInput \}\)\) setVpaNote\("Saved\."\);/);
-    expect(src).toMatch(/if \(await save\(\{ shippingFee: feeInput \}\)\) setFeeNote\("Saved\."\);/);
-    expect(save).toMatch(/if \(!res\.ok\) \{\s*setError\([^)]*\);\s*return false;\s*\}/);
+    const save = hook.slice(start, end);
+    expect(save).toMatch(/if \(!res\?\.ok\) \{\s*setError\([^)]*\);\s*return false;\s*\}/);
+    expect(save).toMatch(/await load\(\);\s*return true;/);
+
+    for (const [file, fn, note, change] of [
+      ["src/components/instagram-store/SellerModeSettings.tsx", "saveVpa", "setVpaNote", "upiVpa: vpaInput"],
+      ["src/components/instagram-store/DeliveryFeeSettings.tsx", "saveFee", "setFeeNote", "shippingFee: feeInput"],
+    ] as const) {
+      const src = code(file);
+      const at = src.indexOf(`async function ${fn}() {`);
+      expect(at, file).toBeGreaterThan(-1);
+      const stop = src.indexOf(`${note}("Saved.");`, at);
+      expect(stop, file).toBeGreaterThan(at);
+      const body = src.slice(at, stop + `${note}("Saved.");`.length);
+      // Cleared BEFORE the save; set only when save() said yes.
+      expect(body, file).toMatch(new RegExp(`${note}\\(null\\);\\s*if \\(await save\\(\\{ ${change.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\}\\)\\) ${note}\\("Saved\\."\\);`));
+    }
+
+    // And the Auto-Reply card no longer saves either — it links there.
+    const card = code("src/components/social/AutoReplySettings.tsx");
+    expect(card).not.toMatch(/upiVpa: vpaInput|shippingFee: feeInput/);
+    expect(card).toMatch(/href="\/dashboard\/instagram-store\?tab=settings"/);
   });
 
   it("A SAVE THE DATABASE REFUSES SAYS WHICH ONE FAILED, then the cause — and nothing reads as saved", async () => {
