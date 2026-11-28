@@ -25,6 +25,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   if (body.notes !== undefined) update.notes = body.notes;
 
+  // AN INSTAGRAM ORDER IS NOT MARKED PAID OR CONFIRMED FROM HERE — Seller
+  // Mode O2, 28 November 2026. For those orders, the seller confirming the
+  // payment is the moment stock moves (applyOrderSideEffects), and this
+  // route only flips a status. Letting it through would record a paid
+  // order whose stock never left the shelf. The confirm step that does
+  // both arrives with O3; until then the answer is a plain refusal.
+  // Website orders are untouched.
+  if (update.payment_status === "paid" || update.status === "confirmed") {
+    const { data: current, error: readError } = await supabase
+      .from("orders")
+      .select("channel")
+      .eq("id", id)
+      .eq("dealership_id", dealershipId)
+      .maybeSingle();
+    if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
+    if (current && current.channel !== "website") {
+      return NextResponse.json(
+        { error: "Instagram orders are confirmed when you confirm the payment — that step also updates your stock, and it isn't switched on yet." },
+        { status: 409 }
+      );
+    }
+  }
+
   const { data: order, error } = await supabase
     .from("orders")
     .update(update)

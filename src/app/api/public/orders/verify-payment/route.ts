@@ -5,6 +5,7 @@ import { applyOrderSideEffects } from "@/lib/orderFulfillment";
 import { verifyRazorpaySignature, fetchRazorpayOrder } from "@/lib/payments/razorpay";
 import { loadRazorpayConnection } from "@/lib/payments/razorpayConnection";
 import { resolveOrderAttribution } from "@/lib/storefront/resolveAttribution";
+import { insertOrder } from "@/lib/orders/insertOrder";
 
 // Confirms a Razorpay payment and only then commits the order. The
 // order is deliberately NOT written by /api/public/orders for the
@@ -85,31 +86,18 @@ export async function POST(request: Request) {
   // came from it. Never throws — a sale must not fail on a lookup.
   const attribution = await resolveOrderAttribution(supabase, website.dealership_id, (body as any)?.attribution);
 
-  const { data: order, error } = await supabase.from("orders").insert({
-    dealership_id: website.dealership_id,
-    website_id: website.id,
-    utm_campaign: attribution.utm_campaign,
-    utm_source: attribution.utm_source,
-    meta_campaign_id: attribution.meta_campaign_id,
-    customer_name: String(customerName).trim(),
-    customer_phone: String(customerPhone).trim(),
-    customer_email: customerEmail ? String(customerEmail).trim() : null,
-    shipping_address: String(shippingAddress).trim(),
-    items: resolvedItems,
-    subtotal,
-    discount_code: appliedDiscountId ? String(discountCode).trim().toUpperCase() : null,
-    discount_amount: discountAmount,
-    shipping_amount: shippingAmount,
-    total,
-    payment_method: "razorpay",
-    payment_status: "paid",
-    status: "new",
-    razorpay_order_id: razorpayOrderId,
-    razorpay_payment_id: razorpayPaymentId,
-    razorpay_signature: razorpaySignature,
-  }).select("id").single();
+  const saved = await insertOrder(supabase, {
+    dealershipId: website.dealership_id,
+    websiteId: website.id,
+    channel: "website",
+    customer: { name: customerName, phone: customerPhone, email: customerEmail, address: shippingAddress },
+    pricing: { resolvedItems, subtotal, discountAmount, appliedDiscountId, discountCode, shippingAmount, total },
+    payment: { method: "razorpay", status: "paid", razorpayOrderId, razorpayPaymentId, razorpaySignature },
+    attribution,
+  });
 
-  if (error) return NextResponse.json({ error: "Payment verified but the order couldn't be saved — please contact the business" }, { status: 500 });
+  if (!saved.ok) return NextResponse.json({ error: "Payment verified but the order couldn't be saved — please contact the business" }, { status: 500 });
+  const order = { id: saved.id };
 
   await applyOrderSideEffects(supabase, {
     orderId: order.id,

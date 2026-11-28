@@ -6744,3 +6744,75 @@ Gates: `tsc` 0, `vitest` 0 (**452 files, 8341 passed**), `next build` 0.
 **UNVERIFIED LIVE**: whether Instagram makes `upi://` tappable in a DM,
 and how real UPI apps read this exact link and QR. No DM order exists
 yet, so the route answers 404 to everything until O2.
+
+
+---
+
+## 2026-11-28 — O2: one way to write an order, and the Instagram order
+
+**One function writes every order row**: `insertOrder`
+(`src/lib/orders/insertOrder.ts`). The storefront's cash-on-delivery path
+and its Razorpay verify path each had their own copy of the same twenty
+columns. Both now call it, and a test walks `src/` (comments stripped) to
+hold that nothing else does `from("orders").insert(`. It writes the row
+only. When `applyOrderSideEffects` runs stays each caller's decision.
+
+**`createDmOrder`** (`src/lib/orders/createDmOrder.ts`) is what O1 will call
+after the customer's "yes" to the read-back. It writes an `instagram`
+order, `upi`, `pending`, `new`, with the UPI reference in the same
+insert. **Nothing else happens**: no stock, no discount count, no email,
+no Purchase event. In this flow only the seller can say the money arrived,
+so stock moves when they confirm it (O3/O4′).
+
+### Judgment calls
+
+1. **Pricing is split, not copied.** `resolveOrderPricing` (by storefront
+   slug) and the new `resolveBusinessOrderPricing` (by business) share one
+   core: catalog price, stock, discount, shipping. A business with no
+   website can sell in DMs.
+2. **Shipping is the business's own rule**, read from its website row
+   (one per business), published or not. **No website means no shipping
+   rule, so none is charged.** A shipping read that fails refuses the
+   order rather than pricing it as free. **Open for the owner:** a
+   DM-only seller has nowhere to set shipping today.
+3. **Seller Mode is read when the order is written**, not when it was
+   quoted. Switched off, UPI ID cleared, or DM replies off in between:
+   refused, nothing written.
+4. **Quantities are whole numbers from 1 to 99.** The storefront's pricing
+   passes a fractional quantity through (a documented gap, left alone),
+   and a conversation is exactly where "1.5" would appear.
+5. **The id is chosen before the insert** (`crypto.randomUUID()`), so the
+   UPI reference goes in the same write. A second write could fail and
+   leave an order the seller cannot match to a payment.
+6. **The Orders tab can no longer mark an Instagram order paid or
+   confirmed** (409, said in plain words). That route only flips a status,
+   and for these orders confirming is the moment stock moves. The confirm
+   step that does both arrives with O3. Website orders are untouched, and
+   notes and cancelling still work.
+7. **The Orders panel now reads the server's answer.** Its status dropdown
+   and "Mark as paid" changed the screen and never looked at the reply,
+   the same fault F4 fixed on the auto-reply switches. A refused change
+   now shows its reason and reloads. Instagram orders carry an
+   **Instagram** label, and their "Mark as paid" button is hidden.
+
+### Verification
+
+**Fourteen mutations, all caught**: side effects run at creation, Seller
+Mode off still taking orders, the precondition check skipped, a fractional
+quantity allowed, the channel written as `website`, no UPI reference, the
+chosen id dropped, a shipping read error priced as free, the business's
+shipping rule ignored, the Orders tab marking an Instagram order paid, a
+channel read error letting it through, website orders blocked too, the
+phone check removed, and pricing not scoped to the business.
+
+The panel's read-the-answer change is UI and has **no test**. The server
+refusal it displays does.
+
+Gates: `tsc` 0, `vitest` 0 (**454 files, 8368 passed**), `next build` 0.
+
+**UNVERIFIED LIVE**: no Instagram order is created until O1. The
+storefront checkout's insert moved into the shared function with the same
+columns (plus an explicit `channel: 'website'`, already the default), and
+**a real checkout has not been placed since**. **Before O1**, the live
+`orders` CHECK constraints must be read, to confirm nothing refuses
+`payment_method = 'upi'`. The query is in the report.

@@ -54,12 +54,68 @@ export async function resolveOrderPricing(
     .maybeSingle();
   if (!website || !website.published) return { ok: false, status: 404, error: "This store isn't accepting orders right now" };
 
+  const priced = await priceItems(supabase, website.dealership_id, website, items, discountCode);
+  if (!priced.ok) return priced;
+  return { ...priced, website };
+}
+
+export type BusinessOrderPricingResult =
+  | (Omit<Extract<OrderPricingResult, { ok: true }>, "website"> & { websiteId: string | null })
+  | { ok: false; status: number; error: string };
+
+/**
+ * The same prices, discount and shipping, for an order that did not come
+ * through a storefront — an Instagram DM (Seller Mode, O2, 28 November
+ * 2026). A business without a website can sell this way, so the
+ * business, not a slug, is the key.
+ *
+ * SHIPPING IS THE BUSINESS'S OWN RULE, read from its website row (one per
+ * business — `websites.dealership_id` is unique), published or not: the
+ * rule is the seller's setting, not a property of a live page. A business
+ * with no website has set no shipping rule, so none is charged — the same
+ * answer `computeShippingAmount` gives an unset rule.
+ *
+ * A FAILED READ IS NOT "NO WEBSITE". Pricing with free shipping because
+ * the database hiccuped would quote the customer the wrong total.
+ */
+export async function resolveBusinessOrderPricing(
+  supabase: any,
+  dealershipId: string,
+  items: any[],
+  discountCode?: string | null
+): Promise<BusinessOrderPricingResult> {
+  if (!Array.isArray(items) || items.length === 0) return { ok: false, status: 400, error: "No items in the order" };
+
+  const { data: website, error } = await supabase
+    .from("websites")
+    .select("id, shipping_mode, shipping_rate, shipping_free_threshold")
+    .eq("dealership_id", dealershipId)
+    .maybeSingle();
+  if (error) return { ok: false, status: 500, error: "Couldn't read the shipping settings" };
+
+  const priced = await priceItems(supabase, dealershipId, website ?? null, items, discountCode);
+  if (!priced.ok) return priced;
+  return { ...priced, websiteId: website?.id ?? null };
+}
+
+type PricedItems =
+  | (Omit<Extract<OrderPricingResult, { ok: true }>, "website">)
+  | { ok: false; status: number; error: string };
+
+/** One business's live products, discount and shipping — the shared core. */
+async function priceItems(
+  supabase: any,
+  dealershipId: string,
+  shippingRules: Parameters<typeof computeShippingAmount>[0],
+  items: any[],
+  discountCode?: string | null
+): Promise<PricedItems> {
   const productIds = items.map((it: any) => it.productId).filter(Boolean);
   const { data: products, error: productsError } = await supabase
     .from("products")
     .select("id, name, price, is_active, inventory_count, kind")
     .in("id", productIds)
-    .eq("dealership_id", website.dealership_id);
+    .eq("dealership_id", dealershipId);
   if (productsError) return { ok: false, status: 500, error: "Couldn't verify products" };
 
   const productMap = new Map<string, ResolvedProduct>((products ?? []).map((p: ResolvedProduct) => [p.id, p]));
@@ -87,14 +143,14 @@ export async function resolveOrderPricing(
   let discountAmount = 0;
   let appliedDiscountId: string | null = null;
   if (discountCode) {
-    const result = await validateDiscountCode(supabase, website.dealership_id, discountCode, subtotal);
+    const result = await validateDiscountCode(supabase, dealershipId, discountCode, subtotal);
     if (!result.valid) return { ok: false, status: 400, error: result.error ?? "Invalid discount code" };
     discountAmount = result.discountAmount ?? 0;
     appliedDiscountId = result.discountId ?? null;
   }
 
   const orderValue = Math.max(0, subtotal - discountAmount);
-  const shippingAmount = computeShippingAmount(website, orderValue);
+  const shippingAmount = computeShippingAmount(shippingRules, orderValue);
   const total = orderValue + shippingAmount;
-  return { ok: true, website, resolvedItems, productMap, subtotal, discountAmount, appliedDiscountId, shippingAmount, total };
+  return { ok: true, resolvedItems, productMap, subtotal, discountAmount, appliedDiscountId, shippingAmount, total };
 }

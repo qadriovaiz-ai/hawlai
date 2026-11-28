@@ -18,6 +18,8 @@ interface Order {
   payment_status: string;
   status: string;
   created_at: string;
+  /** Where the order came from — migration 242. Website for every order before Seller Mode. */
+  channel?: string;
 }
 
 const STATUS_OPTIONS = ["new", "confirmed", "shipped", "delivered", "cancelled"];
@@ -32,6 +34,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function OrdersPanel() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   function load() {
     setLoading(true);
@@ -42,15 +45,22 @@ export default function OrdersPanel() {
   }
   useEffect(load, []);
 
-  async function updateStatus(id: string, status: string) {
-    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
-    await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+  // THE SERVER'S ANSWER IS READ, Seller Mode O2 (28 Nov 2026). Both used to
+  // change the screen and never look at the reply, so a refused change
+  // looked done — the same fault F4 fixed on the auto-reply switches.
+  async function patchOrder(id: string, body: Record<string, string>, optimistic: Partial<Order>) {
+    setError(null);
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ...optimistic } : o)));
+    const res = await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    if (!res?.ok) {
+      const d = await res?.json().catch(() => ({}));
+      setError(d?.error ?? "That change wasn't saved.");
+      load();
+    }
   }
 
-  async function markPaid(id: string) {
-    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, payment_status: "paid" } : o)));
-    await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ paymentStatus: "paid" }) });
-  }
+  const updateStatus = (id: string, status: string) => patchOrder(id, { status }, { status });
+  const markPaid = (id: string) => patchOrder(id, { paymentStatus: "paid" }, { payment_status: "paid" });
 
   if (loading) return <div className="card p-5 flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading orders...</div>;
 
@@ -59,6 +69,8 @@ export default function OrdersPanel() {
       <p className="text-sm font-semibold text-slate-700 flex items-center gap-2"><ClipboardList className="w-4 h-4" /> Orders ({orders.length})</p>
 
       {orders.length === 0 && <p className="text-xs text-slate-400 text-center py-6">No orders yet — they'll show up here the moment someone checks out on your store.</p>}
+
+      {error && <p className="text-xs text-red-500">{error}</p>}
 
       <div className="space-y-2">
         {orders.map((o) => (
@@ -81,7 +93,9 @@ export default function OrdersPanel() {
               <span className={`text-[10px] px-2 py-1 rounded-full ${o.payment_status === "paid" ? "bg-green-100 text-green-600" : "bg-amber-100 text-amber-600"}`}>
                 {o.payment_method.toUpperCase()} · {o.payment_status}
               </span>
-              {o.payment_status !== "paid" && (
+              {o.channel === "instagram" && <span className="text-[10px] px-2 py-1 rounded-full bg-pink-100 text-pink-600">Instagram</span>}
+              {/* An Instagram order is marked paid by confirming the payment, which also moves stock — not from this button. */}
+              {o.payment_status !== "paid" && (o.channel ?? "website") === "website" && (
                 <button onClick={() => markPaid(o.id)} className="text-[10px] text-purple-500 hover:underline">Mark as paid</button>
               )}
             </div>
