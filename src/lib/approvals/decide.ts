@@ -514,9 +514,19 @@ export async function applyApprovalDecision(
         follow_up_email: "follow_up_email_auto_enabled",
         content_autopilot: "content_autopilot_enabled",
         auto_call_new_leads: "auto_call_new_leads",
+        instagram_selling: "instagram_selling_enabled",
       };
       const field = AUTOMATION_TOGGLES[d.toggle] ? TOGGLE_FIELDS[d.toggle] : undefined;
       if (!field) return NextResponse.json({ error: "That automation isn't one Hawlai knows, so nothing was changed." }, { status: 400 });
+      // SELLER MODE, CHECKED AGAIN NOW (F4). Things change between the
+      // request and the approval — the UPI ID cleared, DM replies switched
+      // off — and the approval must not switch on something that cannot work.
+      if (d.toggle === "instagram_selling") {
+        const { SELLER_MODE_COLUMNS, sellerModeBlocker } = await import("@/lib/dm/sellerMode");
+        const { data: row } = await service.from("dealerships").select(SELLER_MODE_COLUMNS).eq("id", approval.dealership_id).single();
+        const blocker = sellerModeBlocker(row);
+        if (blocker) return NextResponse.json({ error: `Nothing was changed. ${blocker}` }, { status: 409 });
+      }
       const { error: toggleError } = await service
         .from("dealerships")
         .update({ [field]: true })

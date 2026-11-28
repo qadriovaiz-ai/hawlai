@@ -236,6 +236,9 @@ export const AUTOMATION_TOGGLES: Record<string, { risk: RiskLevel; what: string 
   content_autopilot: { risk: "critical", what: "posts to your social accounts on a schedule with no review" },
   welcome_email: { risk: "high", what: "emails every new lead automatically" },
   follow_up_email: { risk: "high", what: "emails leads a follow-up automatically" },
+  // F4, 28 Nov 2026 — Seller Mode. CRITICAL: it takes orders and sends
+  // customers UPI payment requests with nobody reading first.
+  instagram_selling: { risk: "critical", what: "takes orders in your Instagram DMs and sends customers your UPI ID to pay, with nobody reading first" },
 };
 
 /** The risk of switching one toggle, or null when the name isn't a known toggle. */

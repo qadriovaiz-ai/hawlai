@@ -6539,3 +6539,70 @@ reconnect; nothing reads it.
 
 Three mutations, all caught. Gates: `tsc` 0, `vitest` 0 (**449 files,
 8275 passed**), `next build` 0.
+
+
+---
+
+## 2026-11-28 — F4: the Seller Mode switch, and the seller's UPI ID
+
+**Migration 242** carries all of Seller Mode's schema, as the plan
+bundled it: `dealerships.instagram_selling_enabled`,
+`dealerships.seller_upi_vpa` (format-checked), `orders.channel` (default
+`website`, which is true of every order before it) and
+`orders.upi_reference`.
+
+**One rule for when it may switch on** (`src/lib/dm/sellerMode.ts`),
+used by all three doors — the dashboard, the chat tool, and the approval
+that carries the chat tool's request out: **Instagram connected, a UPI
+ID saved, DM auto-reply on**, the most fundamental missing one named
+first. The approval checks again **at the moment it is applied**,
+because the UPI ID may have been cleared in between. The dashboard
+checks against the state the change would leave, so switching DM replies
+and Seller Mode on together works.
+
+**Off is never refused, and two things take Seller Mode off with them:**
+DM auto-reply switched off (it answers through those replies) and the
+UPI ID cleared (nowhere left to pay).
+
+### Judgment calls
+
+1. **The UPI ID is not encrypted.** It is a payment address customers are
+   given, not a secret.
+2. **The switch can be saved before order-taking exists**, and the screen
+   says so in plain words. `SELLER_MODE_TAKES_ORDERS` is `false` until
+   the order pieces ship; a switch that claimed to do what it does not
+   would be the lie the integration-health work removed.
+3. **Registered as `critical`** in `AUTOMATION_TOGGLES`: it asks customers
+   for money with nobody reading first.
+4. **The format is checked twice** — the app and a database CHECK — and a
+   test holds the two regexes identical.
+
+### Three things fixed on the way, each a way the card misled
+
+- **An Instagram-only business could not switch DM auto-reply on**: the
+  card required a Facebook Page. Seller Mode is for exactly that business.
+- **A switch flipped before the server answered and never read the
+  answer**, so a refused change looked done.
+- **Every DM was labelled "Comment"** in the log (`dm_instagram` was
+  compared with `"dm"`).
+
+### The tool-schema fingerprint
+
+`set_automation_toggle` gained `instagram_selling`, which changes the
+chat's prompt-cache prefix. `tests/toolSchemas.test.ts` is a tripwire
+for exactly that: its own instruction is to update the fingerprint in the
+same commit and say why — done, with the reason recorded beside the
+earlier ones. One cache warm; no new tool.
+
+### Verification
+
+Ten mutations. **One survived first**: the chat tool's check wrapped in
+`if (false)` passed, because the test looked for the call's text and the
+text was still there — the trap the rule-8 notes describe. The test now
+anchors on the condition, the call and the early return together, and
+the mutation fails it.
+
+Gates: `tsc` 0, `vitest` 0 (**450 files, 8291 passed**), `next build` 0.
+
+**Deployed in two steps**, as F3 was: the code reads the new columns, so
+it waits for migration 242.

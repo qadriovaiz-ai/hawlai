@@ -84,7 +84,11 @@ import { code, sourceWithComments } from "./helpers/source";
 // and the real URL was produced inside the approval and sent only to
 // the browser. upload_store_image now points at the context list that
 // carries them, and says outright not to generate first.
-const FINGERPRINT = "a57deb1d0b375d0b957ec32adf613d1baec763e24fc429b950fa46469193ec06";
+// 28 November 2026, Seller Mode (F4 of docs/PLAN-INSTAGRAM-SELLER-MODE.md):
+// set_automation_toggle gained `instagram_selling` in its enum and its
+// description, so the owner can switch Seller Mode on from chat — through
+// the same approval every other toggle uses. No new tool; one cache warm.
+const FINGERPRINT = "0bce6ba51b09ef4bb3bf01317c36babf3ba65b889119803737cd7fa0b60f6460";
 const TOOL_COUNT = 63;
 
 describe("1. ONE DEFINITION, IN ONE PLACE, IN ONE ORDER", () => {

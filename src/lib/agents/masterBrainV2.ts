@@ -2816,6 +2816,7 @@ export async function executeTool(
         dm_auto_reply: "dm_auto_reply_enabled", comment_auto_reply: "comment_auto_reply_enabled",
         welcome_email: "welcome_email_auto_enabled", follow_up_email: "follow_up_email_auto_enabled",
         content_autopilot: "content_autopilot_enabled", auto_call_new_leads: "auto_call_new_leads",
+        instagram_selling: "instagram_selling_enabled",
       };
       const field = fieldMap[input.toggle];
       if (!field) return { error: "Unknown toggle" };
@@ -2827,7 +2828,12 @@ export async function executeTool(
       // approval, for the same reason pause_meta_campaign needs none:
       // the safe direction should never be the slow one.
       if (!input.enabled) {
-        const { error } = await supabase.from("dealerships").update({ [field]: false }).eq("id", ctx.id);
+        // DM auto-reply off takes Seller Mode with it (F4): Seller Mode
+        // answers through DM replies.
+        const { error } = await supabase
+          .from("dealerships")
+          .update({ [field]: false, ...(input.toggle === "dm_auto_reply" ? { instagram_selling_enabled: false } : {}) })
+          .eq("id", ctx.id);
         if (error) return { error: error.message };
         return { success: true, toggle: input.toggle, enabled: false, note: `Switched off. It ${risk.what} — that has stopped.` };
       }
@@ -2837,6 +2843,15 @@ export async function executeTool(
       // it is the one write in the file that most needs a human saying
       // yes. Its only previous safeguard was a line in the system
       // prompt asking the model not to do it unprompted.
+      // SELLER MODE IS CHECKED BEFORE IT IS ASKED FOR (F4): an approval
+      // card the owner presses and that then cannot work is a dead end.
+      if (input.toggle === "instagram_selling") {
+        const { SELLER_MODE_COLUMNS, sellerModeBlocker } = await import("../dm/sellerMode");
+        const { data: row } = await supabase.from("dealerships").select(SELLER_MODE_COLUMNS).eq("id", ctx.id).single();
+        const blocker = sellerModeBlocker(row);
+        if (blocker) return { error: blocker };
+      }
+
       const { requestApproval } = await import("../chat/requestApproval");
       const toggleConfirm = `This switches on an automation that ${risk.what}. Nobody reviews what it sends. You can switch it off again any time.`;
       return await requestApproval(supabase, ctx.id, {
