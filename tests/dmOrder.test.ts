@@ -54,6 +54,7 @@ import { orderReference } from "@/lib/payments/upiRequest";
 
 const INPUT = {
   dealershipId: "d1",
+  instagramSenderId: "cust-1",
   customerName: "Asha",
   customerPhone: "+91 98000 00001",
   shippingAddress: "12 Lake Road, Pune 411001",
@@ -84,6 +85,8 @@ describe("1. THE ORDER IS WRITTEN — AND NOTHING ELSE HAPPENS", () => {
       payment_status: "pending",
       status: "new",
       customer_name: "Asha",
+      // Migration 245: where the invoice goes once the seller confirms.
+      instagram_sender_id: "cust-1",
       total: 950,
       items: [{ product_id: "p1", name: "Clay Mug", price: 450, quantity: 2 }],
     });
@@ -208,6 +211,7 @@ describe("4. ONE ROW SHAPE FOR EVERY ORDER", () => {
     const row = orderRow({ ...base, channel: "website", payment: { method: "cod", status: "pending" } });
     expect(row).toMatchObject({ channel: "website", payment_method: "cod", status: "new", customer_name: "Asha" });
     expect(row).not.toHaveProperty("upi_reference");
+    expect(row).not.toHaveProperty("instagram_sender_id");
     expect(row).not.toHaveProperty("id");
   });
 

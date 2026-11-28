@@ -368,6 +368,11 @@ describe("the registries stay honest", () => {
       // (Rule 6 rows): sent only after the CUSTOMER's own "yes" to a
       // read-back of the exact quote; the customer's yes is the approval.
       "send_upi_request",
+      // 2026-11-28, Seller Mode O4' — automatic in the owner-approved plan:
+      // the invoice goes only after the SELLER confirmed the payment (that
+      // confirmation is itself approval-gated, confirm_dm_payment), and
+      // only inside Meta's 24-hour window.
+      "dm_order_update",
     ]);
     const ungated = Object.entries(ACTION_POLICIES)
       .filter(([key, p]) => ["send", "publish", "spend"].includes(p.actionType) && !p.requiresApproval && !EXPLAINED_EXCEPTIONS.has(key))

@@ -137,6 +137,11 @@ const NOT_COLLECTED: Record<string, Measure> = {
   // records them. When they do, "orders confirmed paid" is the number.
   // 28 Nov 2026, Seller Mode O1. NOT COLLECTED until O4′ records which
   // requests the seller confirmed as paid.
+  // 28 Nov 2026, Seller Mode O3/O4'. NOT COLLECTED: what they move is
+  // the order itself, which the Orders tab shows, not a number this
+  // results job reads.
+  confirm_dm_payment: { metric: "orders confirmed paid", source: null, direction: "up" },
+  dm_order_update: { metric: "invoices delivered", source: null, direction: "up" },
   send_upi_request: { metric: "payment requests that were paid", source: null, direction: "up" },
   notify_seller_order: { metric: "orders the seller confirmed as paid", source: null, direction: "up" },
   auto_reply_dm: { metric: "replies this automation sent", source: null, direction: "up" },

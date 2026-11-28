@@ -15,6 +15,11 @@ vi.mock("@/lib/orderPricing", () => ({
 vi.mock("@/lib/orders/createDmOrder", () => ({ createDmOrder: async (_s: any, input: any) => (orderCalls.push(input), { ok: true }) }));
 vi.mock("@/lib/dm/sellerOrderNotice", () => ({ notifySellerOfOrder: async (_s: any, d: string, n: any) => noticeCalls.push([d, n]) }));
 vi.mock("@/lib/email/consent", () => ({ siteUrl: () => "https://example.test" }));
+const cards: any[] = [];
+let cardFails = false;
+vi.mock("@/lib/chat/requestApproval", () => ({
+  requestApproval: async (_s: any, d: string, req: any) => (cards.push([d, req]), cardFails ? { error: "insert refused" } : { needsApproval: true, approvalId: "ap-1" }),
+}));
 
 import { buildOrderTurnDeps } from "@/lib/dm/orderTurnDeps";
 
@@ -80,6 +85,8 @@ beforeEach(() => {
   pricingCalls.length = 0;
   orderCalls.length = 0;
   noticeCalls.length = 0;
+  cards.length = 0;
+  cardFails = false;
 });
 
 describe("what can be ordered", () => {
@@ -137,6 +144,7 @@ describe("the yes", () => {
     });
     expect(orderCalls[0]).toEqual({
       dealershipId: "d1",
+      instagramSenderId: "cust-1",
       customerName: "Asha",
       customerPhone: "9800000001",
       shippingAddress: "12 Lake Road",
@@ -158,6 +166,20 @@ describe("prices, payment and the seller", () => {
     expect(pay.text).toContain("₹960");
     expect(pay.text).toMatch(/QR code/);
     expect(pay.qrUrl).toBe("https://example.test/api/public/pay/upi-qr/6b1f0c2e-0000-4000-8000-000000000042");
+  });
+
+  it("THE SELLER'S PAYMENT CARD IS RAISED FIRST — one approval per order, carrying the order id (O3)", async () => {
+    await buildOrderTurnDeps(db(), ctx).notifySeller({ ok: true, orderId: "o1", reference: "#ABC", items: [], subtotal: 900, discountAmount: 0, shippingAmount: 60, total: 960, customerName: "Asha" });
+    expect(cards).toEqual([
+      ["d1", expect.objectContaining({ actionType: "confirm_dm_payment", details: { order_id: "o1", order_ref: "#ABC" }, amount: 960, requestedBy: "seller_mode" })],
+    ]);
+    expect(cards[0][1].confirm).toMatch(/received ₹960 .* order #ABC from Asha/);
+  });
+
+  it("A CARD THAT COULDN'T BE MADE STILL TELLS THE SELLER — the Orders tab can confirm it", async () => {
+    cardFails = true;
+    await buildOrderTurnDeps(db(), ctx).notifySeller({ ok: true, orderId: "o1", reference: "#ABC", items: [], subtotal: 900, discountAmount: 0, shippingAmount: 60, total: 960, customerName: "Asha" });
+    expect(noticeCalls.length).toBe(1);
   });
 
   it("THE SELLER IS TOLD THE ORDER, ITS REFERENCE, THE AMOUNT AND WHO", async () => {

@@ -71,7 +71,13 @@ export async function readDmThread(
       const answered = r.success || isHoldingLine(r.reply_text) ? clip(r.reply_text) : "";
       if (answered) turns.push({ from: "business", text: answered });
     }
-    return { turns, lastCustomerAt: (data ?? [])[0]?.created_at ?? null };
+    // THE CUSTOMER'S OWN LAST MESSAGE, not the newest row (28 Nov 2026,
+    // O4′). Every row used to be a reply to something the customer said,
+    // so the newest row's time was theirs. The order invoice is a row the
+    // BUSINESS starts, with no incoming text — dated from it, Meta's
+    // 24-hour window would read as open when it had closed.
+    const lastCustomer = (data ?? []).find((r: any) => String(r.incoming_text ?? "").trim());
+    return { turns, lastCustomerAt: lastCustomer?.created_at ?? null };
   } catch (err: any) {
     console.error(`[dm-thread] couldn't read the conversation for ${dealershipId}: ${err?.message ?? err}`);
     return EMPTY;

@@ -26,6 +26,8 @@ export type NewOrder = {
   dealershipId: string;
   websiteId: string | null;
   channel: OrderChannel;
+  /** Whose Instagram DM placed it (migration 245) — where the invoice goes. */
+  instagramSenderId?: string | null;
   customer: { name: string; phone: string; email?: string | null; address: string };
   pricing: {
     resolvedItems: ResolvedOrderItem[];
@@ -51,6 +53,7 @@ export function orderRow(o: NewOrder): Record<string, unknown> {
     dealership_id: o.dealershipId,
     website_id: o.websiteId,
     channel: o.channel,
+    ...(o.instagramSenderId ? { instagram_sender_id: o.instagramSenderId } : {}),
     utm_campaign: o.attribution?.utm_campaign ?? null,
     utm_source: o.attribution?.utm_source ?? null,
     meta_campaign_id: o.attribution?.meta_campaign_id ?? null,

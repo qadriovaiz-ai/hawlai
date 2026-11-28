@@ -98,7 +98,11 @@ export async function applyOrderSideEffects(
     discountAmount: number;
     shippingAmount: number;
     total: number;
-    paymentMethod: "cod" | "razorpay";
+    // "upi" since 28 Nov 2026 (Seller Mode O4'): an Instagram order runs
+    // this when the SELLER confirms the UPI payment arrived.
+    paymentMethod: "cod" | "razorpay" | "upi";
+    /** Where it was placed. Defaults to the website, which every caller before Seller Mode was. */
+    channel?: "website" | "instagram";
     // Whether this buyer consented to tracking. Only the BROWSER
     // knows this, so it's passed in rather than inferred server-side.
     // Defaults to false: absent information must never be treated as
@@ -123,6 +127,7 @@ export async function applyOrderSideEffects(
     total,
     paymentMethod,
     trackingConsent,
+    channel = "website",
   } = opts;
 
   await linkOrderToLead(supabase, orderId, dealershipId, customerPhone);
@@ -176,13 +181,19 @@ export async function applyOrderSideEffects(
     const { data: dealership } = await supabase.from("dealerships").select("gmail_email, dealership_name").eq("id", dealershipId).single();
     if (dealership?.gmail_email) {
       const itemLines = resolvedItems.map((it) => `- ${it.name} x${it.quantity} — ₹${it.price}`).join("\n");
-      const paymentLine = paymentMethod === "razorpay" ? "Payment: Paid online via Razorpay" : "Payment: Cash on Delivery (pending)";
+      const paymentLine =
+        paymentMethod === "razorpay"
+          ? "Payment: Paid online via Razorpay"
+          : paymentMethod === "upi"
+            ? "Payment: UPI to your own UPI ID — confirmed by you"
+            : "Payment: Cash on Delivery (pending)";
+      const where = channel === "instagram" ? "in your Instagram DMs" : "on your website";
       await sendEmail(
         supabase,
         dealershipId,
         dealership.gmail_email,
         `New order from ${customerName}`,
-        `New order placed on your website.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nAddress: ${shippingAddress}\n\nItems:\n${itemLines}\n\nSubtotal: ₹${subtotal}${discountAmount > 0 ? `\nDiscount (${discountCode}): -₹${discountAmount}` : ""}${shippingAmount > 0 ? `\nShipping: ₹${shippingAmount}` : ""}\nTotal: ₹${total}\n${paymentLine}\n\nView and confirm this order in your Hawlai dashboard.`
+        `New order placed ${where}.\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nAddress: ${shippingAddress}\n\nItems:\n${itemLines}\n\nSubtotal: ₹${subtotal}${discountAmount > 0 ? `\nDiscount (${discountCode}): -₹${discountAmount}` : ""}${shippingAmount > 0 ? `\nShipping: ₹${shippingAmount}` : ""}\nTotal: ₹${total}\n${paymentLine}\n\nView and confirm this order in your Hawlai dashboard.`
       );
     }
   } catch {

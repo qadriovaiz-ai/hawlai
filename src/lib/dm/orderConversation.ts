@@ -409,8 +409,14 @@ Return JSON only: {"intent":"order|cancel|other","items":[{"product":"...","quan
     { operation: "dm_order_extract", logContext }
   );
   if (!r.ok) return null;
-  const parsed = parseModelJson(r.text);
-  if (!parsed.ok) return null;
-  return readExtraction(parsed.value);
+  const parsedReply = parseModelJson(r.text);
+  // THE CAUSE IS LOGGED (tests/noGreedyJsonParse). Missed when O1 shipped:
+  // that guard walks `git ls-files`, and this file was still untracked
+  // when O1's gates ran — caught 28 Nov 2026 the moment it was tracked.
+  if (!parsedReply.ok) {
+    console.error(`[dm-order-extract] ${parsedReply.cause}: ${parsedReply.detail}`);
+    return null;
+  }
+  return readExtraction(parsedReply.value);
 }
 

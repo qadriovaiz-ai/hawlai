@@ -17,6 +17,9 @@ import { healthFromFailure } from "@/lib/integrations/healthState";
 import { SELLER_MODE_TAKES_ORDERS } from "@/lib/dm/sellerMode";
 import { handleOrderTurn, type OrderTurn } from "@/lib/dm/orderConversation";
 import { buildOrderTurnDeps } from "@/lib/dm/orderTurnDeps";
+// The Instagram transport moved to its own module on 28 Nov 2026 (O4′):
+// the invoice sends through it too.
+import { sendInstagramDmReply, sendInstagramDmImage } from "@/lib/instagram/dm";
 import { normaliseLanguage } from "@/lib/content/language";
 
 const GRAPH_VERSION = "v19.0";
@@ -31,36 +34,7 @@ async function sendDmReply(pageAccessToken: string, recipientId: string, text: s
   if (!res.ok) throw new Error(data?.error?.message ?? "Failed to send DM reply");
 }
 
-// Instagram Business Login uses a genuinely different API surface —
-// graph.instagram.com (not graph.facebook.com), Bearer auth header
-// (not an access_token query param), and the IG_ID/Instagram-scoped
-// IDs from that login flow, not Facebook Page IDs. Confirmed against
-// Meta's current Instagram Platform docs rather than assumed, since
-// getting this wrong fails silently (a 401 that just gets logged).
-async function sendInstagramDmReply(accessToken: string, igBusinessId: string, recipientId: string, text: string) {
-  const res = await fetch(`https://graph.instagram.com/v26.0/${igBusinessId}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ recipient: { id: recipientId }, message: { text } }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message ?? "Failed to send Instagram DM reply");
-}
 
-// Seller Mode O1 (28 Nov 2026): the UPI QR code, as an image attachment
-// fetched by Instagram from its URL. UNVERIFIED against the live API —
-// written from Meta's documented attachment shape. The payment request's
-// TEXT always goes first and carries the UPI ID and link, so a refused
-// image costs the customer one of three ways to pay, not the payment.
-async function sendInstagramDmImage(accessToken: string, igBusinessId: string, recipientId: string, imageUrl: string) {
-  const res = await fetch(`https://graph.instagram.com/v26.0/${igBusinessId}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ recipient: { id: recipientId }, message: { attachment: { type: "image", payload: { url: imageUrl } } } }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message ?? "Failed to send Instagram image");
-}
 
 /**
  * Send one order turn's messages, in order, and log what went out — O1,

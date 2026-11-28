@@ -561,6 +561,20 @@ export async function applyApprovalDecision(
     // blindly. A slug from the card could point at an existing page and
     // the insert would collide with the (website_id, slug) unique
     // constraint — or worse, not collide and sit somewhere nobody meant.
+    // SELLER MODE O3 (28 Nov 2026): the seller confirms an Instagram
+    // order's UPI payment. A BRANCH, NOT A DISPATCHER: dispatchers carry
+    // out outbound sends raised by chat tools (a call, a video); this is
+    // an EDIT — the order, the stock — raised by Seller Mode when the
+    // order was placed, like the toggle and page branches here. The same
+    // confirmDmPayment runs behind the WhatsApp button and the Orders tab;
+    // its conditional claim means whichever door is second does nothing.
+    if (approval?.action_type === "confirm_dm_payment") {
+      const { confirmDmPayment } = await import("@/lib/orders/confirmDmPayment");
+      const done = await confirmDmPayment(service, approval.dealership_id, String((approval.action_details as any)?.order_id ?? ""));
+      if (!done.ok) return NextResponse.json({ error: done.error }, { status: done.status });
+      record({ note: done.note, orderReference: done.reference, invoice: done.invoice });
+    }
+
     if (approval?.action_type === "create_page_draft") {
       const { slugFromQuery, titleFromQuery } = await import("@/lib/opportunities/pageProposal");
       const { legacyToBlocks } = await import("@/lib/blocks/convertLegacy");

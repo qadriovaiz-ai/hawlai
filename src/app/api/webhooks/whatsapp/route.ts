@@ -11,6 +11,7 @@ import { pendingSuggestionRows, applySuggestionDecision } from "@/lib/whatsapp/s
 import { pendingSuggestions } from "@/lib/onboarding/suggestions";
 import { verifyWhatsAppSender, describeWhatsAppRejection, whatsappChallenge } from "@/lib/whatsapp/verifySender";
 import { recordDeliveryStandalone } from "@/lib/webhooks/deliveryLog";
+import { readButtonTaps, handlePaymentTap } from "@/lib/whatsapp/paymentButton";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 300; // Master Chat's tool loop can take a while, same reasoning as the web route
@@ -196,7 +197,9 @@ async function handleOneMessage(phone: string, text: string, supabase: ReturnTyp
         reply.decision === "approved"
           ? `Done — approved ${said}.${result?.publish?.message ? `
 
-${result.publish.message}` : ""}`
+${result.publish.message}` : ""}${result?.produced?.note ? `
+
+${result.produced.note}` : ""}`
           : `Rejected ${said}. Nothing was done.`
       );
       return;
@@ -241,6 +244,38 @@ ${result.publish.message}` : ""}`
     console.error("[whatsapp] handling failed:", err?.message ?? err);
     try { await sendWhatsAppText(phone, "Something went wrong on my end — try again in a moment."); } catch {}
     return;
+  }
+}
+
+/**
+ * One tap on a template button — Seller Mode O3, 28 November 2026.
+ *
+ * ONLY THE BUSINESS'S OWN VERIFIED NUMBER, the same lookup a typed message
+ * gets: a "Yes, received" confirms a payment and moves stock, so it must
+ * come from the person the order notice was sent to. Anyone else's tap is
+ * ignored rather than answered — nothing was sent to them.
+ *
+ * NOT PLAN-GATED, unlike Master Chat over WhatsApp: this is the seller
+ * confirming their own customer's payment, and the same decision is
+ * open to them on the dashboard on every plan.
+ */
+async function handleOneTap(phone: string, payload: string, supabase: ReturnType<typeof createServiceClient>): Promise<void> {
+  try {
+    const { data: dealership } = await supabase
+      .from("dealerships")
+      .select("id, owner_id")
+      .eq("owner_whatsapp_number", phone)
+      .eq("owner_whatsapp_verified", true)
+      .maybeSingle();
+    if (!dealership) {
+      console.error("[whatsapp] a button tap from a number that isn't a verified owner was ignored");
+      return;
+    }
+    const reply = await handlePaymentTap(supabase, dealership, phone, payload);
+    if (reply) await sendWhatsAppText(phone, reply);
+  } catch (err: any) {
+    console.error("[whatsapp] button tap failed:", err?.message ?? err);
+    try { await sendWhatsAppText(phone, "Something went wrong confirming that — open the Orders tab in Hawlai to check the order."); } catch {}
   }
 }
 
@@ -309,11 +344,18 @@ export async function POST(request: Request) {
     await handleOneMessage(message.phone, message.text, supabase);
   }
 
+  // TEMPLATE BUTTON TAPS — Seller Mode O3. Read by their own parser:
+  // readInbound still counts a button as skipped (whatsappInbound pins it).
+  const taps = provider === "meta" ? readButtonTaps(body) : [];
+  for (const tap of taps) {
+    await handleOneTap(tap.phone, tap.payload, supabase);
+  }
+
   // WHY NOTHING HAPPENED, recorded rather than guessed at later. An
   // empty read with no explanation is indistinguishable from a
   // provider that never called — which is the hardest WhatsApp report
   // to answer.
-  if (!read.messages.length && read.skipped.length) {
+  if (!read.messages.length && !taps.length && read.skipped.length) {
     await recordDeliveryStandalone({
       source: "whatsapp",
       outcome: "nothing_to_reply_to",

@@ -6,6 +6,7 @@ import { emitEvent } from "@/lib/events/emitEvent";
 import { dailyRunStalled } from "@/lib/automation/dailyJobs";
 import { indiaToday } from "@/lib/expertise/seasonalCalendar";
 import { authorizeCron } from "@/lib/cronAuth";
+import { remindUnconfirmedPayments } from "@/lib/orders/paymentReminders";
 
 // Triggered by pg_cron every 2 minutes (see migration 129's commented
 // manual setup) via pg_net, which sends the same
@@ -145,8 +146,14 @@ export async function POST(request: Request) {
     }
   }
 
+  // SELLER MODE O4' (28 Nov 2026): one reminder to check a UPI payment,
+  // 15 minutes after an unanswered order notice. A function call — never
+  // a fetch of this app — and it never throws.
+  const paymentReminders = await remindUnconfirmedPayments(supabase);
+
   return NextResponse.json({
     dailyRunNudged,
+    paymentReminders,
     events: { processed: pendingEvents?.length ?? 0, done: eventsDone, failed: eventsFailed },
     tasks: { processed: pendingTasks?.length ?? 0, done: tasksDone, failed: tasksFailed, skipped: tasksSkipped },
   });

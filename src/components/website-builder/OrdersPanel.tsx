@@ -35,6 +35,7 @@ export default function OrdersPanel() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   function load() {
     setLoading(true);
@@ -50,13 +51,19 @@ export default function OrdersPanel() {
   // looked done — the same fault F4 fixed on the auto-reply switches.
   async function patchOrder(id: string, body: Record<string, string>, optimistic: Partial<Order>) {
     setError(null);
+    setNotice(null);
     setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ...optimistic } : o)));
     const res = await fetch(`/api/orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    const d = await res?.json().catch(() => ({}));
     if (!res?.ok) {
-      const d = await res?.json().catch(() => ({}));
       setError(d?.error ?? "That change wasn't saved.");
       load();
+      return;
     }
+    // THE ROW AS THE SERVER LEFT IT: confirming an Instagram payment also
+    // moves the order to confirmed, which the optimistic change can't know.
+    if (d?.order) setOrders((prev) => prev.map((o) => (o.id === id ? d.order : o)));
+    if (d?.note) setNotice(d.note);
   }
 
   const updateStatus = (id: string, status: string) => patchOrder(id, { status }, { status });
@@ -71,6 +78,7 @@ export default function OrdersPanel() {
       {orders.length === 0 && <p className="text-xs text-slate-400 text-center py-6">No orders yet — they'll show up here the moment someone checks out on your store.</p>}
 
       {error && <p className="text-xs text-red-500">{error}</p>}
+      {notice && <p className="text-xs text-green-600">{notice}</p>}
 
       <div className="space-y-2">
         {orders.map((o) => (
@@ -94,7 +102,10 @@ export default function OrdersPanel() {
                 {o.payment_method.toUpperCase()} · {o.payment_status}
               </span>
               {o.channel === "instagram" && <span className="text-[10px] px-2 py-1 rounded-full bg-pink-100 text-pink-600">Instagram</span>}
-              {/* An Instagram order is marked paid by confirming the payment, which also moves stock — not from this button. */}
+              {/* An Instagram order's "Payment received" IS the seller confirming the UPI payment: stock moves and the customer gets their invoice (O3). */}
+              {o.payment_status !== "paid" && o.channel === "instagram" && o.status !== "cancelled" && (
+                <button onClick={() => markPaid(o.id)} className="text-[10px] text-purple-500 hover:underline">Payment received</button>
+              )}
               {o.payment_status !== "paid" && (o.channel ?? "website") === "website" && (
                 <button onClick={() => markPaid(o.id)} className="text-[10px] text-purple-500 hover:underline">Mark as paid</button>
               )}

@@ -68,6 +68,15 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // read-back of the exact items, prices, fee and total; the payee is the
   // seller's own saved UPI ID and Hawlai never holds the money.
   send_upi_request: { actionType: "send", riskLevel: "high", description: "Send an Instagram customer the seller's UPI payment request, after they confirmed the order read-back", requiresApproval: false },
+  // Seller Mode O3 (28 Nov 2026): the seller's word that a customer's UPI
+  // payment arrived. It moves stock and tells the customer they paid, so
+  // it is the SELLER's decision — one approval per order, answered from
+  // WhatsApp, the dashboard card or the Orders tab.
+  confirm_dm_payment: { actionType: "edit", riskLevel: "high", description: "Confirm an Instagram order's UPI payment arrived: the order is confirmed, stock moves and the customer gets their invoice", requiresApproval: true },
+  // Seller Mode O4' (28 Nov 2026): the text invoice to the customer,
+  // automatic and only inside Meta's 24-hour window, once the seller has
+  // confirmed the payment.
+  dm_order_update: { actionType: "send", riskLevel: "medium", description: "Send an Instagram customer their invoice after the seller confirmed the payment", requiresApproval: false },
   notify_seller_order: { actionType: "send", riskLevel: "low", description: "Tell the seller on WhatsApp about a new Instagram order and ask whether the UPI payment arrived", requiresApproval: false },
 
   // ---- One-shot outbound actions reachable from chat (Phase 2B) ----

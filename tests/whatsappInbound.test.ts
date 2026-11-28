@@ -149,6 +149,12 @@ describe("4. NON-TEXT IS SKIPPED, NOT MISHANDLED", () => {
     // owner replaced the whole per-approval notice with a count in the
     // daily email — no template, no button, no tap. Nothing sends one,
     // so nothing should claim to understand one.
+    //
+    // 28 NOVEMBER 2026: a template with buttons is sent again (Seller
+    // Mode's payment check, WA-T). Its taps are read by their OWN parser,
+    // lib/whatsapp/paymentButton.ts — a tap is a decision about one order,
+    // never a sentence for Master Chat — so this list stays exactly as it
+    // is, and stays true: readInbound still turns no button into a message.
     for (const type of ["image", "audio", "document", "sticker", "location", "button", "interactive", "reaction", "unsupported"]) {
       const read = readInbound(delivery({ messages: [{ from: "91900", id: "x", type }] }), "meta");
       expect(read.messages, type).toEqual([]);

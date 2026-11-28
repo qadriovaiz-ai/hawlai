@@ -124,6 +124,19 @@ describe("1. THE THREAD IS THIS CUSTOMER'S, ON THIS CHANNEL, OLDEST FIRST", () =
     expect((await readDmThread(db(), "d1", "instagram", "cust-1")).lastCustomerAt).toBe("2026-11-28T10:02:00Z");
   });
 
+  it("A MESSAGE THE BUSINESS STARTED DOES NOT REOPEN THE WINDOW — O4′, 28 Nov 2026", async () => {
+    // The order invoice is logged with no incoming text. Dated from it,
+    // the window would read open after Meta had closed it.
+    tables.auto_reply_log = [
+      { dealership_id: "d1", channel: "dm_instagram", source_id: "cust-1", incoming_text: "yes", reply_text: "To pay…", success: true, created_at: "2026-11-27T09:00:00Z" },
+      { dealership_id: "d1", channel: "dm_instagram", source_id: "cust-1", incoming_text: null, reply_text: "Invoice…", success: true, created_at: "2026-11-28T11:00:00Z" },
+    ];
+    const t = await readDmThread(db(), "d1", "instagram", "cust-1");
+    expect(t.lastCustomerAt).toBe("2026-11-27T09:00:00Z");
+    // And the invoice is still a turn the next reply can see.
+    expect(t.turns.at(-1)).toEqual({ from: "business", text: "Invoice…" });
+  });
+
   it("AN UNREADABLE THREAD IS AN EMPTY ONE — the reply still goes, without memory", async () => {
     threadQuery.error = "permission denied";
     expect(await readDmThread(db(), "d1", "instagram", "cust-1")).toEqual({ turns: [], lastCustomerAt: null });

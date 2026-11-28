@@ -6,7 +6,8 @@
 
 import { resolveBusinessOrderPricing } from "@/lib/orderPricing";
 import { createDmOrder } from "@/lib/orders/createDmOrder";
-import { upiQrPath, upiRequestText } from "@/lib/payments/upiRequest";
+import { formatRupees, upiQrPath, upiRequestText } from "@/lib/payments/upiRequest";
+import { requestApproval } from "@/lib/chat/requestApproval";
 import { notifySellerOfOrder } from "@/lib/dm/sellerOrderNotice";
 import { businessDisplayName } from "@/lib/business/displayName";
 import { siteUrl } from "@/lib/email/consent";
@@ -95,6 +96,7 @@ export function buildOrderTurnDeps(
     placeOrder: (readback) =>
       createDmOrder(supabase, {
         dealershipId: ctx.dealershipId,
+        instagramSenderId: ctx.senderId,
         customerName: readback.name,
         customerPhone: readback.phone,
         shippingAddress: readback.address,
@@ -110,6 +112,19 @@ export function buildOrderTurnDeps(
     },
 
     async notifySeller(order) {
+      // THE SELLER'S DECISION, RAISED FIRST (O3): one approval per order.
+      // Answered from the dashboard card, "haan CODE" on WhatsApp, the
+      // template's Yes button or the Orders tab — whichever comes first.
+      // A card that could not be made is logged, never thrown: the order
+      // exists, and the Orders tab can still confirm it.
+      const card = await requestApproval(supabase, ctx.dealershipId, {
+        actionType: "confirm_dm_payment",
+        details: { order_id: order.orderId, order_ref: order.reference },
+        confirm: `Confirm you received ₹${formatRupees(order.total)} in your UPI app for Instagram order ${order.reference} from ${order.customerName}. Your stock is reduced and the customer is told their payment arrived — that can't be undone, so check your UPI app first.`,
+        amount: order.total,
+        requestedBy: "seller_mode",
+      });
+      if ("error" in card) console.error(`[seller-mode] no payment card for ${order.orderId}: ${card.error}`);
       await notifySellerOfOrder(supabase, ctx.dealershipId, {
         orderId: order.orderId,
         orderRef: order.reference,

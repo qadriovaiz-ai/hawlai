@@ -33,6 +33,8 @@ import type { ResolvedOrderItem } from "@/lib/orderPricing";
 
 export type DmOrderInput = {
   dealershipId: string;
+  /** The customer's Instagram-scoped id (migration 245): where the invoice goes. */
+  instagramSenderId: string;
   customerName: string;
   customerPhone: string;
   shippingAddress: string;
@@ -114,6 +116,7 @@ export async function createDmOrder(supabase: any, input: DmOrderInput): Promise
     // Not from a website, whether or not the business has one.
     websiteId: null,
     channel: "instagram",
+    instagramSenderId: input.instagramSenderId,
     customer: { name: input.customerName, phone: input.customerPhone, email: input.customerEmail, address: input.shippingAddress },
     pricing: {
       resolvedItems: pricing.resolvedItems,

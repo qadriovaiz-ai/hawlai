@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { createServiceClient } from "@/lib/supabase/service";
+import { confirmDmPayment } from "@/lib/orders/confirmDmPayment";
 
 const VALID_STATUS = ["new", "confirmed", "shipped", "delivered", "cancelled"];
 const VALID_PAYMENT_STATUS = ["pending", "paid", "failed"];
@@ -25,12 +27,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
   if (body.notes !== undefined) update.notes = body.notes;
 
-  // AN INSTAGRAM ORDER IS NOT MARKED PAID OR CONFIRMED FROM HERE — Seller
+  // AN INSTAGRAM ORDER IS NEVER JUST FLIPPED TO PAID OR CONFIRMED — Seller
   // Mode O2, 28 November 2026. For those orders, the seller confirming the
-  // payment is the moment stock moves (applyOrderSideEffects), and this
-  // route only flips a status. Letting it through would record a paid
-  // order whose stock never left the shelf. The confirm step that does
-  // both arrives with O3; until then the answer is a plain refusal.
+  // payment is the moment stock moves (applyOrderSideEffects); a bare
+  // status flip would record a paid order whose stock never left the shelf.
+  //
+  // O3 (same day): "Mark as paid" on one IS the seller confirming the
+  // payment, so it runs confirmDmPayment — the same claim, stock and
+  // invoice the WhatsApp button and the approval card run, and it closes
+  // that card behind it. The owner pressing it on their own dashboard is
+  // the decision. "Confirmed" without the payment is still refused.
   // Website orders are untouched.
   if (update.payment_status === "paid" || update.status === "confirmed") {
     const { data: current, error: readError } = await supabase
@@ -41,8 +47,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .maybeSingle();
     if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
     if (current && current.channel !== "website") {
+      if (update.payment_status === "paid" && Object.keys(update).length === 1) {
+        const done = await confirmDmPayment(createServiceClient(), dealershipId, id, { resolveApproval: { userId: user.id } });
+        if (!done.ok) return NextResponse.json({ error: done.error }, { status: done.status });
+        const { data: order } = await supabase.from("orders").select("*").eq("id", id).eq("dealership_id", dealershipId).maybeSingle();
+        return NextResponse.json({ order, note: done.note });
+      }
       return NextResponse.json(
-        { error: "Instagram orders are confirmed when you confirm the payment — that step also updates your stock, and it isn't switched on yet." },
+        { error: "An Instagram order is confirmed by confirming its payment — use Payment received. That step also updates your stock." },
         { status: 409 }
       );
     }

@@ -6947,3 +6947,95 @@ Gates: `tsc` 0, `vitest` 0 (**457 files, 8422 passed**), `next build` 0.
 
 **UNVERIFIED LIVE: all of it.** It cannot run until the global switch is
 on. Migration 244 must be run before then.
+
+
+---
+
+## 2026-11-28 — O3 + O4′: the seller confirms the payment
+
+`confirmDmPayment` (`src/lib/orders/confirmDmPayment.ts`) is **one
+function behind four doors**: the WhatsApp **"Yes, received"** button,
+**"haan CODE"** typed on WhatsApp, the **approval card** on the dashboard,
+and **"Payment received"** on the Orders tab. Whichever comes first does
+it, and the rest find it done.
+
+1. **The order is claimed** with one conditional update: paid and
+   confirmed, only if it is still an unpaid, new Instagram order of this
+   business.
+2. **`applyOrderSideEffects` runs here**, so stock moves at payment
+   confirmation, as the founder decided. Its email now says "in your
+   Instagram DMs" and "UPI … confirmed by you", not "website" and "Cash
+   on Delivery".
+3. **A text invoice goes to the customer**, and only inside Meta's
+   24-hour window. Outside it, the seller is told to send it themselves.
+
+**One approval card per order**, raised when O1 places the order
+(`confirm_dm_payment`: edit, high, requires approval). The template's
+buttons carry the order id. **"Not yet" is an answer**: the order is
+unchanged and no reminder follows. **One reminder after 15 minutes** of no
+answer: the event dispatcher calls a sweep every two minutes as a
+function, never a fetch. It claims `orders.payment_reminder_sent_at`
+before messaging and covers the last 24 hours only.
+
+**Migration 245**: `orders.instagram_sender_id` (the draft row of 244 is
+reused for the customer's next order, so the order must remember whose DM
+it was) and `orders.payment_reminder_sent_at`.
+
+### Judgment calls
+
+1. **A branch in decide.ts, not a dispatcher.** Built first as a
+   dispatcher. `toolFamilies` then asked which chat tool raises it, and
+   none does. The registry's dispatchers are outbound sends raised by
+   chat tools (a call, a video). This is an edit (the order, the stock)
+   raised by Seller Mode, like the toggle and page branches. Moved rather
+   than given an exception in the test.
+2. **Button taps get their own parser** (`lib/whatsapp/paymentButton.ts`).
+   `tests/whatsappInbound` pins `button` as a type `readInbound` skips;
+   that stays true, and a tap (a decision about one order) never becomes
+   a Master Chat sentence. A dated line was added to that test's
+   comment; the assertion is unchanged.
+3. **"Yes, received" goes through the order's own card** when it has one,
+   so the card, the audit trail ("whatsapp:<number>") and the decision
+   record agree. Without a card, the same confirmation runs directly.
+4. **Only the business's own verified WhatsApp number** may tap; anyone
+   else's tap is ignored. **Not plan-gated**: confirming one's own
+   customer's payment is open on the dashboard on every plan.
+5. **The thread reader now dates Meta's window from the customer's own
+   last message**, not the newest log row. The invoice is a row the
+   business starts, and would otherwise make a closed window look open.
+   This is a fix to F1, with a test.
+6. **The Instagram transport moved** to `lib/instagram/dm.ts`, unchanged,
+   because the invoice needs it outside the webhook.
+7. **The Orders tab's "Mark as paid" on an Instagram order is the
+   confirmation** (O2 refused it "until O3"). A bare "confirmed" is still
+   refused. O2's own interim test was rewritten to the new behaviour.
+8. **"haan CODE" replies now pass on what the action did** (`produced.note`).
+   This applies to every approval: the seller learns whether the invoice
+   went.
+9. **`dm_order_update`** (the invoice) is registered: send, medium,
+   automatic. It goes only after the seller's own confirmation, which is
+   itself approval-gated.
+
+### A miss in O1, found here
+
+`tests/noGreedyJsonParse` walks `git ls-files`. When O1's gates ran,
+`orderConversation.ts` was still untracked, so the suite was green
+**without that guard ever reading it**. The model-reply parse there did
+not log its cause. **O1 went out with that gap** (harmless while dormant).
+It is fixed here, with a mutation proving the guard now sees it. From now
+on the gates run after `git add`.
+
+### Verification
+
+**Twenty-eight mutations, all caught on the first run**: 23 on the claim,
+side effects, invoice window, card closing, the window date, the button,
+"not yet", payload parsing, the reminder (claim, timing, once), the Orders
+tab and the email wording, and 5 on the decide.ts branch and the parse log.
+
+Gates **with every new file staged**: `tsc` 0, `vitest` 0 (**460 files,
+8468 passed**), `next build` 0.
+
+**UNVERIFIED LIVE: all of it.** Migrations 244 and 245 are not run.
+`SELLER_MODE_TAKES_ORDERS` is still false. The WhatsApp template is not
+approved, so its button has never been tapped. No business has Seller Mode
+on.
