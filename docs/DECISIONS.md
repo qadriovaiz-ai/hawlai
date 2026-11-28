@@ -7067,3 +7067,60 @@ passed**), `next build` 0.
 **UNVERIFIED LIVE until the founder's first test order.** The WhatsApp
 template is still unapproved, so the first test confirms from the
 dashboard card or the Orders tab.
+
+
+---
+
+## 2026-11-28 — The UPI ID that could never be saved (migration 246)
+
+**Found by the founder's first live save**: "invalid regular expression:
+invalid repetition count(s)", and zero rows with a UPI ID. Migration
+242's CHECK used `{2,256}`. **PostgreSQL caps a regex repetition bound at
+255** (`RE_DUP_MAX`) and compiles a constraint's regex when it is used,
+not when it is created. So 242 ran cleanly, and every non-null UPI ID was
+then refused. JavaScript accepts `{2,256}`, so the app approved what the
+database refused, and the test pinning "app regex = database regex" was
+green the whole time: identical text, and one side could not run it.
+
+**242's verification could not have caught it.** It checked that the
+constraint existed. My "no-match update" proved nothing (recorded that
+day). **246's verification writes a real UPI ID** inside a `do` block that
+always rolls back, and expects a bad one to be refused.
+
+### The fix
+
+- **Migration 246**: `char_length(seller_upi_vpa) <= 255` and
+  `~ '^[a-z0-9._-]{2,}@[a-z][a-z0-9]{1,63}$'`. The length cap moves out of
+  the regex, which keeps only small bounds. The app checks the same two
+  things (`MAX_VPA_LENGTH`).
+- **A new guard**: no regex in any migration may use a repetition count
+  over 255. 242 is allowlisted with its reason and date, and the test
+  checks that 246 really drops and re-adds that constraint. A probe proves
+  the scan would see one, and removing 242 from the allowlist fails it.
+
+### The "Saved." the founder saw
+
+The founder read it as "the UI never checked the server's answer". **The
+code says otherwise**: `save()` returns false on any non-OK answer, and
+"Saved." is set only on true. The mechanism that fits what was on screen:
+**each field cleared only its own note**. After saving the delivery fee,
+a failed UPI save showed its error **beside the fee's old "Saved."**.
+`save()` now clears every note first. That is the likely cause, not a
+confirmed one, so the founder is asked which "Saved." it was.
+
+The route now says **which** save failed, in the owner's words, before the
+raw database text: "Your UPI ID wasn't saved: …".
+
+### Verification
+
+**Seven mutations, all caught**: the migration or the app back to
+`{2,256}`, either length cap removed, the card keeping the fee's note, the
+route returning only the raw error, and 242 removed from the allowlist.
+The card has no DOM tests in this repo, so its fix is pinned by a bounded
+`code()` read of `save()`.
+
+Gates with every file staged: `tsc` 0, `vitest` 0 (**460 files, 8473
+passed**), `next build` 0.
+
+**Saving a UPI ID works only once migration 246 has run.** The code is
+safe to deploy before it, since it reads no new column.

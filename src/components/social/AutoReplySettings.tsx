@@ -53,6 +53,12 @@ export default function AutoReplySettings() {
   async function save(change: Record<string, unknown>): Promise<boolean> {
     setSaving(true);
     setError(null);
+    // EVERY "Saved." NOTE GOES (28 Nov 2026). Each field cleared only its
+    // own, so after saving the delivery fee a FAILED UPI save showed its
+    // error beside the fee's old "Saved." — which read as the UPI ID saved.
+    // A note appears again only for the save that just succeeded.
+    setVpaNote(null);
+    setFeeNote(null);
     try {
       const res = await fetch("/api/social/auto-reply-settings", {
         method: "PATCH",

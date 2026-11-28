@@ -6,12 +6,13 @@
 // three things true; switching it off never needs anything.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { code } from "./helpers/source";
 
 // ---- the owner's session ----------------------------------------------
 let row: Record<string, any>;
 let updates: Record<string, any>[];
+let updateError: any = null;
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
@@ -25,7 +26,7 @@ vi.mock("@/lib/supabase/server", () => ({
         single: async () => ({ data: table === "profiles" ? { dealership_id: "d1" } : row, error: null }),
         update: (u: Record<string, any>) => {
           updates.push(u);
-          return { eq: async () => ({ error: null }) };
+          return { eq: async () => ({ error: updateError }) };
         },
       };
       return api;
@@ -33,7 +34,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-import { normaliseShippingFee, normaliseVpa, sellerModeBlocker, SELLER_MODE_TAKES_ORDERS } from "@/lib/dm/sellerMode";
+import { MAX_VPA_LENGTH, normaliseShippingFee, normaliseVpa, sellerModeBlocker, SELLER_MODE_TAKES_ORDERS } from "@/lib/dm/sellerMode";
 import { GET, PATCH } from "@/app/api/social/auto-reply-settings/route";
 
 const patch = async (body: any) => {
@@ -46,6 +47,7 @@ const READY = { instagram_business_id: "17841", seller_upi_vpa: "shop@okhdfcbank
 beforeEach(() => {
   row = { ...READY };
   updates = [];
+  updateError = null;
 });
 
 describe("1. A UPI ID THAT CAN BE PAID", () => {
@@ -62,11 +64,56 @@ describe("1. A UPI ID THAT CAN BE PAID", () => {
     expect(normaliseVpa("s@ybl")).toMatchObject({ ok: false });
   });
 
-  it("THE APP AND THE DATABASE CHECK THE SAME SHAPE — one rule, in two places on purpose", () => {
+  it("THE APP AND THE DATABASE CHECK THE SAME SHAPE AND LENGTH — one rule, in two places on purpose", () => {
+    // Reads 246, which replaced 242's constraint (28 Nov 2026). Identical
+    // text was never the whole promise: 242's regex was identical in both
+    // places and the DATABASE could not run it. The next test is the guard
+    // that would have caught that.
     const app = code("src/lib/dm/sellerMode.ts").match(/const VPA = \/(.+?)\/;/)?.[1];
-    const db = readFileSync("supabase/migrations/242_seller_mode.sql", "utf8").match(/seller_upi_vpa ~ '(.+?)'/)?.[1];
+    const sql = readFileSync("supabase/migrations/246_seller_upi_vpa_regex.sql", "utf8").replace(/^\s*--.*$/gm, "");
+    const db = sql.match(/seller_upi_vpa ~ '(.+?)'/)?.[1];
     expect(app).toBeTruthy();
     expect(app).toBe(db);
+    expect(sql).toMatch(new RegExp(`char_length\\(seller_upi_vpa\\) <= ${MAX_VPA_LENGTH}`));
+  });
+
+  it("NO REGEX IN ANY MIGRATION USES A REPETITION COUNT POSTGRESQL CANNOT RUN (over 255)", () => {
+    // THE INCIDENT (28 Nov 2026): 242's `{2,256}` passed in JavaScript and
+    // in `create constraint`, and failed on EVERY save — Postgres compiles
+    // a constraint's regex when it is used, and caps a bound at 255
+    // (RE_DUP_MAX). The founder's first UPI ID was refused with "invalid
+    // regular expression: invalid repetition count(s)".
+    const SUPERSEDED: Record<string, string> = {
+      "242_seller_mode.sql": "its dealerships_seller_upi_vpa_format is dropped and re-added by 246 — 2026-11-28",
+    };
+    const offenders: string[] = [];
+    for (const file of readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql"))) {
+      const sql = readFileSync(`supabase/migrations/${file}`, "utf8").replace(/^\s*--.*$/gm, "");
+      for (const m of sql.matchAll(/!?~\*?\s*'((?:[^']|'')*)'/g)) {
+        for (const c of m[1].matchAll(/\{(\d+)(?:,(\d*))?\}/g)) {
+          const big = [c[1], c[2]].filter(Boolean).map(Number).some((n) => n > 255);
+          if (big && !SUPERSEDED[file]) offenders.push(`${file}: ${c[0]} in ${m[1].slice(0, 60)}`);
+        }
+      }
+    }
+    expect(offenders, offenders.join("\n")).toEqual([]);
+    // The allowlist is honest only while 246 really replaces that constraint.
+    const fix = readFileSync("supabase/migrations/246_seller_upi_vpa_regex.sql", "utf8").replace(/^\s*--.*$/gm, "");
+    expect(fix).toMatch(/drop constraint if exists dealerships_seller_upi_vpa_format;\s*alter table dealerships add constraint dealerships_seller_upi_vpa_format/);
+    for (const why of Object.values(SUPERSEDED)) expect(why).toMatch(/20\d\d-\d\d-\d\d/);
+  });
+
+  it("AND THE MEASURE WOULD SEE ONE — a probe with {2,256} is caught", () => {
+    const probe = "check (x ~ '^[a-z]{2,256}$')";
+    const found = [...probe.matchAll(/!?~\*?\s*'((?:[^']|'')*)'/g)].flatMap((m) =>
+      [...m[1].matchAll(/\{(\d+)(?:,(\d*))?\}/g)].filter((c) => [c[1], c[2]].filter(Boolean).map(Number).some((n) => n > 255))
+    );
+    expect(found.length).toBe(1);
+  });
+
+  it("A UPI ID LONGER THAN THE DATABASE ALLOWS IS REFUSED BY THE APP FIRST", () => {
+    expect(normaliseVpa(`${"a".repeat(MAX_VPA_LENGTH)}@ybl`)).toMatchObject({ ok: false, reason: expect.stringContaining("too long") });
+    expect(normaliseVpa(`${"a".repeat(MAX_VPA_LENGTH - 4)}@ybl`)).toMatchObject({ ok: true });
   });
 });
 
@@ -135,6 +182,37 @@ describe("3. THE DASHBOARD", () => {
     const bad = await patch({ upiVpa: "shop axis" });
     expect(bad.status).toBe(400);
     expect(bad.body.error).toMatch(/no spaces/);
+  });
+
+  it("THE CARD CLEARS EVERY 'Saved.' NOTE BEFORE ANY SAVE — a failed UPI save never sits beside the fee's old one", () => {
+    // 28 Nov 2026: the founder saw an error and "Saved." together. save()
+    // already read the server's answer; the "Saved." was the delivery
+    // fee's, left over, because each field cleared only its own note.
+    // There is no DOM test setup here, so the function is read, bounded at
+    // both ends (Rule 8).
+    const src = code("src/components/social/AutoReplySettings.tsx");
+    const start = src.indexOf("async function save(change: Record<string, unknown>): Promise<boolean> {");
+    const end = src.indexOf("async function saveVpa()", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const save = src.slice(start, end);
+    const fetchAt = save.indexOf("await fetch(");
+    expect(save.indexOf("setVpaNote(null);")).toBeGreaterThan(-1);
+    expect(save.indexOf("setFeeNote(null);")).toBeGreaterThan(-1);
+    expect(save.indexOf("setVpaNote(null);")).toBeLessThan(fetchAt);
+    expect(save.indexOf("setFeeNote(null);")).toBeLessThan(fetchAt);
+    // And a note is set only after save() reports success.
+    expect(src).toMatch(/if \(await save\(\{ upiVpa: vpaInput \}\)\) setVpaNote\("Saved\."\);/);
+    expect(src).toMatch(/if \(await save\(\{ shippingFee: feeInput \}\)\) setFeeNote\("Saved\."\);/);
+    expect(save).toMatch(/if \(!res\.ok\) \{\s*setError\([^)]*\);\s*return false;\s*\}/);
+  });
+
+  it("A SAVE THE DATABASE REFUSES SAYS WHICH ONE FAILED, then the cause — and nothing reads as saved", async () => {
+    updateError = { message: "invalid regular expression: invalid repetition count(s)" };
+    const r = await patch({ upiVpa: "shop@okhdfcbank" });
+    expect(r.status).toBe(500);
+    expect(r.body.error).toBe("Your UPI ID wasn't saved: invalid regular expression: invalid repetition count(s)");
+    expect(r.body.success).toBeUndefined();
   });
 
   it("AN INSTAGRAM-ONLY BUSINESS IS CONNECTED — this card used to require a Facebook Page", async () => {

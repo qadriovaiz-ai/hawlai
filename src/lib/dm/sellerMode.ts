@@ -28,8 +28,19 @@ export const SELLER_MODE_TAKES_ORDERS = true;
 /** The columns Seller Mode reads from `dealerships` (migration 242). */
 export const SELLER_MODE_COLUMNS = "instagram_business_id, seller_upi_vpa, dm_auto_reply_enabled, instagram_selling_enabled";
 
-/** The same shape migration 242 checks: user@handle, lower-case. */
-const VPA = /^[a-z0-9._-]{2,256}@[a-z][a-z0-9]{1,63}$/;
+/**
+ * The same shape migration 246 checks: user@handle, lower-case.
+ *
+ * NO LARGE REPETITION COUNT (28 Nov 2026). 242 wrote `{2,256}`, which
+ * JavaScript accepts and PostgreSQL does not — its regex engine caps a
+ * bound at 255 — so the database refused EVERY UPI ID with "invalid
+ * regular expression" while the app approved them. The length cap is a
+ * separate check now, in both places.
+ */
+const VPA = /^[a-z0-9._-]{2,}@[a-z][a-z0-9]{1,63}$/;
+
+/** Migration 246's char_length cap. */
+export const MAX_VPA_LENGTH = 255;
 
 export type VpaResult = { ok: true; vpa: string } | { ok: false; reason: string };
 
@@ -46,6 +57,7 @@ export function normaliseVpa(raw: unknown): VpaResult {
   if (!vpa) return { ok: false, reason: "Enter your UPI ID — it looks like yourname@okhdfcbank." };
   if (/\s/.test(vpa)) return { ok: false, reason: "A UPI ID has no spaces in it." };
   if (!vpa.includes("@")) return { ok: false, reason: "A UPI ID has an @ in it, like yourname@okhdfcbank." };
+  if (vpa.length > MAX_VPA_LENGTH) return { ok: false, reason: "That's too long to be a UPI ID. Copy it from your UPI app — it looks like yourname@okhdfcbank." };
   if (!VPA.test(vpa)) return { ok: false, reason: "That doesn't look like a UPI ID. Copy it from your UPI app — it looks like yourname@okhdfcbank." };
   return { ok: true, vpa };
 }

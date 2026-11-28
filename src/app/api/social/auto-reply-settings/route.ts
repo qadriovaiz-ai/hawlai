@@ -98,6 +98,12 @@ export async function PATCH(request: Request) {
   }
 
   const { error } = await supabase.from("dealerships").update(update).eq("id", dealershipId);
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // SAID IN THE OWNER'S TERMS FIRST (28 Nov 2026): the raw database text
+    // alone ("invalid regular expression…") told the founder nothing about
+    // what had failed. The cause still follows, for whoever fixes it.
+    const what = "seller_upi_vpa" in update ? "Your UPI ID wasn't saved" : "That change wasn't saved";
+    return NextResponse.json({ error: `${what}: ${error.message}` }, { status: 500 });
+  }
   return NextResponse.json({ success: true });
 }
