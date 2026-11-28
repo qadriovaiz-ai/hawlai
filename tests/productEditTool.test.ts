@@ -60,4 +60,14 @@ describe("each field, its own action", () => {
     for (const k of ["new_stock", "new_compare_at_price", "new_category", "visibility"]) expect(props[k], k).toBeTruthy();
     expect(props.visibility.enum).toEqual(["show", "hide"]);
   });
+
+  // CARD CE3B, 28 Nov 2026: new_price stayed required after E1, so a
+  // stock change had to carry a price, and the one-field rule refused it
+  // as two changes. Only the product may be required — every field that
+  // can be changed is optional, or a single-field change is impossible.
+  it("ONLY THE PRODUCT IS REQUIRED — no changeable field may be, or a stock-only call cannot be made", () => {
+    const schema: any = (TOOLS as any[]).find((t) => t.name === "propose_price_change");
+    expect(schema.input_schema.required).toEqual(["product_description"]);
+    expect(schema.description).toMatch(/Pass ONLY the field being changed/);
+  });
 });

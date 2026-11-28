@@ -392,7 +392,7 @@ export const TOOLS = [
     // have to learn a second convention.
     name: "propose_price_change",
     description:
-      "Request a change to one product — its price, name, description, stock, \"was\" price (compare-at), category, or show/hide. Looks in the business's OWN Hawlai storefront first (where most businesses sell), then a connected Shopify store, which supports price only. Ask for ONE field per call: each change gets its own approval card. Nothing changes until the owner approves. When confirming, ALWAYS state the store's currency (returned as store_currency) BEFORE the amounts, e.g. \"Your store's currency is USD ($). Change X from $749.95 to $799.00?\" — the merchant must never see a price without knowing its currency. This NEVER changes the price directly — it resolves which product is meant and shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT. The person decides right there on that card. NEVER tell them to open a page, visit Approvals, or go anywhere else to confirm; the decision is already in front of them. If the product name is ambiguous the tool returns candidates instead of guessing; show them to the person and call this again with the variant_id they choose.",
+      "Request a change to one product — its price, name, description, stock, \"was\" price (compare-at), category, or show/hide. Looks in the business's OWN Hawlai storefront first (where most businesses sell), then a connected Shopify store, which supports price only. Ask for ONE field per call: each change gets its own approval card. Pass ONLY the field being changed and leave every other field out — a stock change needs no price. Nothing changes until the owner approves. When confirming, ALWAYS state the store's currency (returned as store_currency) BEFORE the amounts, e.g. \"Your store's currency is USD ($). Change X from $749.95 to $799.00?\" — the merchant must never see a price without knowing its currency. This NEVER changes the price directly — it resolves which product is meant and shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT. The person decides right there on that card. NEVER tell them to open a page, visit Approvals, or go anywhere else to confirm; the decision is already in front of them. If the product name is ambiguous the tool returns candidates instead of guessing; show them to the person and call this again with the variant_id they choose.",
     input_schema: {
       type: "object",
       properties: {
@@ -435,7 +435,12 @@ export const TOOLS = [
             "Only on a FOLLOW-UP call, after this tool returned candidates and the person picked one. Pass that candidate's variant_id exactly as given. Never invent one.",
         },
       },
-      required: ["product_description", "new_price"],
+      // ONLY THE PRODUCT IS REQUIRED — 28 Nov 2026, card CE3B. E1 added
+      // stock, "was" price, category and show/hide but left new_price
+      // required, so every stock change had to carry a price too, which
+      // the one-field rule then refused as two changes. The chat told
+      // the owner the tool could not change stock on its own.
+      required: ["product_description"],
     },
   },
   {
