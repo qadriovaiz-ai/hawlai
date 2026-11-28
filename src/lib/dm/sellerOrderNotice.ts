@@ -30,6 +30,7 @@
 
 import { sendWhatsAppTemplate } from "@/lib/whatsapp/client";
 import { emitNotification } from "@/lib/notifications/emit";
+import { formatRupees } from "@/lib/payments/upiRequest";
 
 export type SellerOrderNotice = {
   orderId: string;
@@ -75,10 +76,9 @@ export function paymentButtonPayloads(orderId: string): [string, string] {
   return [`pay_yes:${orderId}`, `pay_no:${orderId}`];
 }
 
-/** Rupees the way Indian sellers read them: 1,299 · 1,25,000 · 499.50 */
-export function formatRupees(amount: number): string {
-  return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(amount);
-}
+// One copy, in the payments module: the seller's notice and the
+// customer's payment request must show the same amount the same way.
+export { formatRupees };
 
 /**
  * Tell the seller a new order is waiting for their payment check.

@@ -6679,3 +6679,68 @@ Gates: `tsc` 0, `vitest` 0 (**451 files, 8316 passed**), `next build` 0.
 **UNVERIFIED AGAINST A LIVE SEND.** `order_payment_check` has not been
 submitted or approved yet. Nothing calls `notifySellerOfOrder` yet either:
 the order pieces (O2/O1) will.
+
+
+---
+
+## 2026-11-28 — UPI: the payment request a customer is sent
+
+`src/lib/payments/upiRequest.ts` composes the request, and
+`/api/public/pay/upi-qr/[orderId]` serves its QR. **Three ways to pay, so
+one always works**: the UPI ID and amount as copyable text, a
+`upi://pay` link, and a QR image. Hawlai never holds money: the payee is
+the seller's own saved UPI ID.
+
+### Judgment calls
+
+1. **The order reference is derived, not stored**: `#` plus the first six
+   characters of the order id. Orders have no number column and this
+   needs no migration. Everything a machine acts on (WhatsApp buttons, the
+   QR route) carries the full id, so a clash between two references
+   cannot confuse two orders.
+2. **The link's shape**: `pa`, `pn`, `am` (two decimals), `cu=INR`, `tn`.
+   **`pa` is not percent-encoded** (some UPI apps fail on `%40`; the ID is
+   already format-checked). Spaces are `%20`, never `+`. **No `tr`**: it
+   is meant for merchant accounts, and some apps refuse it on a personal
+   UPI ID. The `#` in the note is encoded, otherwise the rest of the link
+   would be a fragment.
+3. **The QR route is public, and refuses in one voice.** Instagram fetches
+   an image with no session, and the URL holds a random UUID. It serves
+   only an **unpaid, not-cancelled DM order at a business with Seller Mode
+   on and a UPI ID saved**, read at request time. Everything else gets the
+   same 404, so the route cannot be used to learn which ids exist. A
+   failed database read is a 500, never "no such order". **Not cached**:
+   a changed UPI ID must never keep receiving money through a stored
+   image.
+4. **The text never says the payment arrived**, because nothing here can
+   know. It says the seller will check and confirm. Hinglish is the
+   default, as for the DM holding line, with English and Hindi following
+   the owner's setting.
+5. **One new dependency, `qrcode@1.5.4`** (plus `@types/qrcode`), as the
+   plan said. It added no audit findings: the 19 reported were there
+   before.
+6. **`send_upi_request` is NOT registered yet.** This piece composes and
+   serves; it sends nothing. The registry entry, the Instagram image send
+   and the 24-hour check arrive with O1, the code that actually sends,
+   so the "automatic" exception sits beside the send it excuses.
+7. `formatRupees` moved here, and the seller's notice re-exports it. The
+   seller and the customer must see the same amount written the same way.
+
+### Verification
+
+**Fourteen mutations, all caught**: the UPI ID percent-encoded, a zero
+amount allowed, spaces as `+`, the note unencoded, a bad UPI ID passing,
+the QR line shown when no QR is coming, a paid / website / cancelled order
+offered a QR, Seller Mode off still served, a failed read passed off as
+"no order", the QR cached, the signup handle shown as payee, and `tr`
+added to the link.
+
+One test was wrong first, and it was the test: it assumed English as the
+default language, and the product's default is Hinglish. Corrected to
+pass English explicitly and to pin the real default.
+
+Gates: `tsc` 0, `vitest` 0 (**452 files, 8341 passed**), `next build` 0.
+
+**UNVERIFIED LIVE**: whether Instagram makes `upi://` tappable in a DM,
+and how real UPI apps read this exact link and QR. No DM order exists
+yet, so the route answers 404 to everything until O2.
