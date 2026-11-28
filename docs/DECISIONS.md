@@ -7294,3 +7294,31 @@ behind it do.
 
 Gates with every file staged: `tsc` 0, `vitest` 0 (**465 files, 8534
 passed**), `next build` 0. **Unverified live.**
+
+---
+
+## 2026-11-28 — Stats: the order summary by channel, on the Orders tab
+
+`src/lib/orders/summary.ts`, shown at the top of the existing Orders tab
+(no new page): **Website** and **Instagram**, each with orders placed,
+**paid** (count and ₹), **awaiting payment** (count and ₹) and
+**cancelled**.
+
+### Judgment calls
+
+1. **The last 30 days, said on screen.** A total with no period is a
+   number nobody can act on, and "all time" quietly mixes test orders into
+   real ones.
+2. **One meaning per number.** Paid is money the seller has
+   (`payment_status = paid`, not cancelled). **A cash-on-delivery order is
+   "awaiting payment" until the seller marks it paid.** A cancelled order
+   is counted as placed and as cancelled, never as money. An order with no
+   channel is a website order, which is true of every order before
+   migration 242.
+3. **Its own query, over the period**, not the 200 orders the list shows,
+   so the summary is not quietly capped. A summary that can't be read is
+   `null`, the card says so, and the list still shows.
+
+Seven mutations, all caught. **The table itself (UI) has no test**; the
+function and the route do. Gates with every file staged: `tsc` 0, `vitest`
+0 (**466 files, 8541 passed**), `next build` 0.

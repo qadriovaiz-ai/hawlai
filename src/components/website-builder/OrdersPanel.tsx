@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, ClipboardList } from "lucide-react";
 import OrderMessageBox from "./OrderMessageBox";
+import type { ChannelSummary } from "@/lib/orders/summary";
 
 interface Order {
   id: string;
@@ -34,6 +35,9 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function OrdersPanel() {
   const [orders, setOrders] = useState<Order[]>([]);
+  // Stats (28 Nov 2026): undefined while loading, null when it couldn't be read.
+  const [summary, setSummary] = useState<ChannelSummary[] | null | undefined>(undefined);
+  const [summaryDays, setSummaryDays] = useState(30);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -42,7 +46,11 @@ export default function OrdersPanel() {
     setLoading(true);
     fetch("/api/orders")
       .then((r) => r.json())
-      .then((d) => setOrders(d.orders ?? []))
+      .then((d) => {
+        setOrders(d.orders ?? []);
+        setSummary(d.summary ?? null);
+        if (d.summaryDays) setSummaryDays(d.summaryDays);
+      })
       .finally(() => setLoading(false));
   }
   useEffect(load, []);
@@ -79,6 +87,36 @@ export default function OrdersPanel() {
       {orders.length === 0 && <p className="text-xs text-slate-400 text-center py-6">No orders yet — they'll show up here the moment someone checks out on your store.</p>}
 
       {error && <p className="text-xs text-red-500">{error}</p>}
+
+      {/* ORDERS BY CHANNEL — the last N days, said on screen. */}
+      {summary === null && <p className="text-[11px] text-slate-400">The order summary couldn't be loaded just now.</p>}
+      {summary && summary.some((s) => s.orders > 0) && (
+        <div className="border border-slate-200 rounded-lg p-3 space-y-1.5">
+          <p className="text-xs font-semibold text-slate-600">Last {summaryDays} days, by where the order came from</p>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-slate-400 text-left">
+                <th className="font-medium py-1"></th>
+                <th className="font-medium py-1">Orders</th>
+                <th className="font-medium py-1">Paid</th>
+                <th className="font-medium py-1">Awaiting payment</th>
+                <th className="font-medium py-1">Cancelled</th>
+              </tr>
+            </thead>
+            <tbody className="text-slate-700">
+              {summary.map((s) => (
+                <tr key={s.channel}>
+                  <td className="py-1">{s.channel === "instagram" ? "Instagram" : "Website"}</td>
+                  <td className="py-1 tabular-nums">{s.orders}</td>
+                  <td className="py-1 tabular-nums">{s.paidCount} · ₹{s.paidAmount.toLocaleString("en-IN")}</td>
+                  <td className="py-1 tabular-nums">{s.awaitingCount} · ₹{s.awaitingAmount.toLocaleString("en-IN")}</td>
+                  <td className="py-1 tabular-nums">{s.cancelled}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {notice && <p className="text-xs text-green-600">{notice}</p>}
 
       <div className="space-y-2">
