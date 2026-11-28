@@ -83,13 +83,21 @@ describe("1. SCHEDULED WITH THE READ-BACK — at most one a day per customer", (
   it("FOUR HOURS AFTER THE QUOTE, NAMING THE CUSTOMER AND THE QUOTE", async () => {
     expect(await scheduleOrderNudge(db(), { dealershipId: "d1", senderId: "cust-1", readbackSentAt: QUOTED, now: new Date(QUOTED) })).toBe("scheduled");
     const ins = queries.find((q) => q.op === "insert")!;
-    expect(ins.payload).toMatchObject({
+    expect(ins.payload[0]).toMatchObject({
       dealership_id: "d1",
       action_type: NUDGE_ACTION,
       action_details: { sender_id: "cust-1", readback_sent_at: QUOTED },
       scheduled_for: new Date(new Date(QUOTED).getTime() + NUDGE_AFTER_MS).toISOString(),
     });
     expect(NUDGE_AFTER_MS).toBeLessThan(24 * 3600_000);
+    // FU2 rides along (28 Nov 2026): a CARD a day and an hour later.
+    expect(ins.payload[1]).toMatchObject({
+      dealership_id: "d1",
+      action_type: "dm_quote_followup",
+      action_details: { sender_id: "cust-1", readback_sent_at: QUOTED },
+      scheduled_for: new Date(new Date(QUOTED).getTime() + 25 * 3600_000).toISOString(),
+    });
+    expect(ins.payload).toHaveLength(2);
   });
 
   it("NOT AGAIN WHILE ANOTHER FOR THIS CUSTOMER WAS SCHEDULED IN THE LAST DAY", async () => {

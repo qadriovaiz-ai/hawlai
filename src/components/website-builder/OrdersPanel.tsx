@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, ClipboardList } from "lucide-react";
+import OrderMessageBox from "./OrderMessageBox";
 
 interface Order {
   id: string;
@@ -109,6 +110,8 @@ export default function OrdersPanel() {
               {o.payment_status !== "paid" && (o.channel ?? "website") === "website" && (
                 <button onClick={() => markPaid(o.id)} className="text-[10px] text-purple-500 hover:underline">Mark as paid</button>
               )}
+              {/* O5: telling the customer, sent by the seller (key on status so the draft follows it). */}
+              {o.channel === "instagram" && <OrderMessageBox key={`${o.id}:${o.status}`} orderId={o.id} status={o.status} />}
             </div>
           </div>
         ))}

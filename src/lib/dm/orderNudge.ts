@@ -26,6 +26,7 @@ import { sendInstagramDmReply } from "@/lib/instagram/dm";
 import { INSTAGRAM_TOKEN_SELECT, readInstagramToken } from "@/lib/crypto/oauthSecrets";
 import { formatRupees } from "@/lib/payments/upiRequest";
 import { normaliseLanguage, type CopyLanguage } from "@/lib/content/language";
+import { FOLLOW_UP_ACTION, FOLLOW_UP_AFTER_MS } from "@/lib/dm/quoteFollowUp";
 
 export const NUDGE_ACTION = "dm_order_nudge";
 /** Four hours after the read-back: long enough to be a nudge, well inside Meta's 24. */
@@ -66,13 +67,26 @@ export async function scheduleOrderNudge(
       return "skipped";
     }
     if (Array.isArray(recent) && recent.length) return "skipped";
-    const { error } = await supabase.from("agent_tasks").insert({
-      dealership_id: a.dealershipId,
-      action_type: NUDGE_ACTION,
-      action_details: { sender_id: a.senderId, readback_sent_at: a.readbackSentAt },
-      title: "Remind an Instagram customer about the order they were quoted",
-      scheduled_for: new Date(a.now.getTime() + NUDGE_AFTER_MS).toISOString(),
-    });
+    // FU2 rides along (28 Nov 2026): a day and an hour later, a CARD for the
+    // seller — never a send — if the customer is still silent then
+    // (lib/dm/quoteFollowUp.ts). Same once-a-day gate as the nudge.
+    const details = { sender_id: a.senderId, readback_sent_at: a.readbackSentAt };
+    const { error } = await supabase.from("agent_tasks").insert([
+      {
+        dealership_id: a.dealershipId,
+        action_type: NUDGE_ACTION,
+        action_details: details,
+        title: "Remind an Instagram customer about the order they were quoted",
+        scheduled_for: new Date(a.now.getTime() + NUDGE_AFTER_MS).toISOString(),
+      },
+      {
+        dealership_id: a.dealershipId,
+        action_type: FOLLOW_UP_ACTION,
+        action_details: details,
+        title: "Offer the seller a follow-up to a quiet Instagram customer",
+        scheduled_for: new Date(a.now.getTime() + FOLLOW_UP_AFTER_MS).toISOString(),
+      },
+    ]);
     if (error) {
       console.error(`[order-nudge] couldn't schedule: ${error.message}`);
       return "skipped";

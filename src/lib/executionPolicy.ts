@@ -79,6 +79,11 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // Seller Mode FU1 (28 Nov 2026): ONE nudge to a customer quoted and gone
   // quiet, only inside Meta's 24-hour window, at most one a day per
   // customer — the plan's follow-up, within Meta's rule.
+  // Seller Mode O5 + FU2 (28 Nov 2026): a message the SELLER sends an
+  // Instagram customer — from the Orders tab (the owner's own press is the
+  // decision) or by approving a drafted follow-up card. Between 24 hours
+  // and 7 days it carries Meta's HUMAN_AGENT tag; after 7 days, nothing.
+  dm_human_message: { actionType: "send", riskLevel: "high", description: "Send an Instagram customer a message from the seller (order update or follow-up), tagged HUMAN_AGENT after 24 hours", requiresApproval: true },
   dm_order_nudge: { actionType: "send", riskLevel: "medium", description: "Remind an Instagram customer, once, about an order they were quoted and haven't answered", requiresApproval: false },
   dm_order_update: { actionType: "send", riskLevel: "medium", description: "Send an Instagram customer their invoice after the seller confirmed the payment", requiresApproval: false },
   notify_seller_order: { actionType: "send", riskLevel: "low", description: "Tell the seller on WhatsApp about a new Instagram order and ask whether the UPI payment arrived", requiresApproval: false },

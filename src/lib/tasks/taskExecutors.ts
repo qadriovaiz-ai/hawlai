@@ -28,6 +28,12 @@ export const TASK_EXECUTORS: Record<string, TaskExecutor> = {
     const { runOrderNudge } = await import("../dm/orderNudge");
     return runOrderNudge(supabase, task);
   },
+  // Seller Mode FU2 (28 Nov 2026): a day later, a CARD with a drafted
+  // follow-up for the seller to send — never a send itself.
+  dm_quote_followup: async (supabase, task) => {
+    const { runQuoteFollowUp } = await import("../dm/quoteFollowUp");
+    return runQuoteFollowUp(supabase, task);
+  },
   // P1 8a — the first real producer (goal decomposition,
   // goalPlanningAgent.ts) queues these. Saves to the same
   // content_pieces table Content Marketing's own page reads from, same

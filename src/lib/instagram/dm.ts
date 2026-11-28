@@ -17,11 +17,30 @@
 // the webhook is answering a message that just arrived, and the invoice
 // path checks the window itself before calling.
 
-export async function sendInstagramDmReply(accessToken: string, igBusinessId: string, recipientId: string, text: string) {
+/**
+ * `humanAgent` (O5/FU2, 28 Nov 2026): a message the SELLER sends, between
+ * 24 hours and 7 days after the customer's last message — the only thing
+ * Meta allows in that span, tagged HUMAN_AGENT. The Human Agent feature
+ * comes with instagram_business_manage_messages (per Meta's docs, recorded
+ * in docs/RESEARCH-INSTAGRAM-DM-SELLING.md). UNVERIFIED against the live
+ * API. Never set by anything automated: only lib/dm/sellerMessage.ts sets
+ * it, and only for a message a person sent.
+ */
+export async function sendInstagramDmReply(
+  accessToken: string,
+  igBusinessId: string,
+  recipientId: string,
+  text: string,
+  opts: { humanAgent?: boolean } = {}
+) {
   const res = await fetch(`https://graph.instagram.com/v26.0/${igBusinessId}/messages`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ recipient: { id: recipientId }, message: { text } }),
+    body: JSON.stringify({
+      recipient: { id: recipientId },
+      message: { text },
+      ...(opts.humanAgent ? { messaging_type: "MESSAGE_TAG", tag: "HUMAN_AGENT" } : {}),
+    }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error?.message ?? "Failed to send Instagram DM reply");

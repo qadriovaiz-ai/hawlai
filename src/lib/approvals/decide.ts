@@ -575,6 +575,18 @@ export async function applyApprovalDecision(
       record({ note: done.note, orderReference: done.reference, invoice: done.invoice });
     }
 
+    // SELLER MODE FU2 (28 Nov 2026): the seller approves a drafted message
+    // to a customer quiet for over a day. Sent through sellerMessage.ts —
+    // the one place the HUMAN_AGENT tag is set — which re-reads Meta's
+    // window NOW: a card approved on day 8 sends nothing and says why.
+    if (approval?.action_type === "dm_human_message") {
+      const { sendSellerMessage } = await import("@/lib/dm/sellerMessage");
+      const d = approval.action_details as any;
+      const sent = await sendSellerMessage(service, approval.dealership_id, String(d?.sender_id ?? ""), d?.text);
+      if (!sent.ok) return NextResponse.json({ error: sent.error }, { status: sent.status });
+      record({ note: "Sent to the customer on Instagram.", mode: sent.mode });
+    }
+
     if (approval?.action_type === "create_page_draft") {
       const { slugFromQuery, titleFromQuery } = await import("@/lib/opportunities/pageProposal");
       const { legacyToBlocks } = await import("@/lib/blocks/convertLegacy");

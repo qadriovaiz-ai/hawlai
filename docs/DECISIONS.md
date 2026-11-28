@@ -7231,3 +7231,66 @@ real share and one real story reply have been recorded.
 
 Five mutations, all caught. Gates with every file staged: `tsc` 0,
 `vitest` 0 (**463 files, 8507 passed**), `next build` 0.
+
+
+---
+
+## 2026-11-28 — O5 + FU2: messages the seller sends
+
+**One function, `src/lib/dm/sellerMessage.ts`, and Meta's rule decides
+what it may do**, counted from the customer's own last message: within
+24 hours an ordinary message; **24 hours to 7 days only a person's,
+tagged `HUMAN_AGENT`**; after 7 days nothing, and the seller is told to
+use the customer's phone. **It is the only place the tag is set** (a test
+walks `src/`). It is reached only when the seller sent the message
+themselves.
+
+**O5: the Orders tab.** Each Instagram order has "Message customer".
+The server says what Instagram allows now and offers a draft written by
+code for the order's status ("Your order #… has been shipped / delivered.
+Thank you for ordering from …"). The seller reads it, may change it, and
+presses Send. The panel shows the server's answer, never a hope.
+
+**FU2: the follow-up card.** With each read-back, a second task is
+scheduled a day and an hour later. It **sends nothing**. If the customer
+is still silent then, the same quote still waits, Seller Mode is on, the
+window is past 24 hours but not past 7 days, and no such card is already
+waiting, it raises a **`dm_human_message` approval card** with a drafted
+"your order (₹950) is still waiting…". Approving it (dashboard or "haan
+CODE") sends it through `sellerMessage.ts`, which **re-reads the window at
+that moment**: a card approved on day 8 sends nothing and says why.
+
+### Judgment calls
+
+1. **`dm_human_message`: send, high, requires approval.** On the Orders
+   tab the owner pressing Send on their own dashboard is the decision, as
+   with every control there. For FU2 the approval card is the decision.
+2. **Plain drafts in the owner's language**, written by code, with no AI
+   and no numbers beyond the order's own.
+3. **The plan's "unverified" stands**: whether Meta counts a seller's tap
+   on a drafted message as a human agent. The seller sees and sends the
+   exact text, which is the closest honest reading; Meta's review is the
+   answer. The tag's API shape is also unverified live.
+4. **The card is approve-or-reject.** To change the words, the seller
+   rejects it and writes from the Orders tab (for an order) or Instagram
+   itself.
+
+### Verification
+
+Fifteen mutations, all caught: the 7-day limit removed, never tagged,
+always tagged, a closed window still sending, "never wrote" treated as
+open, the transport dropping the tag, a follow-up card inside 24 hours,
+a duplicate waiting card, an unclaimed task, a customer who wrote since,
+the decide.ts branch skipped or reporting a failed send as done, the
+route messaging a website order, the follow-up task not scheduled, and
+the registry entry dropped.
+
+One test was wrong first, and it was the test: its "inside 24 hours" case
+had the customer writing after the quote, which the code rightly reported
+as "written since".
+
+**`OrderMessageBox.tsx` (UI) has no test**; the route and the function
+behind it do.
+
+Gates with every file staged: `tsc` 0, `vitest` 0 (**465 files, 8534
+passed**), `next build` 0. **Unverified live.**

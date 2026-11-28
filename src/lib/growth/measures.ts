@@ -143,6 +143,9 @@ const NOT_COLLECTED: Record<string, Measure> = {
   confirm_dm_payment: { metric: "orders confirmed paid", source: null, direction: "up" },
   // 28 Nov 2026, Seller Mode FU1. NOT COLLECTED: the measure is orders
   // placed after a nudge, which nothing links back to the nudge yet.
+  // 28 Nov 2026, Seller Mode O5/FU2. NOT COLLECTED: whether the customer
+  // answered is in the conversation, which this results job doesn't read.
+  dm_human_message: { metric: "customers who replied to the seller's message", source: null, direction: "up" },
   dm_order_nudge: { metric: "orders placed after a nudge", source: null, direction: "up" },
   dm_order_update: { metric: "invoices delivered", source: null, direction: "up" },
   send_upi_request: { metric: "payment requests that were paid", source: null, direction: "up" },
