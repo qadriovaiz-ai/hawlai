@@ -60,42 +60,34 @@ export async function resolveOrderPricing(
 }
 
 export type BusinessOrderPricingResult =
-  | (Omit<Extract<OrderPricingResult, { ok: true }>, "website"> & { websiteId: string | null })
+  | Omit<Extract<OrderPricingResult, { ok: true }>, "website">
   | { ok: false; status: number; error: string };
 
 /**
- * The same prices, discount and shipping, for an order that did not come
- * through a storefront — an Instagram DM (Seller Mode, O2, 28 November
- * 2026). A business without a website can sell this way, so the
- * business, not a slug, is the key.
+ * The same prices and discount, for an order that did not come through a
+ * storefront — an Instagram DM (Seller Mode, O2, 28 November 2026). A
+ * business without a website can sell this way, so the business, not a
+ * slug, is the key.
  *
- * SHIPPING IS THE BUSINESS'S OWN RULE, read from its website row (one per
- * business — `websites.dealership_id` is unique), published or not: the
- * rule is the seller's setting, not a property of a live page. A business
- * with no website has set no shipping rule, so none is charged — the same
- * answer `computeShippingAmount` gives an unset rule.
- *
- * A FAILED READ IS NOT "NO WEBSITE". Pricing with free shipping because
- * the database hiccuped would quote the customer the wrong total.
+ * SHIPPING IS THE SELLER MODE FLAT FEE, and only that — migration 243,
+ * the founder's decision of 28 November 2026: one number on the Seller
+ * Mode card, added to every DM order, ₹0 meaning free delivery. Not the
+ * website's rules: O2's first version read them, which left a business
+ * without a website at a silent ₹0 and a business with one governed by a
+ * setting on a different screen.
  */
 export async function resolveBusinessOrderPricing(
   supabase: any,
   dealershipId: string,
   items: any[],
-  discountCode?: string | null
+  discountCode: string | null | undefined,
+  flatShippingFee: number
 ): Promise<BusinessOrderPricingResult> {
   if (!Array.isArray(items) || items.length === 0) return { ok: false, status: 400, error: "No items in the order" };
+  if (!Number.isFinite(flatShippingFee) || flatShippingFee < 0) return { ok: false, status: 500, error: "The delivery fee setting isn't a valid amount" };
 
-  const { data: website, error } = await supabase
-    .from("websites")
-    .select("id, shipping_mode, shipping_rate, shipping_free_threshold")
-    .eq("dealership_id", dealershipId)
-    .maybeSingle();
-  if (error) return { ok: false, status: 500, error: "Couldn't read the shipping settings" };
-
-  const priced = await priceItems(supabase, dealershipId, website ?? null, items, discountCode);
-  if (!priced.ok) return priced;
-  return { ...priced, websiteId: website?.id ?? null };
+  const rules = flatShippingFee > 0 ? { shipping_mode: "flat", shipping_rate: flatShippingFee } : { shipping_mode: "free" };
+  return priceItems(supabase, dealershipId, rules, items, discountCode);
 }
 
 type PricedItems =

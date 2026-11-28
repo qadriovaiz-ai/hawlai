@@ -80,7 +80,8 @@ export async function createDmOrder(supabase: any, input: DmOrderInput): Promise
 
   const { data: business, error: businessError } = await supabase
     .from("dealerships")
-    .select(SELLER_MODE_COLUMNS)
+    // seller_shipping_fee: migration 243 — the only delivery charge on a DM order.
+    .select(`${SELLER_MODE_COLUMNS}, seller_shipping_fee`)
     .eq("id", input.dealershipId)
     .maybeSingle();
   if (businessError) return { ok: false, error: "Couldn't read the shop's settings, so no order was placed." };
@@ -88,7 +89,7 @@ export async function createDmOrder(supabase: any, input: DmOrderInput): Promise
   const blocker = sellerModeBlocker(business);
   if (blocker) return { ok: false, error: blocker };
 
-  const pricing = await resolveBusinessOrderPricing(supabase, input.dealershipId, input.items, input.discountCode);
+  const pricing = await resolveBusinessOrderPricing(supabase, input.dealershipId, input.items, input.discountCode, Number(business.seller_shipping_fee ?? 0));
   if (!pricing.ok) return { ok: false, error: pricing.error };
   if (!(pricing.total > 0)) return { ok: false, error: "This order comes to nothing, so there is nothing to pay." };
 
@@ -101,7 +102,8 @@ export async function createDmOrder(supabase: any, input: DmOrderInput): Promise
   const saved = await insertOrder(supabase, {
     id: orderId,
     dealershipId: input.dealershipId,
-    websiteId: pricing.websiteId,
+    // Not from a website, whether or not the business has one.
+    websiteId: null,
     channel: "instagram",
     customer: { name: input.customerName, phone: input.customerPhone, email: input.customerEmail, address: input.shippingAddress },
     pricing: {

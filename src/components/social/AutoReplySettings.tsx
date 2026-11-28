@@ -17,6 +17,7 @@ type Settings = {
   commentEnabled: boolean;
   sellingEnabled: boolean;
   upiVpa: string | null;
+  shippingFee: number;
   instagramConnected: boolean;
   facebookConnected: boolean;
   takesOrders: boolean;
@@ -30,6 +31,8 @@ export default function AutoReplySettings() {
   const [error, setError] = useState<string | null>(null);
   const [vpaInput, setVpaInput] = useState("");
   const [vpaNote, setVpaNote] = useState<string | null>(null);
+  const [feeInput, setFeeInput] = useState("");
+  const [feeNote, setFeeNote] = useState<string | null>(null);
 
   async function load() {
     const d = await fetch("/api/social/auto-reply-settings").then((r) => r.json());
@@ -39,6 +42,7 @@ export default function AutoReplySettings() {
     }
     setS(d);
     setVpaInput(d.upiVpa ?? "");
+    setFeeInput(d.shippingFee ? String(d.shippingFee) : "");
   }
 
   useEffect(() => {
@@ -70,6 +74,11 @@ export default function AutoReplySettings() {
   async function saveVpa() {
     setVpaNote(null);
     if (await save({ upiVpa: vpaInput })) setVpaNote("Saved.");
+  }
+
+  async function saveFee() {
+    setFeeNote(null);
+    if (await save({ shippingFee: feeInput })) setFeeNote("Saved.");
   }
 
   if (loading) return <div className="card p-5 flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading auto-reply settings...</div>;
@@ -136,6 +145,27 @@ export default function AutoReplySettings() {
           </div>
           <p className="text-[11px] text-slate-400">Copy it from your UPI app. Customers' payments go straight to it — check it carefully.</p>
           {vpaNote && <p className="text-xs text-green-600">{vpaNote}</p>}
+        </div>
+
+        {/* Migration 243 — the founder's call: one flat number, not the
+            website builder's shipping system. */}
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium text-slate-600">Delivery fee for DM orders (optional)</p>
+          <div className="flex gap-2">
+            <div className="flex-1 flex items-center gap-1 p-2 text-xs bg-slate-100 border border-slate-300 rounded-lg focus-within:ring-2 focus-within:ring-purple-500">
+              <span className="text-slate-500">₹</span>
+              <input
+                value={feeInput}
+                onChange={(e) => setFeeInput(e.target.value)}
+                inputMode="decimal"
+                placeholder="0"
+                className="flex-1 bg-transparent text-slate-900 focus:outline-none"
+              />
+            </div>
+            <button onClick={saveFee} disabled={saving} className="text-xs px-3 rounded-lg bg-purple-600 text-white disabled:opacity-50">Save</button>
+          </div>
+          <p className="text-[11px] text-slate-400">Added to every Instagram order. Leave it empty for free delivery.</p>
+          {feeNote && <p className="text-xs text-green-600">{feeNote}</p>}
         </div>
 
         <label className="flex items-center justify-between">

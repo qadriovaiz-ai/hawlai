@@ -45,6 +45,29 @@ export function normaliseVpa(raw: unknown): VpaResult {
   return { ok: true, vpa };
 }
 
+/** Migration 243's upper bound, in rupees. */
+export const MAX_SHIPPING_FEE = 100000;
+
+export type FeeResult = { ok: true; fee: number } | { ok: false; reason: string };
+
+/**
+ * The flat delivery fee for DM orders (migration 243, 28 Nov 2026), as
+ * typed, made into rupees — or the reason not.
+ *
+ * EMPTY IS ₹0, free delivery: the founder's default. A "₹" and Indian
+ * comma grouping are accepted because that is how sellers write money
+ * ("₹1,200"). Paise beyond two places, a negative, or text is refused —
+ * never rounded, because the customer is quoted this number.
+ */
+export function normaliseShippingFee(raw: unknown): FeeResult {
+  const text = String(raw ?? "").trim().replace(/^₹\s*/, "").replace(/,/g, "");
+  if (text === "") return { ok: true, fee: 0 };
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) return { ok: false, reason: "Enter the delivery fee in rupees, like 60 or 49.50 — or leave it empty for free delivery." };
+  const fee = Number(text);
+  if (fee > MAX_SHIPPING_FEE) return { ok: false, reason: `A delivery fee can be at most ₹${MAX_SHIPPING_FEE.toLocaleString("en-IN")}.` };
+  return { ok: true, fee };
+}
+
 type Row = Record<string, any> | null | undefined;
 
 /**

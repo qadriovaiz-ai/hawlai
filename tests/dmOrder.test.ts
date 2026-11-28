@@ -17,8 +17,7 @@ vi.mock("@/lib/orderFulfillment", () => ({ applyOrderSideEffects: (...a: any[]) 
 // ---- one business's database -------------------------------------------
 let business: Record<string, any> | null;
 let businessError: any;
-let website: Record<string, any> | null;
-let websiteError: any;
+let tablesRead: string[];
 let products: Record<string, any>[];
 let insertError: any;
 let inserted: Record<string, any>[];
@@ -27,12 +26,12 @@ let writes: { table: string; op: string }[];
 function db() {
   return {
     from: (table: string) => {
+      tablesRead.push(table);
       const api: any = {
         select: () => api,
         eq: () => api,
         in: () => api,
-        maybeSingle: async () =>
-          table === "dealerships" ? { data: business, error: businessError } : { data: website, error: websiteError },
+        maybeSingle: async () => (table === "dealerships" ? { data: business, error: businessError } : { data: null, error: null }),
         then: (resolve: any) => resolve({ data: table === "products" ? products : [], error: null }),
         insert: (row: Record<string, any>) => {
           writes.push({ table, op: "insert" });
@@ -63,10 +62,9 @@ const INPUT = {
 
 beforeEach(() => {
   sideEffects.mockReset();
-  business = { instagram_business_id: "17841", seller_upi_vpa: "shop@okhdfcbank", dm_auto_reply_enabled: true, instagram_selling_enabled: true };
+  business = { instagram_business_id: "17841", seller_upi_vpa: "shop@okhdfcbank", dm_auto_reply_enabled: true, instagram_selling_enabled: true, seller_shipping_fee: 50 };
   businessError = null;
-  website = { id: "w1", shipping_mode: "flat", shipping_rate: 50, shipping_free_threshold: null };
-  websiteError = null;
+  tablesRead = [];
   products = [{ id: "p1", name: "Clay Mug", price: 450, is_active: true, inventory_count: 5, kind: "product" }];
   insertError = null;
   inserted = [];
@@ -74,13 +72,13 @@ beforeEach(() => {
 });
 
 describe("1. THE ORDER IS WRITTEN — AND NOTHING ELSE HAPPENS", () => {
-  it("AN INSTAGRAM ORDER, UPI, PENDING, `new` — at the catalog's price, with the business's shipping", async () => {
+  it("AN INSTAGRAM ORDER, UPI, PENDING, `new` — at the catalog's price, plus the seller's flat delivery fee", async () => {
     const r = await createDmOrder(db(), INPUT);
     expect(r).toMatchObject({ ok: true, subtotal: 900, shippingAmount: 50, total: 950 });
     expect(inserted.length).toBe(1);
     expect(inserted[0]).toMatchObject({
       dealership_id: "d1",
-      website_id: "w1",
+      website_id: null,
       channel: "instagram",
       payment_method: "upi",
       payment_status: "pending",
@@ -112,18 +110,29 @@ describe("1. THE ORDER IS WRITTEN — AND NOTHING ELSE HAPPENS", () => {
     expect(inserted[0].subtotal).toBe(450);
   });
 
-  it("A BUSINESS WITHOUT A WEBSITE CAN SELL — no website id, no shipping rule, none charged", async () => {
-    website = null;
-    const r = await createDmOrder(db(), INPUT);
-    expect(r).toMatchObject({ ok: true, shippingAmount: 0, total: 900 });
-    expect(inserted[0].website_id).toBeNull();
+  it("A FEE OF ₹0 IS FREE DELIVERY — the founder's default (migration 243)", async () => {
+    business!.seller_shipping_fee = 0;
+    expect(await createDmOrder(db(), INPUT)).toMatchObject({ ok: true, shippingAmount: 0, total: 900 });
   });
 
-  it("A SHIPPING SETTING THAT CAN'T BE READ IS A REFUSAL, never free shipping", async () => {
-    websiteError = { message: "boom" };
-    const r = await createDmOrder(db(), INPUT);
-    expect(r).toEqual({ ok: false, error: "Couldn't read the shipping settings" });
-    expect(inserted).toEqual([]);
+  it("THE FEE IS FLAT — the same on a bigger order, no threshold", async () => {
+    const r = await createDmOrder(db(), { ...INPUT, items: [{ productId: "p1", quantity: 5 }] });
+    expect(r).toMatchObject({ ok: true, subtotal: 2250, shippingAmount: 50, total: 2300 });
+  });
+
+  it("THE WEBSITE'S SHIPPING RULES ARE NOT READ — the Seller Mode fee is the only one", async () => {
+    await createDmOrder(db(), INPUT);
+    expect(tablesRead).not.toContain("websites");
+  });
+
+  it("A FEE THAT ISN'T A VALID AMOUNT REFUSES THE ORDER, never prices it as free", async () => {
+    for (const bad of [-5, "abc"]) {
+      business!.seller_shipping_fee = bad;
+      inserted = [];
+      const r = await createDmOrder(db(), INPUT);
+      expect(r, String(bad)).toEqual({ ok: false, error: "The delivery fee setting isn't a valid amount" });
+      expect(inserted).toEqual([]);
+    }
   });
 });
 

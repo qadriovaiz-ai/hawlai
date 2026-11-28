@@ -1,13 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { normaliseVpa, sellerModeBlocker, SELLER_MODE_COLUMNS, SELLER_MODE_TAKES_ORDERS } from "@/lib/dm/sellerMode";
+import { normaliseShippingFee, normaliseVpa, sellerModeBlocker, SELLER_MODE_COLUMNS, SELLER_MODE_TAKES_ORDERS } from "@/lib/dm/sellerMode";
 
 async function getDealership(supabase: any, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("dealership_id").eq("id", userId).single();
   return profile?.dealership_id as string | undefined;
 }
 
-const COLUMNS = `fb_page_id, comment_auto_reply_enabled, ${SELLER_MODE_COLUMNS}`;
+// seller_shipping_fee is migration 243, read here and by createDmOrder only.
+const COLUMNS = `fb_page_id, comment_auto_reply_enabled, seller_shipping_fee, ${SELLER_MODE_COLUMNS}`;
 
 export async function GET() {
   const supabase = await createClient();
@@ -27,6 +28,7 @@ export async function GET() {
     commentEnabled: dealership?.comment_auto_reply_enabled ?? false,
     sellingEnabled: dealership?.instagram_selling_enabled ?? false,
     upiVpa: dealership?.seller_upi_vpa ?? null,
+    shippingFee: Number(dealership?.seller_shipping_fee ?? 0),
     // EITHER ACCOUNT, F4 (28 Nov 2026). This used to be the Facebook Page
     // alone, so an Instagram-only business could never switch DM
     // auto-reply on — and Seller Mode is for exactly that business.
@@ -71,6 +73,11 @@ export async function PATCH(request: Request) {
       if (!vpa.ok) return NextResponse.json({ error: vpa.reason }, { status: 400 });
       update.seller_upi_vpa = vpa.vpa;
     }
+  }
+  if (body.shippingFee !== undefined) {
+    const fee = normaliseShippingFee(body.shippingFee);
+    if (!fee.ok) return NextResponse.json({ error: fee.reason }, { status: 400 });
+    update.seller_shipping_fee = fee.fee;
   }
   if (typeof body.dmEnabled === "boolean") {
     update.dm_auto_reply_enabled = body.dmEnabled;

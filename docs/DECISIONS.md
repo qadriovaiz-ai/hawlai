@@ -6816,3 +6816,43 @@ columns (plus an explicit `channel: 'website'`, already the default), and
 **a real checkout has not been placed since**. **Before O1**, the live
 `orders` CHECK constraints must be read, to confirm nothing refuses
 `payment_method = 'upi'`. The query is in the report.
+
+
+---
+
+## 2026-11-28 — Seller Mode's delivery fee (migration 243)
+
+**The founder's decision**, after O2 reported that a DM-only seller had
+nowhere to set shipping: no hardcoded ₹0. Instead, **one optional flat fee
+on the Seller Mode card**, default ₹0, and explicitly **not** the website
+builder's shipping system.
+
+`dealerships.seller_shipping_fee` (migration 243, CHECK 0–1,00,000).
+`normaliseShippingFee` accepts what sellers type ("₹1,200", "49.50", empty
+for free delivery) and refuses anything else rather than rounding it,
+because the customer is quoted this number.
+
+### Judgment call: it is the ONLY shipping rule for DM orders
+
+O2's first version read the business's website shipping rules. That gave
+two screens for one decision: a seller with a website would have DM
+shipping set by a page that says nothing about Instagram. **So DM orders
+use the Seller Mode fee, whether or not the business has a website**, and
+the website row is no longer read for them. Website checkout is unchanged.
+A fee that is stored but not a valid amount refuses the order instead of
+pricing it as free.
+
+`seller_shipping_fee` is **not** in `SELLER_MODE_COLUMNS`, so the chat tool
+and the approval path do not read a column they have no use for. It is
+read by the settings route and `createDmOrder` only.
+
+### Verification
+
+Seven mutations, all caught: the fee never charged, a bad fee priced as
+free, three decimals accepted, no ceiling, the card's fee not saved, an
+empty box refused, and the DM order ignoring the stored fee.
+
+Gates: `tsc` 0, `vitest` 0 (**454 files, 8375 passed**), `next build` 0.
+
+**Deployed in two steps**: the code reads the new column, so it waits for
+migration 243.

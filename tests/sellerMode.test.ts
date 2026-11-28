@@ -33,7 +33,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-import { normaliseVpa, sellerModeBlocker, SELLER_MODE_TAKES_ORDERS } from "@/lib/dm/sellerMode";
+import { normaliseShippingFee, normaliseVpa, sellerModeBlocker, SELLER_MODE_TAKES_ORDERS } from "@/lib/dm/sellerMode";
 import { GET, PATCH } from "@/app/api/social/auto-reply-settings/route";
 
 const patch = async (body: any) => {
@@ -139,6 +139,45 @@ describe("3. THE DASHBOARD", () => {
     row = { ...READY, fb_page_id: null };
     const d = await (await GET()).json();
     expect(d).toMatchObject({ connected: true, instagramConnected: true, facebookConnected: false });
+  });
+});
+
+describe("5. THE DELIVERY FEE — migration 243, the founder's call: one flat number", () => {
+  it("EMPTY IS FREE DELIVERY; ₹ AND COMMAS ARE HOW SELLERS WRITE MONEY", () => {
+    expect(normaliseShippingFee("")).toEqual({ ok: true, fee: 0 });
+    expect(normaliseShippingFee(null)).toEqual({ ok: true, fee: 0 });
+    expect(normaliseShippingFee("60")).toEqual({ ok: true, fee: 60 });
+    expect(normaliseShippingFee(" ₹1,200 ")).toEqual({ ok: true, fee: 1200 });
+    expect(normaliseShippingFee("49.50")).toEqual({ ok: true, fee: 49.5 });
+    expect(normaliseShippingFee(75)).toEqual({ ok: true, fee: 75 });
+  });
+
+  it("REFUSED, NEVER ROUNDED — the customer is quoted this number", () => {
+    for (const bad of ["-10", "abc", "12.345", "1e3", "100001"]) {
+      expect(normaliseShippingFee(bad), bad).toMatchObject({ ok: false });
+    }
+    expect(normaliseShippingFee("100000")).toEqual({ ok: true, fee: 100000 });
+  });
+
+  it("THE APP'S CEILING IS THE DATABASE'S", () => {
+    const db = readFileSync("supabase/migrations/243_seller_shipping_fee.sql", "utf8");
+    expect(db).toMatch(/seller_shipping_fee >= 0 and seller_shipping_fee <= 100000/);
+  });
+
+  it("SAVED FROM THE CARD, NORMALISED; A BAD ONE IS REFUSED WITH THE REASON", async () => {
+    await patch({ shippingFee: "₹60" });
+    expect(updates[0]).toEqual({ seller_shipping_fee: 60 });
+    await patch({ shippingFee: "" });
+    expect(updates[1]).toEqual({ seller_shipping_fee: 0 });
+    const bad = await patch({ shippingFee: "free" });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error).toMatch(/delivery fee in rupees/);
+    expect(updates.length).toBe(2);
+  });
+
+  it("AND READ BACK FOR THE CARD", async () => {
+    row = { ...READY, seller_shipping_fee: 49.5 };
+    expect((await (await GET()).json()).shippingFee).toBe(49.5);
   });
 });
 
