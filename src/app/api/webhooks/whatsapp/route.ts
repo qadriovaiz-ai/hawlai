@@ -12,6 +12,8 @@ import { pendingSuggestions } from "@/lib/onboarding/suggestions";
 import { verifyWhatsAppSender, describeWhatsAppRejection, whatsappChallenge } from "@/lib/whatsapp/verifySender";
 import { recordDeliveryStandalone } from "@/lib/webhooks/deliveryLog";
 import { readButtonTaps, handlePaymentTap } from "@/lib/whatsapp/paymentButton";
+import { readPhotoMessages, addProductFromPhoto, readCaption, storeProductPhoto, type PhotoMessage } from "@/lib/whatsapp/photoProduct";
+import { downloadWhatsAppMedia } from "@/lib/whatsapp/metaClient";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 300; // Master Chat's tool loop can take a while, same reasoning as the web route
@@ -279,6 +281,46 @@ async function handleOneTap(phone: string, payload: string, supabase: ReturnType
   }
 }
 
+/**
+ * A product photo from the business's own number — Seller Mode W1, 28 Nov
+ * 2026. The same identity and plan checks a typed message gets: only a
+ * verified owner, and only on a plan with WhatsApp automation. Anyone
+ * else's photo is ignored, not answered.
+ */
+async function handleOnePhoto(photo: PhotoMessage, supabase: ReturnType<typeof createServiceClient>): Promise<void> {
+  try {
+    const { data: dealership } = await supabase
+      .from("dealerships")
+      .select("id")
+      .eq("owner_whatsapp_number", photo.phone)
+      .eq("owner_whatsapp_verified", true)
+      .maybeSingle();
+    if (!dealership) {
+      console.error("[whatsapp] a photo from a number that isn't a verified owner was ignored");
+      return;
+    }
+    const limits = await getDealershipPlanLimits(supabase, dealership.id);
+    if (!hasFeature(limits, "whatsappAutomation")) {
+      await sendWhatsAppText(photo.phone, "Adding products from WhatsApp isn't included in your current plan — add it on the Products tab, or upgrade from the Hawlai dashboard.");
+      return;
+    }
+    const reply = await addProductFromPhoto(
+      {
+        supabase,
+        dealershipId: dealership.id,
+        download: downloadWhatsAppMedia,
+        store: (bytes, mimeType) => storeProductPhoto(supabase, dealership.id, bytes, mimeType),
+        read: (caption) => readCaption(caption, { supabase, dealershipId: dealership.id }),
+      },
+      photo
+    );
+    await sendWhatsAppText(photo.phone, reply);
+  } catch (err: any) {
+    console.error("[whatsapp] photo handling failed:", err?.message ?? err);
+    try { await sendWhatsAppText(photo.phone, "Something went wrong adding that photo — please try again in a moment."); } catch {}
+  }
+}
+
 export async function GET(request: Request) {
   const result = whatsappChallenge(request.url);
   if (!result.ok) {
@@ -351,11 +393,18 @@ export async function POST(request: Request) {
     await handleOneTap(tap.phone, tap.payload, supabase);
   }
 
+  // PRODUCT PHOTOS — Seller Mode W1. Their own parser too: readInbound
+  // still counts an image as skipped (whatsappInbound pins it).
+  const photos = provider === "meta" ? readPhotoMessages(body) : [];
+  for (const photo of photos) {
+    await handleOnePhoto(photo, supabase);
+  }
+
   // WHY NOTHING HAPPENED, recorded rather than guessed at later. An
   // empty read with no explanation is indistinguishable from a
   // provider that never called — which is the hardest WhatsApp report
   // to answer.
-  if (!read.messages.length && !taps.length && read.skipped.length) {
+  if (!read.messages.length && !taps.length && !photos.length && read.skipped.length) {
     await recordDeliveryStandalone({
       source: "whatsapp",
       outcome: "nothing_to_reply_to",

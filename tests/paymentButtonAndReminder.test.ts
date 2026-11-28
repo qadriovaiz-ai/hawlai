@@ -170,7 +170,8 @@ describe("4. THE WEBHOOK READS TAPS SEPARATELY, FROM A VERIFIED OWNER ONLY — c
   });
 
   it("A DELIVERY OF ONLY TAPS IS NOT LOGGED AS 'NOTHING ACTIONABLE'", () => {
-    expect(src).toMatch(/if \(!read\.messages\.length && !taps\.length && read\.skipped\.length\)/);
+    // W1 (28 Nov 2026) added photos to the same rule: a delivery of only photos isn't "nothing" either.
+    expect(src).toMatch(/if \(!read\.messages\.length && !taps\.length && !photos\.length && read\.skipped\.length\)/);
   });
 
   it("AND THE DISPATCHER RUNS THE REMINDER SWEEP AS A FUNCTION, not a fetch", () => {

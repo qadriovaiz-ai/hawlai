@@ -185,6 +185,35 @@ export async function sendWhatsAppTemplate(
   });
 }
 
+/** The photo types and size a product image may be (the Products tab's own limits). */
+export const MEDIA_TYPES = ["image/jpeg", "image/png", "image/webp"];
+export const MAX_MEDIA_BYTES = 5 * 1024 * 1024;
+
+/**
+ * A photo someone sent the business's WhatsApp number — W1, 28 Nov 2026.
+ *
+ * READING, NOT SENDING: two GETs (the media's URL, then its bytes), both
+ * with the WhatsApp token. Meta's media URLs are short-lived and need that
+ * token, so the bytes are fetched here and stored by the caller. Refuses
+ * anything that isn't a JPG, PNG or WEBP under 5MB. UNVERIFIED against
+ * the live API: written from Meta's documented media endpoints.
+ */
+export async function downloadWhatsAppMedia(mediaId: string): Promise<{ bytes: Buffer; mimeType: string }> {
+  if (!/^\d{5,30}$/.test(String(mediaId ?? ""))) throw new Error("That photo couldn't be identified.");
+  const { accessToken } = getConfig();
+  const meta = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${mediaId}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const info = await meta.json().catch(() => null);
+  if (!meta.ok || typeof info?.url !== "string") throw new Error("WhatsApp didn't give the photo.");
+  const mimeType = String(info.mime_type ?? "").split(";")[0].trim();
+  if (!MEDIA_TYPES.includes(mimeType)) throw new Error("Only JPG, PNG or WEBP photos can be used.");
+  if (Number(info.file_size) > MAX_MEDIA_BYTES) throw new Error("The photo is over 5MB.");
+  const file = await fetch(info.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!file.ok) throw new Error("The photo couldn't be downloaded.");
+  const bytes = Buffer.from(await file.arrayBuffer());
+  if (bytes.length > MAX_MEDIA_BYTES) throw new Error("The photo is over 5MB.");
+  return { bytes, mimeType };
+}
+
 export async function sendWhatsAppImage(destination: string, imageUrl: string, caption?: string) {
   // `link` rather than an uploaded media id: the images this product
   // sends already live at a public storage URL, and uploading them

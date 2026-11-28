@@ -7426,3 +7426,45 @@ Nine mutations, all caught. Gates with every file staged: `tsc` 0,
 `vitest` 0 (**468 files, 8569 passed**), `next build` 0. **Unverified
 live**: Instagram's media URL fetched by the AI provider, and the quality
 of the match on real photos.
+
+---
+
+## 2026-11-28 — W1: a product from a photo on WhatsApp
+
+The seller sends a product photo to Hawlai's WhatsApp **from their own
+verified number** (on a plan with WhatsApp automation), with a caption
+like "Red kurta M ₹899 5 pcs". The product is added, **active**, with the
+photo as its image (the same bucket and folder the Products tab uses).
+The seller is told exactly what was added. Photos get **their own parser**
+(`readPhotoMessages`): `readInbound` still counts an image as skipped, as
+`whatsappInbound` pins, and a photo never becomes a Master Chat sentence.
+
+### Judgment calls
+
+1. **The seller's own words, never the model's.** A small AI call reads the
+   caption into name, price and stock. It does not look at the photo and
+   writes no description. `checkAgainstCaption` then accepts the price
+   only if its digits are in the caption, the stock likewise, and the
+   name only if every word is in the caption. **No price, no product**:
+   the seller is told what was missing and what to send. A
+   model-written description could make a claim (like "handmade") that the
+   seller never made.
+2. **Active straight away**, like the chat's `add_product`: the seller
+   asked for it by sending it, and is told exactly what went live.
+3. **Not a second copy**: a product with the same name (case-insensitive)
+   is not added again. A photo that can't be downloaded or stored adds
+   nothing, so a product never ends up without its picture by accident.
+4. `downloadWhatsAppMedia` (two GETs with the WhatsApp token) only reads,
+   and refuses anything that isn't a JPG, PNG or WEBP under 5MB.
+
+### Verification
+
+Eight mutations, all caught: price, name or stock not checked against the
+caption, duplicates added, no caption still added, a photo failure
+ignored, an unverified owner, and no plan check. O3's own test pinning the
+"nothing actionable" condition was updated to include photos, since a
+delivery of only photos isn't "nothing" either.
+
+Gates with every file staged: `tsc` 0, `vitest` 0 (**469 files, 8584
+passed**), `next build` 0. **UNVERIFIED LIVE**: Meta's media download
+endpoints.

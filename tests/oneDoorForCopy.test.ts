@@ -229,6 +229,12 @@ const NOT_COPY: Record<string, string> = {
   // catalog's photos and returns one of the names it was shown (or none)
   // and a confidence. No customer-facing words; the reply that follows is
   // the ordinary guarded path, told the guess must be asked about.
+  // Seller Mode W1, added 2026-11-28. Reads the seller's OWN caption into
+  // name / price / stock; checkAgainstCaption then accepts each value only
+  // if the caption itself contains it. It composes nothing a customer
+  // reads — the product's name is the seller's words.
+  "src/lib/whatsapp/photoProduct.ts":
+    "reads a seller's own photo caption into name, price and stock, each accepted only if the caption itself contains it; writes no words of its own",
   "src/lib/dm/postVision.ts":
     "returns which catalog product a post photo may show, as a name it was given plus a confidence; writes no customer-facing words",
   "src/lib/dm/orderConversation.ts":
