@@ -33,17 +33,24 @@ describe("each field, its own action", () => {
     }
   });
 
-  it("STILL ONE CHANGE PER CARD", () => {
-    expect(tool).toMatch(/if \(askedFields\.length > 1\) \{\s*return \{ error: "One change at a time/);
+  // REPOINTED 28 Nov 2026 (card 8C68), same rule: the refusal moved
+  // after product resolution so a field the product already has is
+  // dropped first (tests/nothingToChangeCard.test.ts). Both stores still
+  // refuse more than one REAL change per card.
+  it("STILL ONE CHANGE PER CARD — on the owner's store and on Shopify", () => {
+    expect(tool).toMatch(/if \(remaining\.length > 1\) return oneAtATime\(remaining\);/);
+    expect(tool).toMatch(/if \(askedFields\.length > 1\) return oneAtATime\(askedFields\);/);
+    expect(tool).toMatch(/const oneAtATime = [\s\S]{0,200}return \{\s*error: `That asks for/);
   });
 
   it("\"none\" CLEARS ONLY THE THREE THAT MAY BE EMPTY — never a price or a name", () => {
     expect(tool).toMatch(/const CLEARABLE = new Set\(\["stock", "compare_price", "category"\]\);/);
-    expect(tool).toMatch(/const cleared = CLEARABLE\.has\(field\) && \/\^\(none\|clear\|remove\|not tracked\|unlimited\)\$\/i\.test\(fieldValue\) \? "" : fieldValue;/);
+    expect(tool).toMatch(/const clearedFrom = \(f: string, v: string\) => \(CLEARABLE\.has\(f\) && \/\^\(none\|clear\|remove\|not tracked\|unlimited\)\$\/i\.test\(v\) \? "" : v\);/);
+    expect(tool).toMatch(/let cleared = clearedFrom\(field, fieldValue\);/);
   });
 
   it("SHOW/HIDE IS ONLY 'show' OR 'hide', AND BECOMES shown/hidden", () => {
-    expect(tool).toMatch(/if \(field === "visibility" && !\/\^\(show\|hide\)\$\/i\.test\(fieldValue\)\) return \{ error:/);
+    expect(tool).toMatch(/if \(askedFields\.some\(\(\[f, v\]\) => f === "visibility" && !\/\^\(show\|hide\)\$\/i\.test\(String\(v\)\.trim\(\)\)\)\) return \{ error:/);
     expect(tool).toMatch(/\{ visibility: \/\^show\$\/i\.test\(fieldValue\) \? "shown" : "hidden" \}/);
   });
 

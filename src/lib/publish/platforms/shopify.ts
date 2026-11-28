@@ -929,6 +929,7 @@ export function createShopifyPlatform(deps: {
           },
           changes,
           warnings,
+          nothingToChange: samePrice(variant.price, nextPrice),
         },
       };
     },

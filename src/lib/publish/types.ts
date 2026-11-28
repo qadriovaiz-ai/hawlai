@@ -218,6 +218,14 @@ export type PreviewDiff = {
    * Not errors. A warning never blocks; it informs the decision.
    */
   warnings: string[];
+  /**
+   * Every change in this preview leaves the value as it already is.
+   * Set by the platform, which alone knows how its values compare
+   * (₹499 and "499.00" are the same price). createPublishAction makes
+   * NO card for it — card 8C68, 28 Nov 2026, asked the owner to approve
+   * ₹499 → ₹499 and the chat then asked him which price was real.
+   */
+  nothingToChange?: boolean;
 };
 
 export type PublishActionRecord = {

@@ -70,12 +70,17 @@ export function approvalCode(id: string): string {
  * one line with its code and what it will do, in the card's own words.
  *
  * Null when the turn made no card.
+ *
+ * THE CARD'S OWN LINE FIRST (8C68, 28 Nov 2026). A product-edit card had
+ * no `confirm`, so WhatsApp printed its label — "Price change
+ * requested" — and the owner was asked to approve without knowing which
+ * product or which numbers. `cardLine` carries the preview's summary.
  */
-export function cardsForWhatsApp(artifacts: { approval?: { id: string } | null; confirm?: string | null; label?: string | null }[]): string | null {
+export function cardsForWhatsApp(artifacts: { approval?: { id: string } | null; cardLine?: string | null; confirm?: string | null; label?: string | null }[]): string | null {
   const cards = (artifacts ?? []).filter((a) => a?.approval?.id);
   if (!cards.length) return null;
   const lines = cards.map((a) => {
-    const what = String(a.confirm || a.label || "the change above").replace(/\s+/g, " ").trim();
+    const what = String(a.cardLine || a.confirm || a.label || "the change above").replace(/\s+/g, " ").trim();
     return `• ${approvalCode(a.approval!.id)}: ${what.length > 300 ? `${what.slice(0, 299)}…` : what}`;
   });
   const code = approvalCode(cards[0].approval!.id);

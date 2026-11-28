@@ -2902,10 +2902,21 @@ export async function executeTool(
         ] as const
       ).filter(([, value]) => asked(value));
       if (askedFields.length === 0) return { error: "Tell me what to change — price, name, description, stock, \"was\" price, category, or show/hide." };
-      if (askedFields.length > 1) {
-        return { error: "One change at a time, so each gets its own approval — ask me for one, then the next." };
-      }
-      const field = askedFields[0][0] as "price" | "name" | "description" | "stock" | "compare_price" | "category" | "visibility";
+      // TWO REAL CHANGES ARE NAMED, NOT JUST REFUSED. Card 8C68, 28 Nov
+      // 2026: the owner asked for stock 20 and the chat re-sent the price
+      // it had already set alongside it. The old refusal ("one change at
+      // a time") named neither field, so the chat dropped the wrong one —
+      // the stock — and made a ₹499 → ₹499 price card instead.
+      const FIELD_WORD = { price: "price", name: "name", description: "description", stock: "stock", compare_price: '"was" price', category: "category", visibility: "show/hide" } as const;
+      const oneAtATime = (fields: readonly (readonly [keyof typeof FIELD_WORD, unknown])[]) => {
+        const words = fields.map(([f]) => FIELD_WORD[f]);
+        return {
+          error: `That asks for ${words.slice(0, -1).join(", ")} and ${words[words.length - 1]} together — each change gets its own approval card. Send ${words[0]} first, then ${words.slice(1).join(", then ")}, one per request.`,
+        };
+      };
+      // Settled once the product is known (a field it already has is
+      // dropped first); until then, the first one asked.
+      let field = askedFields[0][0] as "price" | "name" | "description" | "stock" | "compare_price" | "category" | "visibility";
       const ACTION_FOR_FIELD = {
         price: "update_product_price",
         name: "update_product_name",
@@ -2915,9 +2926,10 @@ export async function executeTool(
         category: "update_product_category",
         visibility: "update_product_visibility",
       } as const;
-      const fieldValue = String(askedFields[0][1] ?? "").trim();
-      const cleared = CLEARABLE.has(field) && /^(none|clear|remove|not tracked|unlimited)$/i.test(fieldValue) ? "" : fieldValue;
-      if (field === "visibility" && !/^(show|hide)$/i.test(fieldValue)) return { error: 'Say "show" or "hide" for visibility.' };
+      let fieldValue = String(askedFields[0][1] ?? "").trim();
+      const clearedFrom = (f: string, v: string) => (CLEARABLE.has(f) && /^(none|clear|remove|not tracked|unlimited)$/i.test(v) ? "" : v);
+      let cleared = clearedFrom(field, fieldValue);
+      if (askedFields.some(([f, v]) => f === "visibility" && !/^(show|hide)$/i.test(String(v).trim()))) return { error: 'Say "show" or "hide" for visibility.' };
 
       // THE BUSINESS'S OWN STORE FIRST. It is the store nearly every
       // Hawlai business sells from, and the one chat lists products
@@ -2948,6 +2960,22 @@ export async function executeTool(
       if (ownMatches.length === 1 || chosenOwn) {
         const product = chosenOwn ?? ownMatches[0];
         const { parseStatedPrice: parseOwnPrice } = await import("../publish/money");
+        // A FIELD ALREADY AT THE ASKED VALUE IS NOT A CHANGE (8C68). It is
+        // dropped before the one-at-a-time check, so "price 499 and stock
+        // 20" on a product already at ₹499 is simply the stock card. Only
+        // when more than one field was asked: a single field goes on to
+        // the pipeline, which refuses a no-op card itself.
+        if (askedFields.length > 1) {
+          const { productAlreadyHas } = await import("../catalog/alreadyHas");
+          const remaining = askedFields.filter(([f, v]) => !productAlreadyHas(product, f, clearedFrom(f, String(v ?? "").trim())));
+          if (remaining.length === 0) {
+            return { nothing_to_change: true, note: `Nothing to change — "${product.name}" already has those values, so no approval card was made.` };
+          }
+          if (remaining.length > 1) return oneAtATime(remaining);
+          field = remaining[0][0];
+          fieldValue = String(remaining[0][1] ?? "").trim();
+          cleared = clearedFrom(field, fieldValue);
+        }
         const ownStated = parseOwnPrice(String(input.new_price ?? ""));
         if (field === "price" && (!ownStated.amount || Number.isNaN(Number(ownStated.amount)) || Number(ownStated.amount) < 0)) {
           return { error: "I couldn't read a price in that — give me an amount, e.g. 999." };
@@ -2979,7 +3007,9 @@ export async function executeTool(
           resolutionPath: chosenOwn ? "user_clarified" : "exact",
           resolutionDetail: { query: phrase, candidateCount: ownMatches.length, matchType: chosenOwn ? "direct" : "exact" },
         });
-        if (!ownCreated.ok) return { error: ownCreated.reason };
+        // Not an error: nothing is wrong, there is just nothing to do — an
+        // error makes the chat apologise and try again (8C68).
+        if (!ownCreated.ok) return ownCreated.nothingToChange ? { nothing_to_change: true, note: ownCreated.reason } : { error: ownCreated.reason };
 
         return {
           success: true,
@@ -3011,6 +3041,7 @@ export async function executeTool(
         const own = await hawlaiStoreProduct(supabase, ctx.id, phrase);
         return { error: own ? hawlaiStorePriceMessage(own) : creds.reason };
       }
+      if (askedFields.length > 1) return oneAtATime(askedFields);
       if (field !== "price") {
         return { error: `Changing a product's ${field} in a connected Shopify store isn't built yet — only price. Change it in Shopify directly.` };
       }
@@ -3122,7 +3153,7 @@ export async function executeTool(
         }
       );
 
-      if (!created.ok) return { error: created.reason };
+      if (!created.ok) return created.nothingToChange ? { nothing_to_change: true, note: created.reason } : { error: created.reason };
 
       return {
         success: true,
@@ -4428,6 +4459,12 @@ export interface Artifact {
    * string that happens to resemble them.
    */
   confirm?: string;
+  /**
+   * One line saying what an approval card does — product and before →
+   * after — for WhatsApp, which has no card to show (8C68, 28 Nov 2026).
+   * Read by cardsForWhatsApp before `confirm` and `label`.
+   */
+  cardLine?: string;
   // "visual" = renders in the side workspace panel (image/website/3d/canvas,
   // unchanged from before). Everything else renders as an inline summary
   // card directly under the assistant's message in the chat feed — the
@@ -5179,10 +5216,19 @@ export function extractArtifact(toolName: string, input: any, result: any): Arti
           ],
         };
       }
+      // No card was made because nothing would change (8C68) — said
+      // plainly, with no approval to offer.
+      if (result.nothing_to_change) return { kind: "record", label: "Nothing to change", summary: String(result.note ?? "") };
       return {
         kind: "record",
         label: result.already_pending ? "Already waiting for approval" : "Price change requested",
         summary: `${result.summary} ${result.note}`,
+        // WHAT WHATSAPP SHOWS beside the card's code. 8C68 reached the
+        // owner as "Price change requested" — no product, no numbers —
+        // because WhatsApp has no card, only this line. The preview's
+        // own summary ("Lavender candle" — Price: ₹999 → ₹499) is the
+        // receipt, so it is what he reads before typing "haan CODE".
+        cardLine: result.summary ? String(result.summary) : undefined,
         // The RESOLVED product, not the phrase they typed. If
         // resolution picked wrongly, this card is where it gets
         // caught — before the owner approves, not after.

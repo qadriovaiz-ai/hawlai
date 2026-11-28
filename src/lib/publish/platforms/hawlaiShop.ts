@@ -246,6 +246,7 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
       // approving is entitled to decide a 40% cut is correct — they are
       // not entitled to be surprised by it.
       const warnings: string[] = [];
+      const nothingToChange = sameValue(field, before, wanted.value);
       if (field === "price") {
         const from = Number(before);
         const to = Number(wanted.value);
@@ -304,6 +305,7 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
           },
           changes,
           warnings,
+          nothingToChange,
         },
       };
     },

@@ -41,7 +41,7 @@ export type CreateInput = {
 
 export type CreateResult =
   | { ok: true; actionId: string; preview: PreviewDiff; approvalId: string | null; alreadyPending?: true }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; nothingToChange?: true };
 
 /**
  * A stable fingerprint of the INTENT.
@@ -268,6 +268,20 @@ export async function createPublishAction(
     publishError("create.preview_failed", { action: draft.id, detail: preview.reason });
     await supabase.from("publish_actions").update({ status: "failed", error: preview.reason }).eq("id", draft.id);
     return { ok: false, reason: preview.reason };
+  }
+
+  // NOTHING WOULD CHANGE, SO NOTHING IS ASKED. Card 8C68, 28 Nov 2026:
+  // the owner was asked to approve a price of ₹499 → ₹499, and the chat
+  // — seeing ₹499 on its own card — then asked him whether the price
+  // was ₹499 or ₹999. A card whose approval does nothing is a question
+  // with no meaning. The draft is kept, marked failed, so the attempt
+  // stays visible; no approval row is created.
+  if (preview.preview.nothingToChange) {
+    const what = preview.preview.target?.title ?? input.targetLabel;
+    const reason = `Nothing to change — "${what}" already has that value, so no approval card was made.`;
+    publishLog("create.nothing_to_change", { action: draft.id, key: input.actionKey, target: input.targetRef });
+    await supabase.from("publish_actions").update({ status: "failed", preview: preview.preview, error: reason }).eq("id", draft.id);
+    return { ok: false, reason, nothingToChange: true };
   }
 
   await supabase
