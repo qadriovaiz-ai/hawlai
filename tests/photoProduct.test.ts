@@ -134,7 +134,9 @@ describe("4. THE WEBHOOK — read with comments stripped", () => {
     const fn = src.slice(start, end);
     expect(fn).toMatch(/\.eq\("owner_whatsapp_number", photo\.phone\)\s*\.eq\("owner_whatsapp_verified", true\)/);
     expect(fn).toMatch(/if \(!dealership\) \{[\s\S]*?return;\s*\}/);
-    expect(fn).toMatch(/if \(!hasFeature\(limits, "whatsappAutomation"\)\) \{[\s\S]*?return;\s*\}\s*const reply = await addProductFromPhoto\(/);
+    // E3 (28 Nov 2026): the reply is now a product added OR a photo
+    // replaced — both still only after the owner and plan checks.
+    expect(fn).toMatch(/if \(!hasFeature\(limits, "whatsappAutomation"\)\) \{[\s\S]*?return;\s*\}\s*const replaceName = photoReplaceName\(photo\.caption\);\s*const reply = replaceName\s*\? await replacePhotoFromWhatsApp\([\s\S]*: await addProductFromPhoto\(/);
   });
 
   it("THE PHOTO GOES WHERE THE PRODUCTS TAB PUTS ITS PHOTOS", () => {

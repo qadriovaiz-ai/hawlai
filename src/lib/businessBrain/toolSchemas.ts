@@ -392,7 +392,7 @@ export const TOOLS = [
     // have to learn a second convention.
     name: "propose_price_change",
     description:
-      "Request a change to one product — its price, name, description, stock, \"was\" price (compare-at), category, or show/hide. Looks in the business's OWN Hawlai storefront first (where most businesses sell), then a connected Shopify store, which supports price only. Ask for ONE field per call: each change gets its own approval card. Pass ONLY the field being changed and leave every other field out — a stock change needs no price. Nothing changes until the owner approves. When confirming, ALWAYS state the store's currency (returned as store_currency) BEFORE the amounts, e.g. \"Your store's currency is USD ($). Change X from $749.95 to $799.00?\" — the merchant must never see a price without knowing its currency. This NEVER changes the price directly — it resolves which product is meant and shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT. The person decides right there on that card. NEVER tell them to open a page, visit Approvals, or go anywhere else to confirm; the decision is already in front of them. If the product name is ambiguous the tool returns candidates instead of guessing; show them to the person and call this again with the variant_id they choose.",
+      "Request a change to one product or service — its price, name, description, stock, \"was\" price (compare-at), category, show/hide, or for a service its duration or booking link. Looks in the business's OWN Hawlai storefront first (where most businesses sell), then a connected Shopify store, which supports price only. Ask for ONE field per call: each change gets its own approval card. Pass ONLY the field being changed and leave every other field out — a stock change needs no price. Nothing changes until the owner approves. When confirming, ALWAYS state the store's currency (returned as store_currency) BEFORE the amounts, e.g. \"Your store's currency is USD ($). Change X from $749.95 to $799.00?\" — the merchant must never see a price without knowing its currency. This NEVER changes the price directly — it resolves which product is meant and shows a preview with Approve / Edit / Reject buttons INLINE IN THE CHAT. The person decides right there on that card. NEVER tell them to open a page, visit Approvals, or go anywhere else to confirm; the decision is already in front of them. If the product name is ambiguous the tool returns candidates instead of guessing; show them to the person and call this again with the variant_id they choose.",
     input_schema: {
       type: "object",
       properties: {
@@ -423,6 +423,14 @@ export const TOOLS = [
         new_category: {
           type: "string",
           description: "The product's category — or 'none' to clear it. Own Hawlai storefront only.",
+        },
+        new_duration_minutes: {
+          type: "string",
+          description: "A SERVICE's length in minutes, e.g. '45' — or 'none' to clear it. Services only, own Hawlai storefront only.",
+        },
+        new_booking_url: {
+          type: "string",
+          description: "Where a SERVICE's Book button sends customers: a full https:// link — or 'none' to use the business's own booking page. Services only, own Hawlai storefront only.",
         },
         visibility: {
           type: "string",

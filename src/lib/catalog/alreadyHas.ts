@@ -16,7 +16,7 @@
 import type { CatalogProduct } from "@/lib/claims/businessFacts";
 import { parseStatedPrice } from "@/lib/publish/money";
 
-export type ProductField = "price" | "name" | "description" | "stock" | "compare_price" | "category" | "visibility";
+export type ProductField = "price" | "name" | "description" | "stock" | "compare_price" | "category" | "visibility" | "duration" | "booking_link";
 
 /** `value` is as asked, already trimmed — "" means "clear it". */
 export function productAlreadyHas(product: CatalogProduct, field: ProductField, value: string): boolean {
@@ -32,6 +32,11 @@ export function productAlreadyHas(product: CatalogProduct, field: ProductField, 
   if (field === "name") return value !== "" && value === (product.name ?? "").trim();
   if (field === "description") return value !== "" && value === (product.description ?? "").trim();
   if (field === "category") return value === (product.category ?? "").trim();
+  if (field === "duration") {
+    if (value === "") return product.durationMinutes == null;
+    return product.durationMinutes != null && Number(value) === product.durationMinutes;
+  }
+  if (field === "booking_link") return value === (product.bookingUrl ?? "").trim();
   if (field === "visibility") {
     if (/^show$/i.test(value)) return product.active === true;
     if (/^hide$/i.test(value)) return product.active === false;

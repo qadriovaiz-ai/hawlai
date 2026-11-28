@@ -149,6 +149,12 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   update_product_compare_price: { actionType: "edit", riskLevel: "high", description: "Set or clear a product's \"was\" price — a discount customers see", requiresApproval: true },
   update_product_category: { actionType: "edit", riskLevel: "medium", description: "Change a product's category in the merchant's own store", requiresApproval: true },
   update_product_visibility: { actionType: "edit", riskLevel: "medium", description: "Show or hide a product in the merchant's own store", requiresApproval: true },
+  // E3, 28 Nov 2026: a photo sent on WhatsApp. Medium — it is the first
+  // thing every customer sees of the product, on the store, in DMs, in ads.
+  // E4, 28 Nov 2026: a service's length, and where its Book button sends a customer.
+  update_product_duration: { actionType: "edit", riskLevel: "medium", description: "Change how long a service in the merchant's own store takes", requiresApproval: true },
+  update_product_booking_url: { actionType: "edit", riskLevel: "medium", description: "Change where a service's Book button sends customers in the merchant's own store", requiresApproval: true },
+  update_product_image: { actionType: "edit", riskLevel: "medium", description: "Replace a product's main photo in the merchant's own store with one they sent", requiresApproval: true },
   update_product_name: { actionType: "edit", riskLevel: "medium", description: "Change a product's public name in the merchant's store", requiresApproval: true },
   update_product_description: { actionType: "edit", riskLevel: "medium", description: "Change a product's public description in the merchant's store", requiresApproval: true },
   publish_post: { actionType: "publish", riskLevel: "high", description: "Publish a post or page to the merchant's live site", requiresApproval: true },

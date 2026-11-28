@@ -157,7 +157,10 @@ export type ActionKey =
   /** Category: organisation only. */
   | "update_product_category"
   /** Show or hide the product — publish/unpublish, its own decision. */
-  | "update_product_visibility";
+  | "update_product_visibility"
+  | "update_product_image"
+  | "update_product_duration"
+  | "update_product_booking_url";
 
 /**
  * One field changing, in terms a person can check.
@@ -414,6 +417,9 @@ export const ALWAYS_REQUIRES_APPROVAL: readonly ActionKey[] = [
   "update_product_compare_price",
   "update_product_category",
   "update_product_visibility",
+  "update_product_image",
+  "update_product_duration",
+  "update_product_booking_url",
 ];
 
 /** Risk classification, for the approval UI and the audit trail. */
@@ -462,4 +468,7 @@ export const ACTION_RISK: Record<ActionKey, RiskLevel> = {
   update_product_category: "medium",
   // Hiding stops sales; showing makes a product public at once.
   update_product_visibility: "medium",
+  update_product_image: "medium",
+  update_product_duration: "medium",
+  update_product_booking_url: "medium",
 };

@@ -216,7 +216,7 @@ describe("approving writes the change — once, and only from the state that was
 });
 
 describe("what this platform claims it can do", () => {
-  it("price, name, description — and since E1 (28 Nov 2026) stock, the \"was\" price, category and show/hide — and nothing it hasn't built", async () => {
+  it("price, name, description — and since E1 (28 Nov 2026) stock, the \"was\" price, category and show/hide; since E3/E4 the main photo and a service's duration and booking link — and nothing it hasn't built", async () => {
     expect(platform().supports).toEqual([
       "update_product_price",
       "update_product_name",
@@ -225,6 +225,9 @@ describe("what this platform claims it can do", () => {
       "update_product_compare_price",
       "update_product_category",
       "update_product_visibility",
+      "update_product_image",
+      "update_product_duration",
+      "update_product_booking_url",
     ]);
     expect(await platform().preview(action({ actionKey: "create_discount_code" }))).toEqual({
       ok: false,

@@ -2888,7 +2888,7 @@ export async function executeTool(
       // join price, name and description — the same tool, pipeline and
       // card. "none" CLEARS the three that may be empty (stock → not
       // tracked, "was" price, category); a cleared value is still asked.
-      const CLEARABLE = new Set(["stock", "compare_price", "category"]);
+      const CLEARABLE = new Set(["stock", "compare_price", "category", "duration", "booking_link"]);
       const asked = (v: unknown) => v !== undefined && v !== null && String(v).trim() !== "";
       const askedFields = (
         [
@@ -2899,6 +2899,8 @@ export async function executeTool(
           ["compare_price", input.new_compare_at_price],
           ["category", input.new_category],
           ["visibility", input.visibility],
+          ["duration", input.new_duration_minutes],
+          ["booking_link", input.new_booking_url],
         ] as const
       ).filter(([, value]) => asked(value));
       if (askedFields.length === 0) return { error: "Tell me what to change — price, name, description, stock, \"was\" price, category, or show/hide." };
@@ -2907,7 +2909,7 @@ export async function executeTool(
       // it had already set alongside it. The old refusal ("one change at
       // a time") named neither field, so the chat dropped the wrong one —
       // the stock — and made a ₹499 → ₹499 price card instead.
-      const FIELD_WORD = { price: "price", name: "name", description: "description", stock: "stock", compare_price: '"was" price', category: "category", visibility: "show/hide" } as const;
+      const FIELD_WORD = { price: "price", name: "name", description: "description", stock: "stock", compare_price: '"was" price', category: "category", visibility: "show/hide", duration: "duration", booking_link: "booking link" } as const;
       const oneAtATime = (fields: readonly (readonly [keyof typeof FIELD_WORD, unknown])[]) => {
         const words = fields.map(([f]) => FIELD_WORD[f]);
         return {
@@ -2916,7 +2918,7 @@ export async function executeTool(
       };
       // Settled once the product is known (a field it already has is
       // dropped first); until then, the first one asked.
-      let field = askedFields[0][0] as "price" | "name" | "description" | "stock" | "compare_price" | "category" | "visibility";
+      let field = askedFields[0][0] as "price" | "name" | "description" | "stock" | "compare_price" | "category" | "visibility" | "duration" | "booking_link";
       const ACTION_FOR_FIELD = {
         price: "update_product_price",
         name: "update_product_name",
@@ -2925,6 +2927,8 @@ export async function executeTool(
         compare_price: "update_product_compare_price",
         category: "update_product_category",
         visibility: "update_product_visibility",
+        duration: "update_product_duration",
+        booking_link: "update_product_booking_url",
       } as const;
       let fieldValue = String(askedFields[0][1] ?? "").trim();
       const clearedFrom = (f: string, v: string) => (CLEARABLE.has(f) && /^(none|clear|remove|not tracked|unlimited)$/i.test(v) ? "" : v);
@@ -2993,7 +2997,11 @@ export async function executeTool(
                     ? { compare_price: cleared === "" ? "" : (parseOwnPrice(cleared).amount ?? cleared) }
                     : field === "category"
                       ? { category: cleared }
-                      : { visibility: /^show$/i.test(fieldValue) ? "shown" : "hidden" };
+                      : field === "duration"
+                        ? { duration: cleared }
+                        : field === "booking_link"
+                          ? { booking_url: cleared }
+                          : { visibility: /^show$/i.test(fieldValue) ? "shown" : "hidden" };
 
         const service = makeService();
         const ownCreated = await createPublishAction(service, createHawlaiShopPlatform({ supabase: service }), {

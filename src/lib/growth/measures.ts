@@ -92,6 +92,9 @@ const NOT_COLLECTED: Record<string, Measure> = {
   update_product_compare_price: { metric: "paid orders of this product", source: null, direction: "up" },
   update_product_category: { metric: "paid orders of this product", source: null, direction: "up" },
   update_product_visibility: { metric: "paid orders of this product", source: null, direction: "up" },
+  update_product_image: { metric: "paid orders of this product", source: null, direction: "up" },
+  update_product_duration: { metric: "bookings of this service", source: null, direction: "up" },
+  update_product_booking_url: { metric: "bookings of this service", source: null, direction: "up" },
   update_product_description: { metric: "paid orders of this product", source: null, direction: "up" },
   // Shopify 3.3. NOT COLLECTED, and the reason is the honest one:
   // the metric that matters is visits to that collection page, and

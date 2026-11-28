@@ -109,7 +109,64 @@ export async function storeProductPhoto(service: any, dealershipId: string, byte
 }
 
 export const ASK_FOR_CAPTION =
-  "Got the photo. To add it as a product, send it again with a caption — the name, price and stock, like: Red kurta M ₹899 5 pcs";
+  "Got the photo. To add it as a product, send it again with a caption — the name, price and stock, like: Red kurta M ₹899 5 pcs. To change an existing product's photo, caption it: photo: <product name>";
+
+/**
+ * E3 (28 Nov 2026): "photo: Clay mug" asks to REPLACE that product's main
+ * photo rather than add a product. The product is named exactly — never
+ * guessed from the picture or from part of a name.
+ */
+export function photoReplaceName(caption: string): string | null {
+  const m = /^\s*photo\s*[:\-–]\s*(.+?)\s*$/i.exec(caption ?? "");
+  const name = m?.[1]?.replace(/\s+/g, " ").trim() ?? "";
+  return name ? name.slice(0, 120) : null;
+}
+
+export type PhotoChangeRequest = (product: { id: string; name: string }, imageUrl: string) => Promise<
+  { ok: true; approvalId: string; summary: string } | { ok: false; reason: string }
+>;
+
+/**
+ * The E3 step: find the ONE product with exactly that name, store the
+ * photo, and ask for approval through the publish pipeline — the same
+ * card, code and "haan CODE" as every other product edit. Nothing on the
+ * product changes until the owner approves.
+ */
+export async function replacePhotoFromWhatsApp(
+  deps: {
+    supabase: any;
+    dealershipId: string;
+    download: (mediaId: string) => Promise<{ bytes: Buffer; mimeType: string }>;
+    store: (bytes: Buffer, mimeType: string) => Promise<string>;
+    requestChange: PhotoChangeRequest;
+    codeFor: (approvalId: string) => string;
+  },
+  photo: PhotoMessage,
+  name: string
+): Promise<string> {
+  const { data, error } = await deps.supabase.from("products").select("id, name").eq("dealership_id", deps.dealershipId);
+  if (error) return "I couldn't read your products just now, so the photo wasn't changed. Please try again.";
+  // EXACT, ignoring only letter case and spacing — "photo: mug" must not
+  // replace the photo of "Clay mug".
+  const wanted = name.toLowerCase();
+  const same = (Array.isArray(data) ? data : []).filter((p: any) => String(p?.name ?? "").replace(/\s+/g, " ").trim().toLowerCase() === wanted);
+  if (same.length === 0) return `No product is called "${name}", so the photo wasn't changed. Send it again with the exact name from your Products tab, like: photo: ${name}`;
+  if (same.length > 1) return `More than one product is called "${name}", so the photo wasn't changed. Rename one on the Products tab, then send it again.`;
+  const product = { id: String(same[0].id), name: String(same[0].name) };
+
+  let imageUrl: string;
+  try {
+    const file = await deps.download(photo.mediaId);
+    imageUrl = await deps.store(file.bytes, file.mimeType);
+  } catch (err: any) {
+    return `The photo couldn't be saved (${err?.message ?? err}), so nothing was changed. Please send it again.`;
+  }
+
+  const asked = await deps.requestChange(product, imageUrl);
+  if (!asked.ok) return `The photo change couldn't be set up (${asked.reason}). Nothing was changed.`;
+  const code = deps.codeFor(asked.approvalId);
+  return `Waiting for your OK:\n• ${code}: ${asked.summary}\n\nReply "haan ${code}" to approve, or "nahi ${code}" to reject. Nothing changes until you do.`;
+}
 
 /**
  * The whole W1 step, given ways to download, store and insert — so it can

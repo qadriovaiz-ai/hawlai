@@ -34,13 +34,14 @@
 //     customer reads, and the card says so.
 
 import { formatMoney } from "../money";
+import { cleanBookingUrl, cleanDuration, formatDuration } from "@/lib/catalog/catalogItem";
 import { publishLog, publishError } from "../log";
 import type { ActionKey, ExecuteResult, FieldChange, PreviewResult, PublishActionRecord, PublishPlatform } from "../types";
 
 /** The Hawlai storefront prices in rupees — there is no per-store currency setting. */
 const CURRENCY = "INR";
 
-type Field = "price" | "name" | "description" | "inventory" | "compare_price" | "category" | "visibility";
+type Field = "price" | "name" | "description" | "inventory" | "compare_price" | "category" | "visibility" | "image" | "duration" | "booking_url";
 
 const FIELD_BY_ACTION: Partial<Record<ActionKey, Field>> = {
   update_product_price: "price",
@@ -50,6 +51,12 @@ const FIELD_BY_ACTION: Partial<Record<ActionKey, Field>> = {
   update_product_compare_price: "compare_price",
   update_product_category: "category",
   update_product_visibility: "visibility",
+  // E3 (28 Nov 2026): a photo sent on WhatsApp replaces the MAIN photo —
+  // the first one, which the store, the DM catalogue and the ads show.
+  update_product_image: "image",
+  // E4 (28 Nov 2026): a SERVICE's length and where its Book button goes.
+  update_product_duration: "duration",
+  update_product_booking_url: "booking_url",
 };
 
 const COLUMN: Record<Field, string> = {
@@ -60,6 +67,9 @@ const COLUMN: Record<Field, string> = {
   compare_price: "compare_at_price",
   category: "category",
   visibility: "is_active",
+  image: "images",
+  duration: "duration_minutes",
+  booking_url: "booking_url",
 };
 
 const LABEL: Record<Field, string> = {
@@ -70,6 +80,9 @@ const LABEL: Record<Field, string> = {
   compare_price: '"Was" price',
   category: "Category",
   visibility: "Shown to customers",
+  image: "Main photo",
+  duration: "Duration",
+  booking_url: "Booking link",
 };
 
 /** Fields compared and written as rupee amounts; "" means none. */
@@ -85,6 +98,9 @@ type ProductRow = {
   inventory_count: number | null;
   compare_at_price: number | string | null;
   category: string | null;
+  kind?: string | null;
+  duration_minutes?: number | null;
+  booking_url?: string | null;
 };
 
 type ReadResult = { ok: true; product: ProductRow | null } | { ok: false; reason: string };
@@ -119,12 +135,15 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
     "update_product_compare_price",
     "update_product_category",
     "update_product_visibility",
+    "update_product_image",
+    "update_product_duration",
+    "update_product_booking_url",
   ];
 
   async function readProduct(dealershipId: string, productId: string): Promise<ReadResult> {
     const { data, error } = await deps.supabase
       .from("products")
-      .select("id, name, price, description, images, is_active, inventory_count, compare_at_price, category")
+      .select("id, name, price, description, images, is_active, inventory_count, compare_at_price, category, kind, duration_minutes, booking_url")
       .eq("id", productId)
       .eq("dealership_id", dealershipId)
       .maybeSingle();
@@ -171,6 +190,22 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
       if (text !== "shown" && text !== "hidden") return { ok: false, reason: 'Say whether to show or hide the product.' };
       return { ok: true, value: text };
     }
+    // The Products tab's own rules (catalogItem), so chat cannot save what
+    // the tab would refuse. "" clears either one.
+    if (field === "duration") {
+      const d = cleanDuration(text === "" ? null : text);
+      if (!d.ok) return { ok: false, reason: "Duration must be a whole number of minutes, up to 24 hours." };
+      return { ok: true, value: d.value == null ? "" : String(d.value) };
+    }
+    if (field === "booking_url") {
+      const b = cleanBookingUrl(text);
+      if (!b.ok) return { ok: false, reason: "The booking link must be a full web address starting with https://" };
+      return { ok: true, value: b.value ?? "" };
+    }
+    if (field === "image") {
+      if (!/^https:\/\/\S+$/.test(text)) return { ok: false, reason: "That photo isn't a stored picture — send it again." };
+      return { ok: true, value: text };
+    }
     if (!text) return { ok: false, reason: `That ${field === "name" ? "name" : "description"} is empty.` };
     if (field === "name" && text.length > 120) return { ok: false, reason: "That product name is too long for a storefront listing (over 120 characters)." };
     return { ok: true, value: text };
@@ -183,6 +218,9 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
     if (field === "compare_price") return product.compare_at_price == null ? "" : String(product.compare_at_price);
     if (field === "category") return product.category ?? "";
     if (field === "visibility") return product.is_active === false ? "hidden" : "shown";
+    if (field === "image") return firstImage(product.images) ?? "";
+    if (field === "duration") return product.duration_minutes == null ? "" : String(product.duration_minutes);
+    if (field === "booking_url") return product.booking_url ?? "";
     return product.description ?? "";
   }
 
@@ -201,6 +239,8 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
     if (field === "compare_price" || field === "inventory") return value === "" ? null : Number(value);
     if (field === "category") return value === "" ? null : value;
     if (field === "visibility") return value === "shown";
+    if (field === "duration") return value === "" ? null : Number(value);
+    if (field === "booking_url") return value === "" ? null : value;
     return value;
   }
 
@@ -209,6 +249,10 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
     if (field === "compare_price") return value === "" ? "none" : formatMoney(value, CURRENCY);
     if (field === "inventory") return value === "" ? "not tracked" : value;
     if (field === "visibility") return value === "shown" ? "shown" : "hidden";
+    // A web address means nothing to the owner; the card shows the photo itself.
+    if (field === "image") return value === "" ? "no photo" : "a photo";
+    if (field === "duration") return value === "" ? "not set" : formatDuration(Number(value)) ?? value;
+    if (field === "booking_url") return value === "" ? "your booking page" : value;
     if (value === "") return "(empty)";
     return `"${value.length > 80 ? `${value.slice(0, 80)}…` : value}"`;
   }
@@ -238,6 +282,11 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
 
       const wanted = requestedValue(field, action.requestedChanges);
       if (!wanted.ok) return { ok: false, reason: wanted.reason };
+
+      // A product is bought, not booked: it has no duration or Book button.
+      if ((field === "duration" || field === "booking_url") && product.kind !== "service") {
+        return { ok: false, reason: `"${product.name}" is a product, not a service — a duration and a booking link are for services.` };
+      }
 
       const before = currentValue(field, product);
       const changes: FieldChange[] = [{ field, before, after: wanted.value }];
@@ -282,6 +331,11 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
         if (field === "visibility") {
           warnings.push(wanted.value === "hidden" ? "Customers won't see it, and orders for it stop." : "It becomes visible and orderable straight away.");
         }
+        if (field === "booking_url" && wanted.value !== "") {
+          warnings.push(`Customers who tap Book will go to ${new URL(wanted.value).host} — check it's the right place.`);
+        }
+        if (field === "booking_url" && wanted.value === "") warnings.push("Without a link, Book goes to your booking page if it is on, otherwise customers see \u201cContact us to book\u201d.");
+        if (field === "image") warnings.push("This becomes the photo customers see first — on your store, in Instagram replies and in ads. Any other photos stay.");
       }
       if (product.is_active === false && field !== "visibility") {
         warnings.push("This product is unpublished — the change won't be visible to customers until you publish it in Website Builder → Products.");
@@ -290,7 +344,10 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
       return {
         ok: true,
         preview: {
-          summary: `"${product.name}" — ${LABEL[field]}: ${shown(field, before)} → ${shown(field, wanted.value)}`,
+          summary:
+            field === "image"
+              ? `"${product.name}" — ${LABEL[field]}: ${before ? "replaced with the photo you sent" : "the photo you sent"}`
+              : `"${product.name}" — ${LABEL[field]}: ${shown(field, before)} → ${shown(field, wanted.value)}`,
           // WHO is being changed, read from the store rather than from
           // the phrase the owner typed. If "the lavender one" resolved to
           // the wrong product, this is the only place it can be caught.
@@ -351,7 +408,12 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
       // and "did it land?" becomes unanswerable.
       publishLog("hawlai_shop.write", { action: action.id, product: product.id, field, from: expected.before, to: expected.after });
 
-      const value = columnValue(field, expected.after);
+      // A new MAIN photo goes first; the other photos stay, in order, and
+      // the replaced one is dropped rather than kept as a second photo.
+      const value =
+        field === "image"
+          ? [expected.after, ...(Array.isArray(product.images) ? product.images : []).filter((u: unknown) => typeof u === "string" && u.trim() && u.trim() !== now)]
+          : columnValue(field, expected.after);
       const { data: updated, error } = await deps.supabase
         .from("products")
         .update({ [COLUMN[field]]: value, updated_at: new Date().toISOString() })

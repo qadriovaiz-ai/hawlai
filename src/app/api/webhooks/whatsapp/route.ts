@@ -5,7 +5,7 @@ import { runMasterBrainChat } from "@/lib/agents/masterBrainV2";
 import { checkAndRecordMessageUsage } from "@/lib/usage/messageLimits";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 import { applyApprovalDecision } from "@/lib/approvals/decide";
-import { describeApproval, cardsForWhatsApp } from "@/lib/whatsapp/approvalReply";
+import { describeApproval, cardsForWhatsApp, approvalCode } from "@/lib/whatsapp/approvalReply";
 import { parseDecision, resolvePending, cannotTell, type Pending } from "@/lib/whatsapp/pendingReply";
 import { pendingSuggestionRows, applySuggestionDecision } from "@/lib/whatsapp/suggestionReply";
 import { pendingSuggestions } from "@/lib/onboarding/suggestions";
@@ -13,7 +13,9 @@ import { verifyWhatsAppSender, describeWhatsAppRejection, whatsappChallenge } fr
 import { recordDeliveryStandalone } from "@/lib/webhooks/deliveryLog";
 import { readButtonTaps, handlePaymentTap } from "@/lib/whatsapp/paymentButton";
 import { rememberInWhatsAppChat } from "@/lib/whatsapp/sessionHistory";
-import { readPhotoMessages, addProductFromPhoto, readCaption, storeProductPhoto, type PhotoMessage } from "@/lib/whatsapp/photoProduct";
+import { readPhotoMessages, addProductFromPhoto, readCaption, storeProductPhoto, photoReplaceName, replacePhotoFromWhatsApp, type PhotoMessage } from "@/lib/whatsapp/photoProduct";
+import { createPublishAction } from "@/lib/publish/create";
+import { createHawlaiShopPlatform } from "@/lib/publish/platforms/hawlaiShop";
 import { downloadWhatsAppMedia } from "@/lib/whatsapp/metaClient";
 import { NextResponse } from "next/server";
 
@@ -332,16 +334,49 @@ async function handleOnePhoto(photo: PhotoMessage, supabase: ReturnType<typeof c
       await sendWhatsAppText(photo.phone, "Adding products from WhatsApp isn't included in your current plan — add it on the Products tab, or upgrade from the Hawlai dashboard.");
       return;
     }
-    const reply = await addProductFromPhoto(
-      {
-        supabase,
-        dealershipId: dealership.id,
-        download: downloadWhatsAppMedia,
-        store: (bytes, mimeType) => storeProductPhoto(supabase, dealership.id, bytes, mimeType),
-        read: (caption) => readCaption(caption, { supabase, dealershipId: dealership.id }),
-      },
-      photo
-    );
+    // E3 (28 Nov 2026): "photo: <exact product name>" replaces that
+    // product's main photo — through the publish pipeline, so it is an
+    // approval card like every other product edit. Any other caption adds
+    // a product, as W1 always did.
+    const replaceName = photoReplaceName(photo.caption);
+    const reply = replaceName
+      ? await replacePhotoFromWhatsApp(
+          {
+            supabase,
+            dealershipId: dealership.id,
+            download: downloadWhatsAppMedia,
+            store: (bytes, mimeType) => storeProductPhoto(supabase, dealership.id, bytes, mimeType),
+            requestChange: async (product, imageUrl) => {
+              const created = await createPublishAction(supabase, createHawlaiShopPlatform({ supabase }), {
+                dealershipId: dealership.id,
+                platform: "hawlai_shop",
+                actionKey: "update_product_image",
+                targetRef: product.id,
+                targetLabel: product.name,
+                requestedChanges: { image: imageUrl },
+                requestedBy: null,
+                resolutionPath: "exact",
+                resolutionDetail: { query: replaceName, candidateCount: 1, matchType: "exact" },
+              });
+              if (!created.ok) return { ok: false, reason: created.reason };
+              if (!created.approvalId) return { ok: false, reason: "no approval card was made" };
+              return { ok: true, approvalId: created.approvalId, summary: created.preview.summary };
+            },
+            codeFor: approvalCode,
+          },
+          photo,
+          replaceName
+        )
+      : await addProductFromPhoto(
+          {
+            supabase,
+            dealershipId: dealership.id,
+            download: downloadWhatsAppMedia,
+            store: (bytes, mimeType) => storeProductPhoto(supabase, dealership.id, bytes, mimeType),
+            read: (caption) => readCaption(caption, { supabase, dealershipId: dealership.id }),
+          },
+          photo
+        );
     await sendWhatsAppText(photo.phone, reply);
     // Remembered like every exchange handled outside the chat (the DD23
     // fix, 28 Nov 2026): the chat must know this product was just added.

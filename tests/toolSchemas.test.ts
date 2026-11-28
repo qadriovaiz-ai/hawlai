@@ -93,7 +93,7 @@ import { code, sourceWithComments } from "./helpers/source";
 // new_category and visibility, and its description names them — the
 // founder asked for any product field to be editable from chat and
 // WhatsApp. Same tool, same one-field-per-card rule. One cache warm.
-const FINGERPRINT = "086bdbfb6fb39a50c3c7497c48bbad7f977c499ea1c3b16eb2c25820a5e08ae2";
+const FINGERPRINT = "3eeccd53c64ae821ad1925b863fff048eac03247e4733b3abb656a9cc1069dee";
 const TOOL_COUNT = 63;
 
 describe("1. ONE DEFINITION, IN ONE PLACE, IN ONE ORDER", () => {

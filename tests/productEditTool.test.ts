@@ -28,6 +28,8 @@ describe("each field, its own action", () => {
       ["compare_price", "update_product_compare_price"],
       ["category", "update_product_category"],
       ["visibility", "update_product_visibility"],
+      ["duration", "update_product_duration"],
+      ["booking_link", "update_product_booking_url"],
     ]) {
       expect(tool, field).toMatch(new RegExp(`\\b${field}: "${action}"`));
     }
@@ -43,8 +45,10 @@ describe("each field, its own action", () => {
     expect(tool).toMatch(/const oneAtATime = [\s\S]{0,200}return \{\s*error: `That asks for/);
   });
 
-  it("\"none\" CLEARS ONLY THE THREE THAT MAY BE EMPTY — never a price or a name", () => {
-    expect(tool).toMatch(/const CLEARABLE = new Set\(\["stock", "compare_price", "category"\]\);/);
+  // E4 (28 Nov 2026) added a service's duration and booking link, which
+  // may also be empty. Still never a price, a name or a description.
+  it("\"none\" CLEARS ONLY THE FIELDS THAT MAY BE EMPTY — never a price or a name", () => {
+    expect(tool).toMatch(/const CLEARABLE = new Set\(\["stock", "compare_price", "category", "duration", "booking_link"\]\);/);
     expect(tool).toMatch(/const clearedFrom = \(f: string, v: string\) => \(CLEARABLE\.has\(f\) && \/\^\(none\|clear\|remove\|not tracked\|unlimited\)\$\/i\.test\(v\) \? "" : v\);/);
     expect(tool).toMatch(/let cleared = clearedFrom\(field, fieldValue\);/);
   });
