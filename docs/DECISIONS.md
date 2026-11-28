@@ -7124,3 +7124,40 @@ passed**), `next build` 0.
 
 **Saving a UPI ID works only once migration 246 has run.** The code is
 safe to deploy before it, since it reads no new column.
+
+
+---
+
+## 2026-11-28 — V1: variants as separate products
+
+**No schema.** A seller with a kurta in two colours and three sizes adds
+six products, named like **"Kurta – Red – M"**, each with its own price
+and stock. `src/lib/catalog/variants.ts` reads the names: the part before
+the first **spaced** separator (` – `, ` - `, ` — `, ` | `, ` / `) is the
+item. So "T-shirt" stays one product.
+
+- **The order flow asks which one.** When a customer names only the item
+  ("ek kurta") and the shop sells two or more of its options, the reply
+  lists them **from the catalog, exactly as spelled** (up to ten), and
+  prices nothing. The order reader is told to return the exact variant
+  when the customer's words pick one, and the bare item when they don't.
+- **The DM reply is told how to read such names**, only when the catalog
+  really has variants: answer an option question **only** from the
+  product with that exact option; never assume an option exists.
+
+### Judgment calls
+
+1. **Two options or none.** An item with a single option ("Vase – Tall")
+   is not a choice, so the customer gets the ordinary "which product?".
+2. **Ten options at most** in the list, so a DM stays readable.
+
+### Verification
+
+Six mutations, all caught: a hyphen inside a word splitting, one product
+counted as a choice, any named product counted as variants, the options
+never listed, the reply never told, and options listed only on a near
+match.
+
+Gates with every file staged: `tsc` 0, `vitest` 0 (**461 files, 8482
+passed**), `next build` 0. **Unverified live**: no business has Seller
+Mode on yet. The founder's live test is waiting on migration 246.

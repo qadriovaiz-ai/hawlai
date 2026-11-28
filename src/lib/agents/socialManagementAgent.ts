@@ -14,6 +14,7 @@ import { getModel } from "../models";
 import { modelForTask } from "../aiTaskRouter";
 import { callClaude, withAiFailure, aiFailureMessage, type AiFailureNote } from "@/lib/ai/claude";
 import { soundRule, normaliseLanguage } from "@/lib/content/language";
+import { hasVariants, VARIANT_NOTE } from "@/lib/catalog/variants";
 
 import { SOCIAL_TASKS, type SocialTaskMeta } from "@/lib/departments/social";
 import { parseModelJson } from "@/lib/ai/modelJson";
@@ -156,6 +157,9 @@ export async function generateAutoReply(
   const catalogContext = productCatalog && productCatalog.length > 0
     ? `\nReal current catalogue (use this for any question about a specific product or service — price, availability, booking):\n${productCatalog.map((p) => `- ${p.name}: ₹${p.price}${p.kind === "service" ? ` (a SERVICE — booked, not bought or shipped${p.durationMinutes ? `, ${formatDuration(p.durationMinutes)}` : ""}; ${p.bookingLink ? `book at ${p.bookingLink}` : "no booking link — offer to help them book in this conversation"})` : p.inventoryCount !== undefined && p.inventoryCount !== null ? (p.inventoryCount > 0 ? ` (in stock)` : ` (out of stock)`) : ""}${p.description ? ` — ${p.description.slice(0, 80)}` : ""}`).join("\n")}`
     : "";
+  // V1 (28 Nov 2026): variants are separate products named "Item – Option".
+  // Told only when the catalog really has them.
+  const variantContext = productCatalog && hasVariants(productCatalog) ? `\n${VARIANT_NOTE}` : "";
 
   // A CUSTOMER'S PRIVATE SITUATION IS NOT AN AUTO-REPLY.
   //
@@ -220,7 +224,7 @@ export async function generateAutoReply(
       messages: [{
         role: "user",
         content: `You are auto-replying as "${dealershipName}", a ${businessCategory} business in India, to a ${channel === "dm" ? "private DM" : "public comment"}.
-${brandContext}${truthBlock(facts, "customer")}${catalogContext}${knowledgeContext}${insightsContext}${personaContext}${historyContext}
+${brandContext}${truthBlock(facts, "customer")}${catalogContext}${variantContext}${knowledgeContext}${insightsContext}${personaContext}${historyContext}
 ${safety}
 Incoming message: "${incomingText}"
 

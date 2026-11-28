@@ -36,6 +36,7 @@ import { callClaude } from "@/lib/ai/claude";
 import { modelForTask } from "@/lib/aiTaskRouter";
 import { parseModelJson } from "@/lib/ai/modelJson";
 import type { CopyLanguage } from "@/lib/content/language";
+import { variantsOf } from "@/lib/catalog/variants";
 import { formatRupees } from "@/lib/payments/upiRequest";
 import { threadBlock, MESSAGING_WINDOW_MS, type DmTurn } from "@/lib/dm/thread";
 import type { BusinessOrderPricingResult, ResolvedOrderItem } from "@/lib/orderPricing";
@@ -123,7 +124,7 @@ export function isNo(text: string): boolean {
 type Lines = Record<
   "askItems" | "askName" | "askPhone" | "badPhone" | "askAddress" | "change" | "cancelled" | "priceMoved" | "notPlaced" | "readbackHead" | "readbackFoot" | "delivery" | "free" | "total" | "nameLabel" | "phoneLabel" | "addressLabel",
   string
-> & { unknown: (name: string) => string; ambiguous: (name: string) => string };
+> & { unknown: (name: string) => string; ambiguous: (name: string) => string; whichOne: (base: string, options: string[]) => string };
 
 const LINES: Record<CopyLanguage, Lines> = {
   english: {
@@ -146,6 +147,7 @@ const LINES: Record<CopyLanguage, Lines> = {
     addressLabel: "Address",
     unknown: (n) => `I couldn't find "${n}" in our catalogue. Could you send the exact product name?`,
     ambiguous: (n) => `We have more than one "${n}". Could you tell me a little more about the one you'd like? The team can also help here.`,
+    whichOne: (b, o) => `Which ${b} would you like?\n${o.map((x) => `• ${x}`).join("\n")}\nSend the one you want.`,
   },
   hinglish: {
     askItems: "Aap kya order karna chahenge? Product ka naam aur kitne chahiye, bata dijiye.",
@@ -167,6 +169,7 @@ const LINES: Record<CopyLanguage, Lines> = {
     addressLabel: "Address",
     unknown: (n) => `"${n}" hamare catalogue mein nahi mila. Product ka exact naam bhej dijiye?`,
     ambiguous: (n) => `Hamare paas "${n}" naam ke ek se zyada products hain. Aap kaunsa chahte hain, thoda aur bata dijiye? Team bhi yahin madad kar sakti hai.`,
+    whichOne: (b, o) => `Aapko kaunsa ${b} chahiye?\n${o.map((x) => `• ${x}`).join("\n")}\nJo chahiye, wo bhej dijiye.`,
   },
   hindi: {
     askItems: "आप क्या ऑर्डर करना चाहेंगे? प्रोडक्ट का नाम और कितने चाहिए, बताइए।",
@@ -188,6 +191,7 @@ const LINES: Record<CopyLanguage, Lines> = {
     addressLabel: "पता",
     unknown: (n) => `"${n}" हमारे कैटलॉग में नहीं मिला। प्रोडक्ट का सही नाम भेजिए?`,
     ambiguous: (n) => `हमारे पास "${n}" नाम के एक से ज़्यादा प्रोडक्ट हैं। आप कौन-सा चाहते हैं, थोड़ा और बताइए? टीम भी यहीं मदद कर सकती है।`,
+    whichOne: (b, o) => `आपको कौन-सा ${b} चाहिए?\n${o.map((x) => `• ${x}`).join("\n")}\nजो चाहिए, वह भेज दीजिए।`,
   },
 };
 
@@ -305,6 +309,16 @@ export async function handleOrderTurn(text: string, deps: OrderTurnDeps): Promis
     if (match.length !== 1) {
       await save({ draft: { ...next, items: next.items.filter((x) => x !== it) } });
       const named = clip(String(it.product ?? ""), 60);
+      // V1 (28 Nov 2026): ONLY THE ITEM WAS NAMED, and it comes in options —
+      // "kurta", when the shop sells "Kurta – Red – M" and "Kurta – Red – L".
+      // The options are listed from the catalog, never guessed at.
+      const options = match.length === 0 ? variantsOf(String(it.product ?? ""), deps.catalog) : [];
+      if (options.length) {
+        return {
+          handled: true,
+          messages: [{ text: L.whichOne(named, options.slice(0, 10).map((p) => p.name)) }],
+        };
+      }
       return {
         handled: true,
         messages: [{ text: match.length === 0 ? L.unknown(named) : L.ambiguous(named) }],
@@ -399,7 +413,7 @@ Order details gathered so far: ${JSON.stringify(input.draft)}${threadBlock(input
 The customer's new message: ${JSON.stringify(input.text)}
 
 intent: "order" if they want to buy, or are giving details for an order (name, phone, address, quantity, a change); "cancel" if they want to cancel the order; "other" for anything else (a question, a greeting).
-items: the FULL list of products they want now, with each product's exact name from the list above and the quantity (1 if not said) — or null if this message doesn't change the items. If they name a product not in the list, give their words as the product.
+items: the FULL list of products they want now, with each product's exact name from the list above and the quantity (1 if not said) — or null if this message doesn't change the items. If they name a product not in the list, give their words as the product. Some products are options of one item, named like "Kurta – Red – M": when their words pick one option, give that exact name; when they name only the item ("a kurta") without saying which, give just the item name ("Kurta").
 name, phone, address: only what THIS message says, else null. Never invent any detail.
 
 Return JSON only: {"intent":"order|cancel|other","items":[{"product":"...","quantity":1}] or null,"name":null,"phone":null,"address":null}`,
