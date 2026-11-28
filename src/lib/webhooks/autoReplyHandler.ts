@@ -18,6 +18,7 @@ import { SELLER_MODE_TAKES_ORDERS } from "@/lib/dm/sellerMode";
 import { handleOrderTurn, type OrderTurn } from "@/lib/dm/orderConversation";
 import { buildOrderTurnDeps } from "@/lib/dm/orderTurnDeps";
 import { describeMessageShape } from "@/lib/dm/messageShape";
+import { fetchCaption, productFromCaption, readPostRef, withPostContext } from "@/lib/dm/postContext";
 // The Instagram transport moved to its own module on 28 Nov 2026 (O4′):
 // the invoice sends through it too.
 import { sendInstagramDmReply, sendInstagramDmImage } from "@/lib/instagram/dm";
@@ -229,10 +230,22 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
   if (dealership.dm_auto_reply_enabled) {
     for (const msgEvent of entry?.messaging ?? []) {
       const senderId = msgEvent?.sender?.id;
-      const text = msgEvent?.message?.text;
+      const rawText = msgEvent?.message?.text;
       if (senderId && !msgEvent?.message?.is_echo) {
         const shape = describeMessageShape(msgEvent?.message);
-        if (shape) (text ? contextShapes : textlessShapes).push(shape);
+        if (shape) (rawText ? contextShapes : textlessShapes).push(shape);
+      }
+      // T1 (28 Nov 2026): A DM THAT POINTS AT A POST — a shared post (no
+      // text) or a story reply ("iska price?"). Its caption is read with
+      // the shop's own token and, when it carries #HawlaiTag: <product>,
+      // the product is named. The reply and the order flow both see it.
+      // Before this, a shared post was skipped and a story reply was
+      // answered as if it pointed at nothing.
+      let text: string | undefined = rawText;
+      const postRef = channel === "instagram" && senderId && !msgEvent?.message?.is_echo ? readPostRef(msgEvent?.message) : null;
+      if (postRef) {
+        const caption = postRef.mediaId ? await fetchCaption(replyToken, postRef.mediaId) : null;
+        text = withPostContext(rawText ?? "", postRef, caption, productFromCaption(caption, catalogItems));
       }
       if (!senderId || !text || msgEvent?.message?.is_echo) continue;
 

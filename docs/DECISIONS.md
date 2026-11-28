@@ -7343,3 +7343,55 @@ real shape.
 
 Two mutations, both caught. Gates with every file staged: `tsc` 0,
 `vitest` 0 (**466 files, 8542 passed**), `next build` 0.
+
+---
+
+## 2026-11-28 — T1: a DM that points at a post
+
+**Built on the two shapes recorded live** from the founder's tests:
+- a shared post arrives as `attachments[ig_post{payload:ig_post_media_id,url}]`, with no text;
+- a story reply arrives as text plus `reply_to{story:id,url}`.
+
+`src/lib/dm/postContext.ts` reads which post or story the DM points at.
+It fetches that post's **caption with the shop's own token**. If the
+caption carries **`#HawlaiTag: <product name>`** matching exactly one
+catalog product (ignoring case and spacing), it names the product. The
+ordinary reply, and the order flow, then read the customer's message as:
+`[The customer shared your Instagram post showing the product "Clay
+Mug".] They sent no message with it.` That text is also what the
+conversation's memory keeps.
+
+**A shared post is answered now.** It used to be skipped. **A story reply
+knows what it replies to.**
+
+### Judgment calls
+
+1. **The tag part of T2 needs no table yet.** The caption is read when the
+   customer asks, so there is no daily sync and no `instagram_media_products`
+   table. T2's remaining value (pre-reading posts, telling the seller
+   about untagged or unknown names) is reconsidered once real use shows
+   whether reading on demand is enough.
+2. **Only the seller's own tag names a product.** No tag, an unknown name,
+   or two products sharing it: the caption is passed on and no product is
+   named. A guess about what a customer pays for is never made. T3
+   (vision) is where an untagged post would be recognised.
+3. **Every failure degrades and none throws.** An expired story, a refused
+   read, or no caption: the customer is still answered, and the reply is
+   told to ask which product. Instagram only: Facebook shares have a
+   different shape that was never recorded.
+4. **The reply is still the ordinary guarded path.** The caption is the
+   shop's own published words, and the claims guard still checks what
+   goes out.
+
+### Verification
+
+Seven mutations. **One survived, and it was equivalent**: a throw on a
+refused read sat inside the `try` whose `catch` returns null, so nothing
+changed. A real mutant on the never-throws guarantee (the `catch`
+rethrowing) was then run and caught. The other six are caught: a share
+not read, a story not read, a malformed id used, an ambiguous tag
+guessed, the handler skipping context, and an echo answered.
+
+Gates with every file staged: `tsc` 0, `vitest` 0 (**467 files, 8558
+passed**), `next build` 0. **UNVERIFIED LIVE**: whether a story's id can be
+read for its caption.

@@ -51,7 +51,7 @@ describe("the webhook records it — read with comments stripped", () => {
     // Widened 28 Nov 2026: a story reply has TEXT and context, and the
     // first version (text-less only) missed it in the founder's test.
     expect(src).toMatch(
-      /if \(senderId && !msgEvent\?\.message\?\.is_echo\) \{\s*const shape = describeMessageShape\(msgEvent\?\.message\);\s*if \(shape\) \(text \? contextShapes : textlessShapes\)\.push\(shape\);\s*\}\s*if \(!senderId \|\| !text \|\| msgEvent\?\.message\?\.is_echo\) continue;/
+      /if \(senderId && !msgEvent\?\.message\?\.is_echo\) \{\s*const shape = describeMessageShape\(msgEvent\?\.message\);\s*if \(shape\) \(rawText \? contextShapes : textlessShapes\)\.push\(shape\);\s*\}[\s\S]*?if \(!senderId \|\| !text \|\| msgEvent\?\.message\?\.is_echo\) continue;/
     );
   });
 
