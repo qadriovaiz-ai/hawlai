@@ -7468,3 +7468,26 @@ delivery of only photos isn't "nothing" either.
 Gates with every file staged: `tsc` 0, `vitest` 0 (**469 files, 8584
 passed**), `next build` 0. **UNVERIFIED LIVE**: Meta's media download
 endpoints.
+
+---
+
+## 2026-11-28 — E2: a card made on WhatsApp can now be approved from WhatsApp
+
+The founder's decisions on `docs/PLAN-INSTAGRAM-STORE-AND-PRODUCT-EDITS.md`:
+**A** a new "Instagram Store" page; **B** dashboard-only, with team members
+allowed (S6 skipped); **C** Policies edit the existing `business_knowledge`
+rows; **D** an approval card for every edit; **E** order E2 → E1 → S1–S5.
+
+**E2 found a gap before any live test.** Chat's `surface` ("whatsapp") is
+used only to label the cost log. So a price change asked for over
+WhatsApp made a card and the reply said to approve it on the card, but
+**WhatsApp shows no card, and the owner had no CODE to type**. "haan
+CODE", built for exactly this, was unreachable. `cardsForWhatsApp` now
+sends, after the reply, one line per card made in that turn: its code
+and what it will do, in the card's own words, plus how to answer. A test
+round-trips the printed code through `parseDecision` and `resolvePending`.
+
+Three mutations, all caught. Gates with every file staged: `tsc` 0,
+`vitest` 0 (**470 files, 8589 passed**), `next build` 0. **The live check
+itself is the founder's**: "<product> ka price <amount> karo" on WhatsApp,
+then the "haan CODE" it gives.

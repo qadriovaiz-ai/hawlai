@@ -59,6 +59,30 @@ export function approvalCode(id: string): string {
 }
 
 /**
+ * The approval cards a chat turn created, as WhatsApp can show them —
+ * E2 of docs/PLAN-INSTAGRAM-STORE-AND-PRODUCT-EDITS.md, 28 Nov 2026.
+ *
+ * THE GAP THIS CLOSES. On the web a card sits in the chat with its
+ * buttons. WhatsApp has no card: the chat's reply ("approve it on the
+ * card") arrived alone, and the owner had no CODE to type — so a price
+ * change asked for over WhatsApp could never be approved from WhatsApp,
+ * though "haan CODE" was built for exactly that. Each card now becomes
+ * one line with its code and what it will do, in the card's own words.
+ *
+ * Null when the turn made no card.
+ */
+export function cardsForWhatsApp(artifacts: { approval?: { id: string } | null; confirm?: string | null; label?: string | null }[]): string | null {
+  const cards = (artifacts ?? []).filter((a) => a?.approval?.id);
+  if (!cards.length) return null;
+  const lines = cards.map((a) => {
+    const what = String(a.confirm || a.label || "the change above").replace(/\s+/g, " ").trim();
+    return `• ${approvalCode(a.approval!.id)}: ${what.length > 300 ? `${what.slice(0, 299)}…` : what}`;
+  });
+  const code = approvalCode(cards[0].approval!.id);
+  return `Waiting for your OK:\n${lines.join("\n")}\n\nReply "haan ${code}" to approve, or "nahi ${code}" to reject. Nothing changes until you do.`;
+}
+
+/**
  * What the owner's message is asking for.
  *
  * DELIBERATELY NARROW. Anything that is not plainly an approval

@@ -5,7 +5,7 @@ import { runMasterBrainChat } from "@/lib/agents/masterBrainV2";
 import { checkAndRecordMessageUsage } from "@/lib/usage/messageLimits";
 import { getDealershipPlanLimits, hasFeature } from "@/lib/plans";
 import { applyApprovalDecision } from "@/lib/approvals/decide";
-import { describeApproval } from "@/lib/whatsapp/approvalReply";
+import { describeApproval, cardsForWhatsApp } from "@/lib/whatsapp/approvalReply";
 import { parseDecision, resolvePending, cannotTell, type Pending } from "@/lib/whatsapp/pendingReply";
 import { pendingSuggestionRows, applySuggestionDecision } from "@/lib/whatsapp/suggestionReply";
 import { pendingSuggestions } from "@/lib/onboarding/suggestions";
@@ -234,6 +234,11 @@ ${result.produced.note}` : ""}`
     await supabase.from("whatsapp_chat_sessions").upsert({ dealership_id: dealership.id, phone_number: phone, history: newHistory, updated_at: new Date().toISOString() }, { onConflict: "phone_number" });
 
     await sendWhatsAppText(phone, result.reply);
+    // E2 (28 Nov 2026): a card made in this turn, shown the way WhatsApp
+    // can — its code, and how to say yes or no. Without it the owner had
+    // nothing to type.
+    const cards = cardsForWhatsApp(result.artifacts as any[]);
+    if (cards) await sendWhatsAppText(phone, cards);
     for (const artifact of result.artifacts) {
       if (artifact.type === "image" && artifact.url) await sendWhatsAppImage(phone, artifact.url, artifact.label);
     }
