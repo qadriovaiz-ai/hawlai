@@ -7208,3 +7208,26 @@ registry entry dropped, and the nudge logged as if the customer wrote.
 
 Gates with every file staged: `tsc` 0, `vitest` 0 (**462 files, 8500
 passed**), `next build` 0. **Unverified live.**
+
+---
+
+## 2026-11-28 — T1, step one: record what a text-less DM looks like
+
+T1 ("a DM that points at a post": a shared post, a story reply) is to be
+built **on a real payload**. The plan says the shape is unverified, and
+the Shopify adapter's four post-launch corrections are why that matters.
+Until now a DM with no text was skipped **silently**, so nothing could
+be checked.
+
+`src/lib/dm/messageShape.ts` describes such a message's **structure** for
+`webhook_deliveries.detail`: attachment types (only short words, so
+anything else prints as `?`), and the **names** of the keys present, for
+example `attachments[share{payload:title,url}]` or `reply_to{story:id,url}`.
+**Never a value**: no URL, id, title, caption or text. A test feeds it
+URLs, ids, captions and an email and asserts none comes out.
+
+**What this does not do: read the post.** T1 itself is built once one
+real share and one real story reply have been recorded.
+
+Five mutations, all caught. Gates with every file staged: `tsc` 0,
+`vitest` 0 (**463 files, 8507 passed**), `next build` 0.

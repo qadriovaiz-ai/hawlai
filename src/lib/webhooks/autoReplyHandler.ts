@@ -17,6 +17,7 @@ import { healthFromFailure } from "@/lib/integrations/healthState";
 import { SELLER_MODE_TAKES_ORDERS } from "@/lib/dm/sellerMode";
 import { handleOrderTurn, type OrderTurn } from "@/lib/dm/orderConversation";
 import { buildOrderTurnDeps } from "@/lib/dm/orderTurnDeps";
+import { describeMessageShape } from "@/lib/dm/messageShape";
 // The Instagram transport moved to its own module on 28 Nov 2026 (O4′):
 // the invoice sends through it too.
 import { sendInstagramDmReply, sendInstagramDmImage } from "@/lib/instagram/dm";
@@ -215,11 +216,19 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
   // Whether any customer message or comment in this entry was actually
   // answered — read at the end to tell "handled" from "nothing to do".
   let handledSomething = false;
+  // T1, step one (28 Nov 2026): the SHAPE of each DM that had no text — a
+  // shared post, a story reply — recorded so T1 is built on a real payload,
+  // not a guess. Types and key names only; never a URL, id or content.
+  const textlessShapes: string[] = [];
 
   if (dealership.dm_auto_reply_enabled) {
     for (const msgEvent of entry?.messaging ?? []) {
       const senderId = msgEvent?.sender?.id;
       const text = msgEvent?.message?.text;
+      if (senderId && !text && !msgEvent?.message?.is_echo) {
+        const shape = describeMessageShape(msgEvent?.message);
+        if (shape) textlessShapes.push(shape);
+      }
       if (!senderId || !text || msgEvent?.message?.is_echo) continue;
 
       // P2 27a-iii — attributes every DM to a real lead (a "DM-only"
@@ -395,8 +404,10 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
   await recordDelivery(supabase, {
     source, entryId, dealershipId: dealership.id,
     outcome: handledSomething ? "handled" : "nothing_to_reply_to",
-    detail: handledSomething
-      ? null
-      : "matched and enabled, but the entry carried no customer message or comment to answer",
+    detail: textlessShapes.length
+      ? `a DM with no text: ${textlessShapes.join(" | ")}`
+      : handledSomething
+        ? null
+        : "matched and enabled, but the entry carried no customer message or comment to answer",
   });
 }
