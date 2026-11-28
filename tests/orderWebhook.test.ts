@@ -6,8 +6,9 @@
 // costs one way to pay, not the payment), and an order whose payment
 // request never arrived is told to the seller.
 //
-// SELLER_MODE_TAKES_ORDERS is false in the product until O3/O4′. It is
-// switched on HERE ONLY, through a mock, to drive the path that will run.
+// SELLER_MODE_TAKES_ORDERS was false in the product until O3/O4′ (true
+// from 28 Nov 2026). It stays mocked on HERE so this file does not depend
+// on that constant either way.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 

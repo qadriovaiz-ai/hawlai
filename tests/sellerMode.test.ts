@@ -78,9 +78,11 @@ describe("2. WHEN IT MAY BE SWITCHED ON", () => {
     expect(sellerModeBlocker(READY)).toBeNull();
   });
 
-  it("ORDER-TAKING IS NOT LIVE YET, and the screen is told so", async () => {
-    expect(SELLER_MODE_TAKES_ORDERS).toBe(false);
-    expect((await (await GET()).json()).takesOrders).toBe(false);
+  it("ORDER-TAKING IS LIVE, and the screen is told so — switched on 28 Nov 2026, after O3/O4′ and migrations 244 + 245", async () => {
+    // Was `false` (F4) until the seller could confirm a payment; this pin
+    // was written to change at exactly this step.
+    expect(SELLER_MODE_TAKES_ORDERS).toBe(true);
+    expect((await (await GET()).json()).takesOrders).toBe(true);
   });
 });
 

@@ -313,8 +313,10 @@ describe("6. THE WEBHOOK RUNS IT ONLY WHEN ORDER-TAKING IS LIVE — read with co
     expect(block).toMatch(/if \(turn\.handled\) \{\s*await sendOrderTurn\(supabase, \{[^}]*turn \}\);\s*handledSomething = true;\s*continue;\s*\}/);
   });
 
-  it("ORDER-TAKING IS STILL OFF — it turns on once the seller can confirm payments (O3/O4′)", async () => {
+  it("ORDER-TAKING IS ON — switched on 28 Nov 2026 once the seller could confirm payments (O3/O4′)", async () => {
+    // The global switch alone takes no orders: the gate above still needs
+    // this business's Seller Mode, its UPI ID and Instagram.
     const { SELLER_MODE_TAKES_ORDERS } = await import("@/lib/dm/sellerMode");
-    expect(SELLER_MODE_TAKES_ORDERS).toBe(false);
+    expect(SELLER_MODE_TAKES_ORDERS).toBe(true);
   });
 });

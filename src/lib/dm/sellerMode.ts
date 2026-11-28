@@ -13,12 +13,17 @@
 /**
  * Is order-taking actually live?
  *
- * FALSE UNTIL THE ORDER PIECES SHIP (O1–O4). The switch and the UPI ID can
- * be saved now, and the screen says plainly that saving them does not yet
+ * FALSE UNTIL THE ORDER PIECES SHIPPED (O1–O4′): the switch and the UPI ID
+ * could be saved, and the screen said plainly that saving them did not yet
  * make Hawlai take orders — a switch that claimed to do something it does
  * not would be the same lie the integration-health work removed.
+ *
+ * TRUE FROM 28 NOVEMBER 2026, once the seller could confirm a payment (O3)
+ * and migrations 244 + 245 were confirmed live. It changes nothing for a
+ * business until that business switches Seller Mode on, saves a UPI ID and
+ * has DM auto-reply on — the webhook checks all three on every message.
  */
-export const SELLER_MODE_TAKES_ORDERS = false;
+export const SELLER_MODE_TAKES_ORDERS = true;
 
 /** The columns Seller Mode reads from `dealerships` (migration 242). */
 export const SELLER_MODE_COLUMNS = "instagram_business_id, seller_upi_vpa, dm_auto_reply_enabled, instagram_selling_enabled";

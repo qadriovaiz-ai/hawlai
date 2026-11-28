@@ -7039,3 +7039,31 @@ Gates **with every new file staged**: `tsc` 0, `vitest` 0 (**460 files,
 `SELLER_MODE_TAKES_ORDERS` is still false. The WhatsApp template is not
 approved, so its button has never been tapped. No business has Seller Mode
 on.
+
+
+---
+
+## 2026-11-28 — Seller Mode takes orders: the switch is on
+
+`SELLER_MODE_TAKES_ORDERS` is now **true**. It was false from F4 until
+the seller could confirm a payment (O3/O4′). It flipped after migrations
+244 and 245 were confirmed live, and after the exact reads the new code
+makes (reminder sweep, draft row, payment card by order id, the claim's
+columns, the settings and webhook column sets) were run read-only against
+the live database without error.
+
+**It changes nothing for any business until that business** switches
+Seller Mode on, saves a UPI ID, has Instagram connected and DM auto-reply
+on. The webhook checks all of these on every message. On the day it
+flipped, **no business had Seller Mode on** and no UPI ID was saved
+(read-only count).
+
+The two tests pinning `false` were written to change at exactly this
+step. They now pin `true`, with the date and the reason.
+
+Gates with every file staged: `tsc` 0, `vitest` 0 (**460 files, 8468
+passed**), `next build` 0.
+
+**UNVERIFIED LIVE until the founder's first test order.** The WhatsApp
+template is still unapproved, so the first test confirms from the
+dashboard card or the Orders tab.
