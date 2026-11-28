@@ -77,6 +77,7 @@ export const TASK_COMPLEXITY: Record<string, TaskComplexity> = {
   call_scoring: "simple", // callScoringAgent.ts's scoreLeadFromCall
   dm_auto_reply: "simple", // socialManagementAgent.ts's generateAutoReply("dm", ...)
   comment_auto_reply: "simple", // generateAutoReply("comment", ...)
+  dm_order_extract: "simple", // src/lib/dm/orderConversation.ts — reads order details out of a DM, writes nothing a customer sees (Seller Mode O1, 28 Nov 2026)
   // whatsappMarketingAgent.ts's WHATSAPP_TASKS — all 7 real keys,
   // uniformly "fast" today (a single flat model choice regardless of
   // task), so all map to simple.

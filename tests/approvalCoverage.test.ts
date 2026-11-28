@@ -364,6 +364,10 @@ describe("the registries stay honest", () => {
       // only to the business's OWN verified WhatsApp number, about its
       // own order. Nobody else receives it.
       "notify_seller_order",
+      // 2026-11-28, Seller Mode O1 — automatic in the owner-approved plan
+      // (Rule 6 rows): sent only after the CUSTOMER's own "yes" to a
+      // read-back of the exact quote; the customer's yes is the approval.
+      "send_upi_request",
     ]);
     const ungated = Object.entries(ACTION_POLICIES)
       .filter(([key, p]) => ["send", "publish", "spend"].includes(p.actionType) && !p.requiresApproval && !EXPLAINED_EXCEPTIONS.has(key))

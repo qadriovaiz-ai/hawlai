@@ -39,6 +39,12 @@ export type DmOrderInput = {
   customerEmail?: string | null;
   items: { productId: string; quantity: number }[];
   discountCode?: string | null;
+  /**
+   * The total the customer said yes to (O1's read-back). When given, an
+   * order whose price has moved since is REFUSED rather than written —
+   * the customer agreed to a number, and a different one is not theirs.
+   */
+  expectedTotal?: number;
 };
 
 export type DmOrderResult =
@@ -53,7 +59,7 @@ export type DmOrderResult =
       shippingAmount: number;
       total: number;
     }
-  | { ok: false; error: string };
+  | { ok: false; error: string; priceChanged?: true };
 
 /** The same minimums the storefront checkout enforces. */
 function customerProblem(i: DmOrderInput): string | null {
@@ -92,6 +98,9 @@ export async function createDmOrder(supabase: any, input: DmOrderInput): Promise
   const pricing = await resolveBusinessOrderPricing(supabase, input.dealershipId, input.items, input.discountCode, Number(business.seller_shipping_fee ?? 0));
   if (!pricing.ok) return { ok: false, error: pricing.error };
   if (!(pricing.total > 0)) return { ok: false, error: "This order comes to nothing, so there is nothing to pay." };
+  if (input.expectedTotal !== undefined && Math.round(pricing.total * 100) !== Math.round(input.expectedTotal * 100)) {
+    return { ok: false, error: "The price changed since the customer confirmed it.", priceChanged: true };
+  }
 
   // THE ID IS CHOSEN HERE so the UPI reference can be written in the same
   // insert — no second write that could fail and leave an order the

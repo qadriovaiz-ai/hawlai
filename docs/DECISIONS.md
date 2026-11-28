@@ -6856,3 +6856,94 @@ Gates: `tsc` 0, `vitest` 0 (**454 files, 8375 passed**), `next build` 0.
 
 **Deployed in two steps**: the code reads the new column, so it waits for
 migration 243.
+
+
+---
+
+## 2026-11-28 — O1: taking an order inside an Instagram DM
+
+`src/lib/dm/orderConversation.ts` gathers the product, quantity, name,
+phone and address over a few messages. It **reads the whole order back**
+with the catalog's prices and the Seller Mode delivery fee, and only the
+customer's own **"yes" to that read-back** places the order (O2's
+`createDmOrder`), sends the UPI payment request (text, then the QR image)
+and tells the seller (WA-T). Anything that is not the order (a question,
+a greeting), or an order step that fails, falls through to the ordinary
+reply, unchanged.
+
+**It is dormant.** The webhook runs it only when `SELLER_MODE_TAKES_ORDERS`
+is true, the channel is Instagram, and the business has Seller Mode on
+and a UPI ID saved. The global switch stays **false** until the seller can
+confirm a payment (O3/O4′). An order nobody can mark paid should not be
+taken.
+
+### Judgment calls
+
+1. **The model reads; code writes.** One small Haiku call
+   (`dm_order_extract`) turns the customer's words into fixed fields, and
+   `readExtraction` accepts that exact shape or nothing. Every message the
+   customer sees in the order flow is written by code from the records.
+   A number in a read-back is never the model's. Listed in `oneDoorForCopy`'s
+   `NOT_COPY` with that reason.
+2. **The claims guard is not run over the read-back.** It exists for words
+   a model wrote. These come from the same request's catalog read and the
+   pricing function the order is written with, and the delivery fee is not
+   in the facts it checks against, so it would strip a true line. The
+   ordinary reply still passes through the guard as before.
+3. **A table, against the plan** — migration 244 `dm_order_drafts`. The
+   plan expected the order to be rebuilt from the message log, which holds
+   only prose. The yes must place **exactly the quote shown**, so that
+   quote is stored as data. One row per conversation; owner may read, only
+   the service client writes.
+4. **A yes places exactly what was shown, once.** It is claimed with a
+   conditional update on `readback_sent_at` before anything is written, so
+   the same yes delivered twice places nothing the second time. The order
+   is re-priced first: if the price moved, the customer gets the new
+   read-back instead. `createDmOrder` refuses a total that differs from
+   the one confirmed (`expectedTotal`), which closes the gap between those
+   two steps.
+5. **"Yes" is the whole message.** "yes but in blue" is a change, read by
+   the model and read back again. It never places the old quote. A yes is
+   never sent to the model.
+6. **A product must match exactly one catalog name** (ignoring case).
+   None: the customer is asked for the exact name. Two products sharing a
+   name: the customer is told there is more than one, and the seller sees
+   it in the log, because that is theirs to fix.
+7. **A conversation quiet for 24 hours starts over**, and an old read-back
+   is not answered by today's yes. The name, phone and address are kept,
+   and they are always read back before anything is placed.
+8. **The webhook sends the text first, then the QR.** A refused image is
+   recorded and the order stands, because the text carries the UPI ID and
+   link. **A payment request that never arrived is told to the seller**:
+   the customer is waiting for a UPI ID nobody sent.
+9. **`send_upi_request`** is registered: send, **high**, automatic. The
+   customer's own yes to the exact quote is the approval, as the plan's
+   Rule 6 rows say. It joins `approvalCoverage`'s explained exceptions.
+10. **The send-and-log block is its own function** (`sendOrderTurn`).
+    `dmConversationMemory` reads the DM loop up to its first log insert,
+    and an inline insert would have come first. The code moved, the guard
+    did not.
+
+### Known limits, said plainly
+
+- **A stock or pricing refusal is in English** whatever the owner's
+  language: it is the pricing function's own message.
+- **One product per line, catalog names only.** No variants (V1).
+- **The QR image send is unverified** against the live Instagram API.
+
+### Verification
+
+**Twenty-one mutations first; one survived (M4).** Matching the first of
+two same-named products passed, because no test had two. A test was
+added, and ambiguity now gets its own message and log note. M4 and two
+mutations on the new branch are all caught. After the send block moved,
+seven handler mutations were re-run, all caught. **Thirty mutations, all
+caught in the end.**
+
+Two tripwires fired and were answered, not loosened: `dmConversationMemory`
+(the code moved) and `oneDoorForCopy` (listed with its reason).
+
+Gates: `tsc` 0, `vitest` 0 (**457 files, 8422 passed**), `next build` 0.
+
+**UNVERIFIED LIVE: all of it.** It cannot run until the global switch is
+on. Migration 244 must be run before then.

@@ -219,6 +219,14 @@ const NOT_COPY: Record<string, string> = {
   // a gender list, a daily budget and an owner-facing summary. It reads
   // an existing campaign's headline and never writes one.
   "src/lib/agents/campaignEditAgent.ts": "changes targeting and budget numbers; writes no copy, only an owner-facing summary",
+  // Seller Mode O1, added 2026-11-28. The model READS a customer's DM
+  // into fixed fields (intent, product names, quantity, name, phone,
+  // address) — readExtraction accepts only that shape. Every message the
+  // customer is sent in the order flow is written by code from the
+  // records (catalog prices, the Seller Mode fee, the pricing function
+  // the order is written with), pinned by tests/orderConversation.
+  "src/lib/dm/orderConversation.ts":
+    "reads an Instagram DM into order fields for code to act on; every message the customer sees is written by code from the records",
 };
 
 describe("every model caller is accounted for", () => {

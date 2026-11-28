@@ -135,6 +135,9 @@ const NOT_COLLECTED: Record<string, Measure> = {
   // 28 November 2026, Seller Mode WA-T. NOT COLLECTED: the notice's job
   // is a seller's answer, and those answers do not exist until O4′
   // records them. When they do, "orders confirmed paid" is the number.
+  // 28 Nov 2026, Seller Mode O1. NOT COLLECTED until O4′ records which
+  // requests the seller confirmed as paid.
+  send_upi_request: { metric: "payment requests that were paid", source: null, direction: "up" },
   notify_seller_order: { metric: "orders the seller confirmed as paid", source: null, direction: "up" },
   auto_reply_dm: { metric: "replies this automation sent", source: null, direction: "up" },
   dm_auto_reply: { metric: "replies this automation sent", source: null, direction: "up" },

@@ -183,6 +183,13 @@ describe("3. AN ORDER THAT IS NOT WHOLE IS NOT WRITTEN", () => {
     expect(inserted).toEqual([]);
   });
 
+  it("A TOTAL THAT MOVED SINCE THE CUSTOMER SAID YES IS REFUSED — O1's read-back", async () => {
+    const r = await createDmOrder(db(), { ...INPUT, expectedTotal: 900 });
+    expect(r).toEqual({ ok: false, error: "The price changed since the customer confirmed it.", priceChanged: true });
+    expect(inserted).toEqual([]);
+    expect(await createDmOrder(db(), { ...INPUT, expectedTotal: 950 })).toMatchObject({ ok: true, total: 950 });
+  });
+
   it("A SAVE THAT FAILS IS SAID, never reported as an order", async () => {
     insertError = { message: "constraint" };
     expect(await createDmOrder(db(), INPUT)).toEqual({ ok: false, error: "The order couldn't be saved." });

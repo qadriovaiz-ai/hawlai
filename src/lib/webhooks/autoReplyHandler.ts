@@ -14,6 +14,10 @@ import { holdingLine } from "@/lib/dm/holdingLine";
 import { shouldSendHoldingLine, tellSellerCustomerIsWaiting } from "@/lib/dm/escalation";
 import { recordAnswerGap } from "@/lib/chat/answerGaps";
 import { healthFromFailure } from "@/lib/integrations/healthState";
+import { SELLER_MODE_TAKES_ORDERS } from "@/lib/dm/sellerMode";
+import { handleOrderTurn, type OrderTurn } from "@/lib/dm/orderConversation";
+import { buildOrderTurnDeps } from "@/lib/dm/orderTurnDeps";
+import { normaliseLanguage } from "@/lib/content/language";
 
 const GRAPH_VERSION = "v19.0";
 
@@ -41,6 +45,74 @@ async function sendInstagramDmReply(accessToken: string, igBusinessId: string, r
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error?.message ?? "Failed to send Instagram DM reply");
+}
+
+// Seller Mode O1 (28 Nov 2026): the UPI QR code, as an image attachment
+// fetched by Instagram from its URL. UNVERIFIED against the live API —
+// written from Meta's documented attachment shape. The payment request's
+// TEXT always goes first and carries the UPI ID and link, so a refused
+// image costs the customer one of three ways to pay, not the payment.
+async function sendInstagramDmImage(accessToken: string, igBusinessId: string, recipientId: string, imageUrl: string) {
+  const res = await fetch(`https://graph.instagram.com/v26.0/${igBusinessId}/messages`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ recipient: { id: recipientId }, message: { attachment: { type: "image", payload: { url: imageUrl } } } }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error?.message ?? "Failed to send Instagram image");
+}
+
+/**
+ * Send one order turn's messages, in order, and log what went out — O1,
+ * 28 November 2026.
+ *
+ * ITS OWN FUNCTION, and not tidiness: tests/dmConversationMemory reads
+ * the DM loop from the thread read to its first auto_reply_log insert
+ * and requires the ordinary reply inside that span. Writing this log
+ * inline put an insert first, so the code moved rather than the guard —
+ * the same call this codebase made for whatsappNotice.ts.
+ *
+ * THE TEXT GOES FIRST. The payment request's text carries the UPI ID and
+ * the link, so a refused QR image costs one way to pay, not the payment;
+ * it is recorded and the turn still counts as sent.
+ */
+async function sendOrderTurn(
+  supabase: any,
+  a: { dealershipId: string; replyToken: string; entryId: string; senderId: string; text: string; leadId: string | null; turn: Extract<OrderTurn, { handled: true }> }
+) {
+  const sent: string[] = [];
+  const problems: string[] = a.turn.note ? [a.turn.note] : [];
+  let ok = true;
+  try {
+    for (const m of a.turn.messages) {
+      if ("text" in m) {
+        await sendInstagramDmReply(a.replyToken, a.entryId, a.senderId, m.text);
+        sent.push(m.text);
+      } else {
+        try {
+          await sendInstagramDmImage(a.replyToken, a.entryId, a.senderId, m.imageUrl);
+          sent.push("[UPI QR code]");
+        } catch (imgErr: any) {
+          problems.push(`the QR image wasn't sent: ${imgErr?.message ?? imgErr}`);
+        }
+      }
+    }
+    if (sent.length) await recordHealth(supabase, a.dealershipId, "instagram", { state: "working", reason: null });
+  } catch (sendErr: any) {
+    ok = false;
+    problems.push(sendErr?.message ?? String(sendErr));
+    await recordHealth(supabase, a.dealershipId, "instagram", healthFromFailure(sendErr?.message));
+    // AN ORDER WAS PLACED AND ITS PAYMENT REQUEST DID NOT ARRIVE: the
+    // seller must hear it, or the customer waits for a UPI ID nobody sent.
+    if (a.turn.orderId) {
+      await tellSellerCustomerIsWaiting(supabase, { dealershipId: a.dealershipId, channel: "instagram", senderId: a.senderId, customerSaid: a.text, why: "an order was placed but the payment request couldn't be sent" });
+    }
+  }
+  await supabase.from("auto_reply_log").insert({
+    dealership_id: a.dealershipId, channel: "dm_instagram", source_id: a.senderId, lead_id: a.leadId,
+    incoming_text: a.text, reply_text: sent.length ? sent.join("\n\n") : null, success: ok,
+    error: problems.length ? problems.join(" — ") : null,
+  });
 }
 
 async function sendCommentReply(pageAccessToken: string, commentId: string, text: string) {
@@ -104,7 +176,7 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
   if (!dealership) {
     const igResult = await supabase
       .from("dealerships")
-      .select(`id, dealership_name, business_category, ${INSTAGRAM_TOKEN_SELECT}, dm_auto_reply_enabled, comment_auto_reply_enabled`)
+      .select(`id, dealership_name, business_category, ${INSTAGRAM_TOKEN_SELECT}, dm_auto_reply_enabled, comment_auto_reply_enabled, instagram_selling_enabled, seller_upi_vpa`)
       .eq("instagram_business_id", entryId)
       .maybeSingle();
     if (igResult.data) {
@@ -191,6 +263,36 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
       // F1 — this sender's earlier turns. Read BEFORE this message is
       // logged below, so the thread is what came before it.
       const thread = await readDmThread(supabase, dealership.id, channel, senderId);
+
+      // ── SELLER MODE, O1 (28 Nov 2026) ─────────────────────────────
+      // An order in progress is handled before the ordinary reply. Only
+      // while order-taking is live AND this business has Seller Mode on
+      // with a UPI ID saved; anything that is not the order — or an order
+      // step that fails — falls through to the reply below, unchanged.
+      if (channel === "instagram" && SELLER_MODE_TAKES_ORDERS && dealership.instagram_selling_enabled && dealership.seller_upi_vpa) {
+        let turn: OrderTurn = { handled: false };
+        try {
+          turn = await handleOrderTurn(
+            text,
+            buildOrderTurnDeps(supabase, {
+              dealershipId: dealership.id,
+              dealershipName: dealership.dealership_name,
+              upiVpa: dealership.seller_upi_vpa,
+              senderId,
+              language: normaliseLanguage(brandProfile.preferred_language),
+              catalog: catalogItems,
+              turns: thread.turns,
+            })
+          );
+        } catch (orderErr: any) {
+          console.error(`[auto-reply] order step failed for ${dealership.id}; answering normally: ${orderErr?.message ?? orderErr}`);
+        }
+        if (turn.handled) {
+          await sendOrderTurn(supabase, { dealershipId: dealership.id, replyToken, entryId, senderId, text, leadId, turn });
+          handledSomething = true;
+          continue;
+        }
+      }
 
       let replyText: string | null = null;
       let success = true;

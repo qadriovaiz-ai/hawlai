@@ -63,6 +63,11 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // Seller Mode, WA-T (28 Nov 2026): to the business's OWN verified
   // WhatsApp number, about its own order. A per-message charge, which is
   // why it is a template sent once (plus one reminder), never a stream.
+  // Seller Mode O1 (28 Nov 2026): the UPI payment request to a customer —
+  // a money request. Automatic ONLY after the customer's own "yes" to a
+  // read-back of the exact items, prices, fee and total; the payee is the
+  // seller's own saved UPI ID and Hawlai never holds the money.
+  send_upi_request: { actionType: "send", riskLevel: "high", description: "Send an Instagram customer the seller's UPI payment request, after they confirmed the order read-back", requiresApproval: false },
   notify_seller_order: { actionType: "send", riskLevel: "low", description: "Tell the seller on WhatsApp about a new Instagram order and ask whether the UPI payment arrived", requiresApproval: false },
 
   // ---- One-shot outbound actions reachable from chat (Phase 2B) ----
