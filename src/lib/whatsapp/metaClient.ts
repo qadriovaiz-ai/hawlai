@@ -5,11 +5,12 @@
 // fallback if a direct integration is ever rate-limited or suspended —
 // so this sits beside it and `client.ts` chooses between them.
 //
-// ONLY SESSION MESSAGES, like the Gupshup client: every send in this
-// product is a reply inside the 24-hour window after the person
-// messaged Hawlai first. Outside that window Meta allows only an
-// approved template, and `channelRules` already encodes the rule that
-// keeps this true — it is why only the inbound webhook may send.
+// SESSION MESSAGES, AND ONE TEMPLATE PATH. Free-form text and images
+// are replies inside the 24-hour window after the person messaged
+// Hawlai first; `channelRules` holds that to the inbound webhook. The
+// template sender below is the only shape Meta accepts outside the
+// window, and `channelRules` holds IT to its own, separate list —
+// since 28 November 2026, the seller's order notice (WA-T).
 //
 // ──────────────────────────────────────────────────────────────────
 // THE SENDER IS AN ID, NOT A PHONE NUMBER, and this is the mistake
@@ -118,6 +119,70 @@ export async function sendWhatsAppText(destination: string, text: string) {
   // approval card means an unrelated image can appear under a decision
   // the owner is about to take.
   return post({ to: destination, type: "text", text: { preview_url: false, body: text } });
+}
+
+/**
+ * A template variable Meta will accept, or a refusal before anything is
+ * sent.
+ *
+ * META REFUSES A BAD VARIABLE AT SEND TIME, not at approval — a newline,
+ * a tab, four consecutive spaces, or an empty value. The template passes
+ * review either way. So the value is collapsed to one line and capped
+ * here rather than trusted. Restored 28 November 2026 from the H3-b
+ * version deleted in 49cf3d8f, unchanged.
+ */
+export function templateVariable(value: string, limit = 600): string {
+  const flat = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!flat) throw new Error("A WhatsApp template variable came out empty, so nothing was sent.");
+  return flat.length > limit ? `${flat.slice(0, limit - 1).trimEnd()}…` : flat;
+}
+
+/**
+ * A template message — the only thing Meta accepts outside the 24-hour
+ * session window.
+ *
+ * WHY IT EXISTS AGAIN: WA-T, 28 November 2026. The seller is told about
+ * a new Instagram order and asked whether the payment arrived, and the
+ * seller has usually not written to Hawlai in the last 24 hours.
+ * `channelRules` constrains this function to its own list of callers.
+ *
+ * PARAMETER ORDER IS THE CALLER'S, AND IT IS POSITIONAL. {{1}}, {{2}},
+ * {{3}} are filled in array order, and a count that does not match the
+ * APPROVED body is Graph error 132000 — not a message about the thing
+ * that is actually wrong. The approved body is the contract; this
+ * function does not know it.
+ *
+ * QUICK-REPLY PAYLOADS ARE SET PER SEND, one per button, in the
+ * template's own button order — buttons are addressed by index. That is
+ * what lets a tap be trusted: it comes back carrying exactly what was
+ * put here (an order id), so the reply never has to guess which order
+ * it is about.
+ */
+export async function sendWhatsAppTemplate(
+  destination: string,
+  template: { name: string; language?: string; variables: string[]; buttonPayloads?: string[] }
+) {
+  const parameters = template.variables.map((value) => ({ type: "text", text: templateVariable(value) }));
+  const buttons = (template.buttonPayloads ?? []).map((payload, index) => ({
+    type: "button",
+    sub_type: "quick_reply",
+    index: String(index),
+    parameters: [{ type: "payload", payload: templateVariable(payload, 128) }],
+  }));
+
+  return post({
+    to: destination,
+    type: "template",
+    template: {
+      name: template.name,
+      // Pinned per call rather than defaulted globally: a template is
+      // approved per language, and sending `en` against an `en_US`
+      // approval fails as "template not found" — which reads like the
+      // template was never approved at all.
+      language: { code: template.language ?? "en" },
+      components: [...(parameters.length ? [{ type: "body", parameters }] : []), ...buttons],
+    },
+  });
 }
 
 export async function sendWhatsAppImage(destination: string, imageUrl: string, caption?: string) {

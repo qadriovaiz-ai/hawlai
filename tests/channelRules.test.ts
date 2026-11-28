@@ -246,6 +246,12 @@ describe("WhatsApp stays tap-to-send", () => {
   // IF A TEMPLATE EVER COMES BACK, so must that list: this regex names
   // its senders BY HAND, so a third function is invisible to it. That
   // was the hole H3-c found, and it would be the same hole again.
+  //
+  // IT CAME BACK, 28 November 2026 — Seller Mode's order notice (WA-T)
+  // — AND SO DID THE LIST. It lives in tests/sellerOrderNotice.test.ts
+  // §5 rather than here, because that file reads source through code()
+  // (Rule 8) and this one is still on the raw-source allowlist. The
+  // permitted caller is lib/dm/sellerOrderNotice.ts, and only it.
 
   it("nothing calls a WhatsApp sending API directly", () => {
     const direct = all

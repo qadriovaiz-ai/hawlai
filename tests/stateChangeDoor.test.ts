@@ -54,6 +54,10 @@ const OUTBOUND = [
   "sendCommentReply",
   "sendWhatsAppText",
   "sendWhatsAppImage",
+  // 28 Nov 2026, Seller Mode WA-T: the template sender came back for
+  // the seller's order notice — a paid, business-initiated message.
+  "sendWhatsAppTemplate",
+  "notifySellerOfOrder",
   // money and live platform state
   "setCampaignStatus",
 ];

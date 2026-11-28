@@ -60,6 +60,10 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // reversible. src/lib/seo/sitemapSubmit.ts reads this entry and stops
   // if it is removed or reclassified as needing approval.
   submit_sitemap: { actionType: "edit", riskLevel: "low", description: "Tell Google Search Console the platform sitemap exists, so published shops get crawled", requiresApproval: false },
+  // Seller Mode, WA-T (28 Nov 2026): to the business's OWN verified
+  // WhatsApp number, about its own order. A per-message charge, which is
+  // why it is a template sent once (plus one reminder), never a stream.
+  notify_seller_order: { actionType: "send", riskLevel: "low", description: "Tell the seller on WhatsApp about a new Instagram order and ask whether the UPI payment arrived", requiresApproval: false },
 
   // ---- One-shot outbound actions reachable from chat (Phase 2B) ----
   //

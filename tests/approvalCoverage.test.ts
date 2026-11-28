@@ -59,6 +59,10 @@ const SENDERS: { symbol: RegExp; what: string }[] = [
   { symbol: /\buploadVideoToYouTube\s*\(/, what: "publishes a video publicly" },
   { symbol: /\bpostPhotoToPage\s*\(|\bpostTextToPage\s*\(|\bpostPhotoToInstagram\s*\(/, what: "posts publicly to a social account" },
   { symbol: /\bsendDmReply\s*\(|\bsendCommentReply\s*\(/, what: "replies to a customer" },
+  // Added 2026-11-28 with WA-T: the WhatsApp template sender came back
+  // for Seller Mode's order notice, and a chat tool calling it would be
+  // a paid business-initiated message with nobody asked.
+  { symbol: /\bsendWhatsAppTemplate\s*\(|\bnotifySellerOfOrder\s*\(/, what: "sends a WhatsApp template" },
 ];
 
 /** Direct writes that change what a customer can transact with, or switch on unattended sending. */
@@ -355,6 +359,11 @@ describe("the registries stay honest", () => {
       "auto_reply_dm",
       // Nothing spends on creation; activation is the money step.
       "ad_campaign_launch",
+      // 2026-11-28, Seller Mode WA-T — automatic in the owner-approved
+      // plan (docs/PLAN-INSTAGRAM-SELLER-MODE.md, Rule 6 rows): it goes
+      // only to the business's OWN verified WhatsApp number, about its
+      // own order. Nobody else receives it.
+      "notify_seller_order",
     ]);
     const ungated = Object.entries(ACTION_POLICIES)
       .filter(([key, p]) => ["send", "publish", "spend"].includes(p.actionType) && !p.requiresApproval && !EXPLAINED_EXCEPTIONS.has(key))

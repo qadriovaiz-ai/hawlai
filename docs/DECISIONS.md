@@ -6606,3 +6606,76 @@ Gates: `tsc` 0, `vitest` 0 (**450 files, 8291 passed**), `next build` 0.
 
 **Deployed in two steps**, as F3 was: the code reads the new columns, so
 it waits for migration 242.
+
+
+---
+
+## 2026-11-28 — WA-T: the seller is told about an order on WhatsApp
+
+Seller Mode asks the customer to pay the seller's own UPI ID, and only the
+seller can say the money arrived. `notifySellerOfOrder`
+(`src/lib/dm/sellerOrderNotice.ts`) is that question: an in-app
+notification for every order, and a WhatsApp **template**
+(`order_payment_check`) with **Yes, received / Not yet** buttons whose
+payloads carry the order's id (`pay_yes:<id>` / `pay_no:<id>`), so two
+waiting orders can never be confused.
+
+**The template sender is restored** from `49cf3d8f^` (deleted 24 Nov with
+H3), with one change: several quick-reply buttons, each at its own index.
+The facade's Gupshup path still **refuses** rather than falling back to
+free-form text.
+
+### Judgment calls
+
+1. **Always a template, never a guess at the window.** Inside 24 hours a
+   template is still accepted; outside, free-form is refused. Guessing
+   the window could only be wrong in the direction that fails.
+2. **Off until Meta approves.** `WHATSAPP_ORDER_TEMPLATE` names the
+   approved template; unset means no WhatsApp leg at all, because a send
+   against an unapproved template fails every time. The in-app
+   notification is written regardless, and **first**.
+3. **Only a verified number.** The same check the inbound webhook makes
+   before acting as the owner. An unverified number's "yes" would confirm
+   a payment.
+4. **A failed send is returned, never thrown.** The order already exists;
+   a notice must not undo or hide it.
+5. **The result does not claim the in-app notification was written.**
+   `emitNotification` swallows its own errors, so "written: true" would be
+   a claim nothing checked. Dropped from the return value.
+6. **`notify_seller_order` is `send / low / automatic`**, as the
+   owner-approved plan's Rule 6 rows say. It joins
+   `approvalCoverage`'s explained exceptions with that reason. It goes only
+   to the business's own verified number, about its own order.
+
+### The rule that came back with it
+
+`channelRules` names its free-form senders by hand, so a template sender
+is invisible to it (the hole H3-c found). **The second list is back**, in
+`tests/sellerOrderNotice.test.ts` §5 rather than in `channelRules`: that
+file reads source through `code()` (Rule 8), and `channelRules` is still
+on the raw-source allowlist. The only permitted caller is
+`lib/dm/sellerOrderNotice.ts`, which sends no free-form. `channelRules`
+carries a pointer. `sendWhatsAppTemplate` and `notifySellerOfOrder` also
+joined the sender lists in `approvalCoverage` and `stateChangeDoor`, so no
+chat tool can reach either.
+
+Three tripwires fired and were answered rather than loosened:
+`.env.example` documents `WHATSAPP_ORDER_TEMPLATE`; `measures.ts` names
+`notify_seller_order` as not collected yet ("orders the seller confirmed
+as paid" — it becomes measurable with O4′); `stateChangeDoor` watches the
+new senders.
+
+### Verification
+
+**Thirteen mutations, all caught**: the verified-number check removed, the
+notification skipped, sending with no template named, every button at
+index 0, Gupshup falling back to text, variables not sanitised, a second
+template caller, a send failure thrown, buttons without the order id, the
+registry entry dropped, variables reordered, a blank customer name, and a
+chat tool calling the notice.
+
+Gates: `tsc` 0, `vitest` 0 (**451 files, 8316 passed**), `next build` 0.
+
+**UNVERIFIED AGAINST A LIVE SEND.** `order_payment_check` has not been
+submitted or approved yet. Nothing calls `notifySellerOfOrder` yet either:
+the order pieces (O2/O1) will.
