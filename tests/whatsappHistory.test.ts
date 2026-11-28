@@ -95,6 +95,11 @@ describe("2. THE WEBHOOK REMEMBERS EVERY DECISION IT HANDLES — read with comme
     expect(src).toMatch(/\{ role: "assistant", content: assistantSaid \}/);
   });
 
+  it("A PRODUCT PHOTO AND ITS REPLY ARE REMEMBERED (W1)", () => {
+    const photo = src.slice(src.indexOf("async function handleOnePhoto("), src.indexOf("export async function GET("));
+    expect(photo).toMatch(/await sendWhatsAppText\(photo\.phone, reply\);\s*await rememberInWhatsAppChat\(supabase, dealership\.id, photo\.phone, \[\s*\{ role: "user", content: `\[Sent a product photo/);
+  });
+
   it("A PAYMENT BUTTON TAP IS REMEMBERED", () => {
     const tap = src.slice(src.indexOf("async function handleOneTap("), src.indexOf("async function handleOnePhoto("));
     expect(tap).toMatch(/await rememberInWhatsAppChat\(supabase, dealership\.id, phone, \[\s*\{ role: "user", content: `\[Tapped/);

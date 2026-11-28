@@ -343,6 +343,12 @@ async function handleOnePhoto(photo: PhotoMessage, supabase: ReturnType<typeof c
       photo
     );
     await sendWhatsAppText(photo.phone, reply);
+    // Remembered like every exchange handled outside the chat (the DD23
+    // fix, 28 Nov 2026): the chat must know this product was just added.
+    await rememberInWhatsAppChat(supabase, dealership.id, photo.phone, [
+      { role: "user", content: `[Sent a product photo${photo.caption ? ` with the caption "${photo.caption.slice(0, 200)}"` : ""}]` },
+      { role: "assistant", content: reply },
+    ]);
   } catch (err: any) {
     console.error("[whatsapp] photo handling failed:", err?.message ?? err);
     try { await sendWhatsAppText(photo.phone, "Something went wrong adding that photo — please try again in a moment."); } catch {}
