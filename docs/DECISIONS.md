@@ -7322,3 +7322,24 @@ passed**), `next build` 0. **Unverified live.**
 Seven mutations, all caught. **The table itself (UI) has no test**; the
 function and the route do. Gates with every file staged: `tsc` 0, `vitest`
 0 (**466 files, 8541 passed**), `next build` 0.
+
+---
+
+## 2026-11-28 — T1: the first real shapes, and a gap in the recorder
+
+**The founder's first share test, recorded live** (11:16 UTC): a shared
+post arrives as `attachments[ig_post{payload:ig_post_media_id,url}]`, with
+no text. **It got no reply**: a text-less DM is skipped. T1 must fix that.
+
+**The story reply ("iska price?", 11:24 UTC) was received and answered as
+an ordinary message**, but **its shape was not recorded**. The recorder
+looked only at text-less DMs, and a story reply carries text and the
+story it replies to. So it was answered as if it pointed at nothing,
+which is the exact gap T1 exists to close. **Widened**: every non-echo
+DM's structure is recorded (types and key names, never values), logged
+as "a DM with text and context" when it has text. A plain text DM has no
+shape and adds nothing. **One more story reply** is needed to see its
+real shape.
+
+Two mutations, both caught. Gates with every file staged: `tsc` 0,
+`vitest` 0 (**466 files, 8542 passed**), `next build` 0.

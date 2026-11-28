@@ -220,14 +220,19 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
   // shared post, a story reply — recorded so T1 is built on a real payload,
   // not a guess. Types and key names only; never a URL, id or content.
   const textlessShapes: string[] = [];
+  // AND OF A DM WITH TEXT THAT POINTS AT SOMETHING (28 Nov 2026). A story
+  // reply carries the customer's words ("iska price?") AND what they are
+  // replying to; recording only text-less DMs missed exactly that one in
+  // the founder's first test — it was answered as if it pointed at nothing.
+  const contextShapes: string[] = [];
 
   if (dealership.dm_auto_reply_enabled) {
     for (const msgEvent of entry?.messaging ?? []) {
       const senderId = msgEvent?.sender?.id;
       const text = msgEvent?.message?.text;
-      if (senderId && !text && !msgEvent?.message?.is_echo) {
+      if (senderId && !msgEvent?.message?.is_echo) {
         const shape = describeMessageShape(msgEvent?.message);
-        if (shape) textlessShapes.push(shape);
+        if (shape) (text ? contextShapes : textlessShapes).push(shape);
       }
       if (!senderId || !text || msgEvent?.message?.is_echo) continue;
 
@@ -404,8 +409,11 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
   await recordDelivery(supabase, {
     source, entryId, dealershipId: dealership.id,
     outcome: handledSomething ? "handled" : "nothing_to_reply_to",
-    detail: textlessShapes.length
-      ? `a DM with no text: ${textlessShapes.join(" | ")}`
+    detail: textlessShapes.length || contextShapes.length
+      ? [
+          textlessShapes.length ? `a DM with no text: ${textlessShapes.join(" | ")}` : "",
+          contextShapes.length ? `a DM with text and context: ${contextShapes.join(" | ")}` : "",
+        ].filter(Boolean).join(" || ")
       : handledSomething
         ? null
         : "matched and enabled, but the entry carried no customer message or comment to answer",

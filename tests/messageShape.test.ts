@@ -47,13 +47,21 @@ describe("the shape, and nothing else", () => {
 describe("the webhook records it — read with comments stripped", () => {
   const src = code("src/lib/webhooks/autoReplyHandler.ts");
 
-  it("A TEXT-LESS, NON-ECHO DM FROM A SENDER IS DESCRIBED BEFORE IT IS SKIPPED", () => {
+  it("EVERY NON-ECHO DM FROM A SENDER IS DESCRIBED — with text or without — BEFORE A TEXT-LESS ONE IS SKIPPED", () => {
+    // Widened 28 Nov 2026: a story reply has TEXT and context, and the
+    // first version (text-less only) missed it in the founder's test.
     expect(src).toMatch(
-      /if \(senderId && !text && !msgEvent\?\.message\?\.is_echo\) \{\s*const shape = describeMessageShape\(msgEvent\?\.message\);\s*if \(shape\) textlessShapes\.push\(shape\);\s*\}\s*if \(!senderId \|\| !text \|\| msgEvent\?\.message\?\.is_echo\) continue;/
+      /if \(senderId && !msgEvent\?\.message\?\.is_echo\) \{\s*const shape = describeMessageShape\(msgEvent\?\.message\);\s*if \(shape\) \(text \? contextShapes : textlessShapes\)\.push\(shape\);\s*\}\s*if \(!senderId \|\| !text \|\| msgEvent\?\.message\?\.is_echo\) continue;/
     );
   });
 
-  it("AND THE DELIVERY LOG CARRIES IT", () => {
-    expect(src).toMatch(/detail: textlessShapes\.length\s*\? `a DM with no text: \$\{textlessShapes\.join\(" \| "\)\}`/);
+  it("AND THE DELIVERY LOG CARRIES BOTH KINDS, SAID APART", () => {
+    expect(src).toMatch(/textlessShapes\.length \? `a DM with no text: \$\{textlessShapes\.join\(" \| "\)\}` : ""/);
+    expect(src).toMatch(/contextShapes\.length \? `a DM with text and context: \$\{contextShapes\.join\(" \| "\)\}` : ""/);
+  });
+
+  it("A PLAIN TEXT DM HAS NO SHAPE, so ordinary messages add nothing to the log", () => {
+    expect(describeMessageShape({ mid: "m1", text: "iska price?" })).toBeNull();
+    expect(describeMessageShape({ mid: "m1", text: "iska price?", reply_to: { story: { id: "1", url: "https://x" } } })).toBe("reply_to{story:id,url}");
   });
 });
