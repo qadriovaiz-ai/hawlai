@@ -216,8 +216,16 @@ describe("approving writes the change — once, and only from the state that was
 });
 
 describe("what this platform claims it can do", () => {
-  it("price, name and description — and nothing it hasn't built", async () => {
-    expect(platform().supports).toEqual(["update_product_price", "update_product_name", "update_product_description"]);
+  it("price, name, description — and since E1 (28 Nov 2026) stock, the \"was\" price, category and show/hide — and nothing it hasn't built", async () => {
+    expect(platform().supports).toEqual([
+      "update_product_price",
+      "update_product_name",
+      "update_product_description",
+      "update_product_inventory",
+      "update_product_compare_price",
+      "update_product_category",
+      "update_product_visibility",
+    ]);
     expect(await platform().preview(action({ actionKey: "create_discount_code" }))).toEqual({
       ok: false,
       reason: 'Your store can\'t do "create_discount_code".',
@@ -237,5 +245,78 @@ describe("what this platform claims it can do", () => {
     expect(await platform().isConnected("d1")).toBe(true);
     tables.products = [];
     expect(await platform().isConnected("d1")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// E1 (28 Nov 2026): stock, the "was" price, category, show/hide — the same
+// read-before, refuse-if-stale, write-scoped contract as price.
+// ---------------------------------------------------------------------------
+describe("E1 — the rest of a product, one card each", () => {
+  beforeEach(() => {
+    tables.products = [{ ...PRODUCT(), inventory_count: 5, compare_at_price: null, category: null }];
+  });
+
+  it("STOCK: the card shows the real number and the new one; approving writes a whole number", async () => {
+    const p: any = await platform().preview(action({ actionKey: "update_product_inventory", requestedChanges: { inventory: "12" } }));
+    expect(p.preview.summary).toBe('"Lavender candle" — Stock: 5 → 12');
+    const r = await platform().execute(previewed({ actionKey: "update_product_inventory" }, [{ field: "inventory", before: "5", after: "12" }]));
+    expect(r.ok).toBe(true);
+    expect(writes[0].values).toMatchObject({ inventory_count: 12 });
+  });
+
+  it("STOCK SOLD BETWEEN THE CARD AND THE YES: REFUSED AS OUT OF DATE — a sold unit is never overwritten", async () => {
+    tables.products[0].inventory_count = 4;
+    const r: any = await platform().execute(previewed({ actionKey: "update_product_inventory" }, [{ field: "inventory", before: "5", after: "12" }]));
+    expect(r).toMatchObject({ ok: false, stale: true });
+    expect(writes).toEqual([]);
+  });
+
+  it("STOCK 'none' STOPS TRACKING; 0 WARNS THAT ORDERS STOP; A FRACTION IS REFUSED", async () => {
+    const none: any = await platform().preview(action({ actionKey: "update_product_inventory", requestedChanges: { inventory: "" } }));
+    expect(none.preview.summary).toBe('"Lavender candle" — Stock: 5 → not tracked');
+    await platform().execute(previewed({ actionKey: "update_product_inventory" }, [{ field: "inventory", before: "5", after: "" }]));
+    expect(writes[0].values).toMatchObject({ inventory_count: null });
+    const zero: any = await platform().preview(action({ actionKey: "update_product_inventory", requestedChanges: { inventory: "0" } }));
+    expect(zero.preview.warnings).toContain("With stock at 0, customers can't order it.");
+    expect(await platform().preview(action({ actionKey: "update_product_inventory", requestedChanges: { inventory: "2.5" } }))).toMatchObject({ ok: false });
+  });
+
+  it("THE \"WAS\" PRICE SAYS IT IS A DISCOUNT CLAIM, WITH THE PERCENT — and one not above the price shows none", async () => {
+    const p: any = await platform().preview(action({ actionKey: "update_product_compare_price", requestedChanges: { compare_price: "800" } }));
+    expect(p.preview.summary).toBe('"Lavender candle" — "Was" price: none → ₹800.00');
+    expect(p.preview.warnings.join(" ")).toMatch(/was ₹800\.00 \(31% off\)\. That is a discount claim/);
+    const low: any = await platform().preview(action({ actionKey: "update_product_compare_price", requestedChanges: { compare_price: "500" } }));
+    expect(low.preview.warnings.join(" ")).toMatch(/is not above the price .* shows no discount/);
+    await platform().execute(previewed({ actionKey: "update_product_compare_price" }, [{ field: "compare_price", before: "", after: "800" }]));
+    expect(writes[0].values).toMatchObject({ compare_at_price: 800 });
+  });
+
+  it("CATEGORY: set and cleared", async () => {
+    await platform().execute(previewed({ actionKey: "update_product_category" }, [{ field: "category", before: "", after: "Candles" }]));
+    expect(writes[0].values).toMatchObject({ category: "Candles" });
+  });
+
+  it("SHOW/HIDE: its own card, saying what customers lose — and the 'unpublished' note isn't added to it", async () => {
+    const hide: any = await platform().preview(action({ actionKey: "update_product_visibility", requestedChanges: { visibility: "hidden" } }));
+    expect(hide.preview.summary).toBe('"Lavender candle" — Shown to customers: shown → hidden');
+    expect(hide.preview.warnings).toContain("Customers won't see it, and orders for it stop.");
+    await platform().execute(previewed({ actionKey: "update_product_visibility" }, [{ field: "visibility", before: "shown", after: "hidden" }]));
+    expect(writes[0].values).toMatchObject({ is_active: false });
+    tables.products[0].is_active = false;
+    writes = [];
+    const show: any = await platform().preview(action({ actionKey: "update_product_visibility", requestedChanges: { visibility: "shown" } }));
+    expect(show.preview.warnings.join(" ")).not.toMatch(/unpublished/);
+    expect(await platform().preview(action({ actionKey: "update_product_visibility", requestedChanges: { visibility: "maybe" } }))).toMatchObject({ ok: false });
+  });
+
+  it("THE RISK OF EACH, AND A CARD FOR ALL — the founder's decision D", async () => {
+    const { ACTION_RISK, ALWAYS_REQUIRES_APPROVAL } = await import("@/lib/publish/types");
+    expect(ACTION_RISK.update_product_compare_price).toBe("high");
+    expect(ACTION_RISK.update_product_inventory).toBe("medium");
+    expect(ACTION_RISK.update_product_visibility).toBe("medium");
+    for (const k of ["update_product_inventory", "update_product_compare_price", "update_product_category", "update_product_visibility"] as const) {
+      expect(ALWAYS_REQUIRES_APPROVAL).toContain(k);
+    }
   });
 });

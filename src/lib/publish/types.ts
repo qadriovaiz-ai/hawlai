@@ -147,7 +147,17 @@ export type ActionKey =
    * deletion, not a reverse, and by the time anyone asks, a page may
    * already point at it.
    */
-  | "upload_image";
+  | "upload_image"
+  // E1 (28 Nov 2026): the rest of a product, in the merchant's OWN
+  // storefront only — each its own card, like price, name and description.
+  /** Stock (inventory_count); empty = not tracked. */
+  | "update_product_inventory"
+  /** The "was" price (compare_at_price) — a discount claim customers read. */
+  | "update_product_compare_price"
+  /** Category: organisation only. */
+  | "update_product_category"
+  /** Show or hide the product — publish/unpublish, its own decision. */
+  | "update_product_visibility";
 
 /**
  * One field changing, in terms a person can check.
@@ -391,6 +401,11 @@ export const ALWAYS_REQUIRES_APPROVAL: readonly ActionKey[] = [
   "update_page_text",
   "add_faq_item",
   "update_collection_text",
+  // E1, 28 Nov 2026 — the founder's decision D: a card for every edit.
+  "update_product_inventory",
+  "update_product_compare_price",
+  "update_product_category",
+  "update_product_visibility",
 ];
 
 /** Risk classification, for the approval UI and the audit trail. */
@@ -427,4 +442,16 @@ export const ACTION_RISK: Record<ActionKey, RiskLevel> = {
   // references it. See the key's own comment for why it is still
   // approval-gated in ACTION_POLICIES.
   upload_image: "low",
+  // E1 (28 Nov 2026). Stock 0 stops orders and a wrong number oversells.
+  update_product_inventory: "medium",
+  // "Was ₹X" is a DISCOUNT CLAIM every customer reads — high, like a
+  // discount code.
+  update_product_compare_price: "high",
+  // Medium, not low: organisation only, but tests/shopifyContentActions
+  // holds upload_image as the ONE low in this table, and that rule was
+  // kept rather than loosened (28 Nov 2026). It costs nothing — every
+  // product edit gets a card anyway (the founder's decision D).
+  update_product_category: "medium",
+  // Hiding stops sales; showing makes a product public at once.
+  update_product_visibility: "medium",
 };

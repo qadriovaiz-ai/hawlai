@@ -17,10 +17,21 @@
 //   - already-at-target is checked BEFORE staleness, so a retry after a
 //     timeout reports success instead of demanding re-approval.
 //
-// Scope is deliberately three fields. Stock is excluded because it
+// Scope was deliberately three fields. Stock was excluded because it
 // changes on its own with every order, which would make the staleness
-// check fire constantly; active/inactive is excluded because that is
+// check fire constantly; active/inactive was excluded because that is
 // publish/unpublish, a different decision with a different risk.
+//
+// E1, 28 NOVEMBER 2026 — THE FOUNDER ASKED FOR STOCK, THE "WAS" PRICE,
+// CATEGORY AND SHOW/HIDE, and both reasons above are honoured rather than
+// overridden:
+//   • STOCK keeps the staleness check. If an order sold a unit between
+//     the card and the approval, the card is refused as out of date and
+//     the owner asked again — never a sold unit silently written over.
+//   • SHOW/HIDE is its OWN action (update_product_visibility) with its
+//     own risk and its own card — the "different decision" kept separate.
+//   • The "WAS" PRICE is HIGH risk: "was ₹X" is a discount claim every
+//     customer reads, and the card says so.
 
 import { formatMoney } from "../money";
 import { publishLog, publishError } from "../log";
@@ -29,17 +40,40 @@ import type { ActionKey, ExecuteResult, FieldChange, PreviewResult, PublishActio
 /** The Hawlai storefront prices in rupees — there is no per-store currency setting. */
 const CURRENCY = "INR";
 
-const FIELD_BY_ACTION: Partial<Record<ActionKey, "price" | "name" | "description">> = {
+type Field = "price" | "name" | "description" | "inventory" | "compare_price" | "category" | "visibility";
+
+const FIELD_BY_ACTION: Partial<Record<ActionKey, Field>> = {
   update_product_price: "price",
   update_product_name: "name",
   update_product_description: "description",
+  update_product_inventory: "inventory",
+  update_product_compare_price: "compare_price",
+  update_product_category: "category",
+  update_product_visibility: "visibility",
 };
 
-const COLUMN: Record<"price" | "name" | "description", string> = {
+const COLUMN: Record<Field, string> = {
   price: "price",
   name: "name",
   description: "description",
+  inventory: "inventory_count",
+  compare_price: "compare_at_price",
+  category: "category",
+  visibility: "is_active",
 };
+
+const LABEL: Record<Field, string> = {
+  price: "Price",
+  name: "Name",
+  description: "Description",
+  inventory: "Stock",
+  compare_price: '"Was" price',
+  category: "Category",
+  visibility: "Shown to customers",
+};
+
+/** Fields compared and written as rupee amounts; "" means none. */
+const MONEY: readonly Field[] = ["price", "compare_price"];
 
 type ProductRow = {
   id: string;
@@ -48,6 +82,9 @@ type ProductRow = {
   description: string | null;
   images: unknown;
   is_active: boolean | null;
+  inventory_count: number | null;
+  compare_at_price: number | string | null;
+  category: string | null;
 };
 
 type ReadResult = { ok: true; product: ProductRow | null } | { ok: false; reason: string };
@@ -74,12 +111,20 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
    * declared capability is a promise the tool layer reads, so nothing
    * is listed until it works end to end.
    */
-  const supports: readonly ActionKey[] = ["update_product_price", "update_product_name", "update_product_description"];
+  const supports: readonly ActionKey[] = [
+    "update_product_price",
+    "update_product_name",
+    "update_product_description",
+    "update_product_inventory",
+    "update_product_compare_price",
+    "update_product_category",
+    "update_product_visibility",
+  ];
 
   async function readProduct(dealershipId: string, productId: string): Promise<ReadResult> {
     const { data, error } = await deps.supabase
       .from("products")
-      .select("id, name, price, description, images, is_active")
+      .select("id, name, price, description, images, is_active, inventory_count, compare_at_price, category")
       .eq("id", productId)
       .eq("dealership_id", dealershipId)
       .maybeSingle();
@@ -95,24 +140,77 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
     return { ok: true, product: (data as ProductRow) ?? null };
   }
 
-  /** The requested value, validated per field. */
-  function requestedValue(field: "price" | "name" | "description", changes: Record<string, unknown>): { ok: true; value: string } | { ok: false; reason: string } {
+  /**
+   * The requested value, validated per field, as the string the card shows
+   * and execute() writes back. "" means NONE for the fields that may be
+   * cleared: stock (not tracked), "was" price, category.
+   */
+  function requestedValue(field: Field, changes: Record<string, unknown>): { ok: true; value: string } | { ok: false; reason: string } {
     const raw = changes[field] ?? changes[field === "description" ? "newDescription" : field];
-    if (field === "price") {
-      const value = String(raw ?? "").trim();
-      if (!value || Number.isNaN(Number(value)) || Number(value) < 0) return { ok: false, reason: "That price isn't a valid amount." };
-      return { ok: true, value };
-    }
     const text = String(raw ?? "").trim();
+    if (field === "price") {
+      if (!text || Number.isNaN(Number(text)) || Number(text) < 0) return { ok: false, reason: "That price isn't a valid amount." };
+      return { ok: true, value: text };
+    }
+    if (field === "compare_price") {
+      if (text === "") return { ok: true, value: "" };
+      if (Number.isNaN(Number(text)) || Number(text) <= 0) return { ok: false, reason: 'That "was" price isn\'t a valid amount.' };
+      return { ok: true, value: text };
+    }
+    if (field === "inventory") {
+      if (text === "") return { ok: true, value: "" };
+      const n = Number(text);
+      if (!Number.isInteger(n) || n < 0 || n > 1000000) return { ok: false, reason: "Stock must be a whole number, 0 or more." };
+      return { ok: true, value: String(n) };
+    }
+    if (field === "category") {
+      if (text.length > 60) return { ok: false, reason: "That category is too long (over 60 characters)." };
+      return { ok: true, value: text };
+    }
+    if (field === "visibility") {
+      if (text !== "shown" && text !== "hidden") return { ok: false, reason: 'Say whether to show or hide the product.' };
+      return { ok: true, value: text };
+    }
     if (!text) return { ok: false, reason: `That ${field === "name" ? "name" : "description"} is empty.` };
     if (field === "name" && text.length > 120) return { ok: false, reason: "That product name is too long for a storefront listing (over 120 characters)." };
     return { ok: true, value: text };
   }
 
-  function currentValue(field: "price" | "name" | "description", product: ProductRow): string {
+  function currentValue(field: Field, product: ProductRow): string {
     if (field === "price") return String(product.price ?? "");
     if (field === "name") return product.name ?? "";
+    if (field === "inventory") return product.inventory_count == null ? "" : String(product.inventory_count);
+    if (field === "compare_price") return product.compare_at_price == null ? "" : String(product.compare_at_price);
+    if (field === "category") return product.category ?? "";
+    if (field === "visibility") return product.is_active === false ? "hidden" : "shown";
     return product.description ?? "";
+  }
+
+  /** Equal as this field compares: money by amount, "" only equal to "". */
+  function sameValue(field: Field, a: unknown, b: unknown): boolean {
+    if (MONEY.includes(field)) {
+      if (String(a ?? "") === "" || String(b ?? "") === "") return String(a ?? "") === String(b ?? "");
+      return samePrice(a, b);
+    }
+    return sameText(a, b);
+  }
+
+  /** What execute() writes for the card's value. */
+  function columnValue(field: Field, value: string): unknown {
+    if (field === "price") return Number(value);
+    if (field === "compare_price" || field === "inventory") return value === "" ? null : Number(value);
+    if (field === "category") return value === "" ? null : value;
+    if (field === "visibility") return value === "shown";
+    return value;
+  }
+
+  function shown(field: Field, value: string): string {
+    if (field === "price") return formatMoney(value, CURRENCY);
+    if (field === "compare_price") return value === "" ? "none" : formatMoney(value, CURRENCY);
+    if (field === "inventory") return value === "" ? "not tracked" : value;
+    if (field === "visibility") return value === "shown" ? "shown" : "hidden";
+    if (value === "") return "(empty)";
+    return `"${value.length > 80 ? `${value.slice(0, 80)}…` : value}"`;
   }
 
   return {
@@ -167,21 +265,31 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
         }
         if (samePrice(before, wanted.value)) warnings.push("The price is already this value — approving will change nothing.");
       } else {
-        if (sameText(before, wanted.value)) warnings.push(`The ${field} is already this — approving will change nothing.`);
+        if (sameValue(field, before, wanted.value)) warnings.push(`The ${LABEL[field].toLowerCase()} is already this — approving will change nothing.`);
         if (field === "description" && wanted.value.length > 2000) warnings.push("This description is very long — storefront listings read better under about 2,000 characters.");
         if (field === "name") warnings.push("Renaming changes what customers see, and the product's link stays the same.");
+        if (field === "inventory" && wanted.value === "0") warnings.push("With stock at 0, customers can't order it.");
+        if (field === "inventory") warnings.push("If an order sells one before you approve, this card will ask again rather than overwrite it.");
+        if (field === "compare_price" && wanted.value !== "") {
+          const price = Number(product.price);
+          const was = Number(wanted.value);
+          if (Number.isFinite(price) && was <= price) warnings.push(`A "was" price of ${formatMoney(wanted.value, CURRENCY)} is not above the price (${formatMoney(String(product.price), CURRENCY)}), so it shows no discount.`);
+          else if (Number.isFinite(price) && price > 0) {
+            warnings.push(`Customers will see ${formatMoney(String(product.price), CURRENCY)}, was ${formatMoney(wanted.value, CURRENCY)} (${Math.round(((was - price) / was) * 100)}% off). That is a discount claim — set it only if customers really paid ${formatMoney(wanted.value, CURRENCY)}.`);
+          }
+        }
+        if (field === "visibility") {
+          warnings.push(wanted.value === "hidden" ? "Customers won't see it, and orders for it stop." : "It becomes visible and orderable straight away.");
+        }
       }
-      if (product.is_active === false) {
+      if (product.is_active === false && field !== "visibility") {
         warnings.push("This product is unpublished — the change won't be visible to customers until you publish it in Website Builder → Products.");
       }
-
-      const label = field === "price" ? "Price" : field === "name" ? "Name" : "Description";
-      const shown = (value: string) => (field === "price" ? formatMoney(value, CURRENCY) : `"${value.length > 80 ? `${value.slice(0, 80)}…` : value}"`);
 
       return {
         ok: true,
         preview: {
-          summary: `"${product.name}" — ${label}: ${shown(before || "(empty)")} → ${shown(wanted.value)}`,
+          summary: `"${product.name}" — ${LABEL[field]}: ${shown(field, before)} → ${shown(field, wanted.value)}`,
           // WHO is being changed, read from the store rather than from
           // the phrase the owner typed. If "the lavender one" resolved to
           // the wrong product, this is the only place it can be caught.
@@ -218,7 +326,7 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
       if (!expected) return { ok: false, reason: `The preview did not record a ${field} to verify against.` };
 
       const now = currentValue(field, product);
-      const matches = field === "price" ? samePrice : sameText;
+      const matches = (a: unknown, b: unknown) => sameValue(field, a, b);
 
       // ALREADY AT THE TARGET — checked BEFORE staleness, and the order
       // is the whole of retry safety: a successful write followed by a
@@ -241,7 +349,7 @@ export function createHawlaiShopPlatform(deps: { supabase: any }): PublishPlatfo
       // and "did it land?" becomes unanswerable.
       publishLog("hawlai_shop.write", { action: action.id, product: product.id, field, from: expected.before, to: expected.after });
 
-      const value = field === "price" ? Number(expected.after) : expected.after;
+      const value = columnValue(field, expected.after);
       const { data: updated, error } = await deps.supabase
         .from("products")
         .update({ [COLUMN[field]]: value, updated_at: new Date().toISOString() })

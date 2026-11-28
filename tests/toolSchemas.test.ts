@@ -88,7 +88,12 @@ import { code, sourceWithComments } from "./helpers/source";
 // set_automation_toggle gained `instagram_selling` in its enum and its
 // description, so the owner can switch Seller Mode on from chat — through
 // the same approval every other toggle uses. No new tool; one cache warm.
-const FINGERPRINT = "0bce6ba51b09ef4bb3bf01317c36babf3ba65b889119803737cd7fa0b60f6460";
+// 28 November 2026, E1 of docs/PLAN-INSTAGRAM-STORE-AND-PRODUCT-EDITS.md:
+// propose_price_change gained new_stock, new_compare_at_price,
+// new_category and visibility, and its description names them — the
+// founder asked for any product field to be editable from chat and
+// WhatsApp. Same tool, same one-field-per-card rule. One cache warm.
+const FINGERPRINT = "3c2a76086a087d5ba96cd97478004def3f51f76eb5e6af7584075af46b4d5f67";
 const TOOL_COUNT = 63;
 
 describe("1. ONE DEFINITION, IN ONE PLACE, IN ONE ORDER", () => {

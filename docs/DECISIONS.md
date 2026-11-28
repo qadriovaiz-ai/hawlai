@@ -7491,3 +7491,52 @@ Three mutations, all caught. Gates with every file staged: `tsc` 0,
 `vitest` 0 (**470 files, 8589 passed**), `next build` 0. **The live check
 itself is the founder's**: "<product> ka price <amount> karo" on WhatsApp,
 then the "haan CODE" it gives.
+
+---
+
+## 2026-11-28 — E1: every product field editable from chat and WhatsApp
+
+`propose_price_change` (no new tool, Rule 5) now takes **stock, the "was"
+price, category and show/hide** besides price, name and description.
+Each goes through the same publish pipeline on the business's own
+storefront (`hawlaiShop.ts`) as **its own approval card** (decision D):
+preview of the real current value, a re-read before writing, a refusal
+if stale, and a write scoped to the business. On WhatsApp the card comes
+with its code (E2).
+
+### The file's own reasons for leaving two of these out were kept
+
+`hawlaiShop.ts` had excluded stock (it moves with every order, so the
+staleness check fires) and show/hide (a different decision). Both reasons
+are honoured, not overridden:
+- **Stock keeps the staleness check.** If an order sells a unit between
+  the card and the yes, the card is refused as out of date, and the card
+  says so beforehand. A sold unit is never written over.
+- **Show/hide is its own action** (`update_product_visibility`), with its own risk and card.
+
+### Risk levels
+
+| Action | Risk |
+|---|---|
+| Stock | medium |
+| "Was" price | **high**: "was ₹X" is a discount claim; the card shows the % off and says to set it only if customers really paid it |
+| Category | **medium, not the low proposed in the plan**: `tests/shopifyContentActions` holds `upload_image` as the one low action, and that rule was kept rather than loosened. Every edit gets a card anyway |
+| Show/hide | medium |
+
+"none" clears only the three that may be empty: stock (not tracked),
+"was" price, category. Never a price or a name.
+
+### Tripwires answered
+
+The tool-schema fingerprint was updated per its protocol, with the
+reason. `hawlaiShopPlatform`'s "nothing it hasn't built" list now names
+the four new actions, because they are built.
+
+### Not done, said plainly
+
+**No undo for product edits**: there was none before E1 either. A
+mistaken change is fixed with another card.
+
+Eight mutations, all caught. Gates with every file staged: `tsc` 0,
+`vitest` 0 (**471 files, 8606 passed**), `next build` 0. **Unverified
+live.**

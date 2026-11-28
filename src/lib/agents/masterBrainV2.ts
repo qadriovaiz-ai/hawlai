@@ -2884,19 +2884,40 @@ export async function executeTool(
       // ONE FIELD PER CARD. Each has its own risk level and its own
       // approval; a single card mixing a price cut with a rename would
       // hide one decision behind the other.
+      // E1 (28 Nov 2026): stock, the "was" price, category and show/hide
+      // join price, name and description — the same tool, pipeline and
+      // card. "none" CLEARS the three that may be empty (stock → not
+      // tracked, "was" price, category); a cleared value is still asked.
+      const CLEARABLE = new Set(["stock", "compare_price", "category"]);
+      const asked = (v: unknown) => v !== undefined && v !== null && String(v).trim() !== "";
       const askedFields = (
         [
           ["price", input.new_price],
           ["name", input.new_name],
           ["description", input.new_description],
+          ["stock", input.new_stock],
+          ["compare_price", input.new_compare_at_price],
+          ["category", input.new_category],
+          ["visibility", input.visibility],
         ] as const
-      ).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== "");
-      if (askedFields.length === 0) return { error: "Tell me what to change — a new price, name or description." };
+      ).filter(([, value]) => asked(value));
+      if (askedFields.length === 0) return { error: "Tell me what to change — price, name, description, stock, \"was\" price, category, or show/hide." };
       if (askedFields.length > 1) {
-        return { error: "One change at a time, so each gets its own approval — ask me for the price first, then the name or description." };
+        return { error: "One change at a time, so each gets its own approval — ask me for one, then the next." };
       }
-      const field = askedFields[0][0] as "price" | "name" | "description";
-      const ACTION_FOR_FIELD = { price: "update_product_price", name: "update_product_name", description: "update_product_description" } as const;
+      const field = askedFields[0][0] as "price" | "name" | "description" | "stock" | "compare_price" | "category" | "visibility";
+      const ACTION_FOR_FIELD = {
+        price: "update_product_price",
+        name: "update_product_name",
+        description: "update_product_description",
+        stock: "update_product_inventory",
+        compare_price: "update_product_compare_price",
+        category: "update_product_category",
+        visibility: "update_product_visibility",
+      } as const;
+      const fieldValue = String(askedFields[0][1] ?? "").trim();
+      const cleared = CLEARABLE.has(field) && /^(none|clear|remove|not tracked|unlimited)$/i.test(fieldValue) ? "" : fieldValue;
+      if (field === "visibility" && !/^(show|hide)$/i.test(fieldValue)) return { error: 'Say "show" or "hide" for visibility.' };
 
       // THE BUSINESS'S OWN STORE FIRST. It is the store nearly every
       // Hawlai business sells from, and the one chat lists products
@@ -2936,7 +2957,15 @@ export async function executeTool(
             ? { price: ownStated.amount ?? "", statedCurrency: ownStated.statedCurrency }
             : field === "name"
               ? { name: String(input.new_name ?? "").trim() }
-              : { description: String(input.new_description ?? "").trim() };
+              : field === "description"
+                ? { description: String(input.new_description ?? "").trim() }
+                : field === "stock"
+                  ? { inventory: cleared }
+                  : field === "compare_price"
+                    ? { compare_price: cleared === "" ? "" : (parseOwnPrice(cleared).amount ?? cleared) }
+                    : field === "category"
+                      ? { category: cleared }
+                      : { visibility: /^show$/i.test(fieldValue) ? "shown" : "hidden" };
 
         const service = makeService();
         const ownCreated = await createPublishAction(service, createHawlaiShopPlatform({ supabase: service }), {

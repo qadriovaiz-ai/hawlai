@@ -87,6 +87,11 @@ const NOT_COLLECTED: Record<string, Measure> = {
   change_campaign_targeting: { metric: "leads from this campaign", source: null, direction: "up" },
   auto_paused_campaign: { metric: "spend on this campaign", source: null, direction: "down" },
   update_product_name: { metric: "paid orders of this product", source: null, direction: "up" },
+  // E1, 28 Nov 2026 — the same honest gap as the edits above.
+  update_product_inventory: { metric: "paid orders of this product", source: null, direction: "up" },
+  update_product_compare_price: { metric: "paid orders of this product", source: null, direction: "up" },
+  update_product_category: { metric: "paid orders of this product", source: null, direction: "up" },
+  update_product_visibility: { metric: "paid orders of this product", source: null, direction: "up" },
   update_product_description: { metric: "paid orders of this product", source: null, direction: "up" },
   // Shopify 3.3. NOT COLLECTED, and the reason is the honest one:
   // the metric that matters is visits to that collection page, and

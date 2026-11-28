@@ -142,6 +142,13 @@ export const ACTION_POLICIES: Record<string, ActionPolicy> = {
   // plan cap runs inside generateDesign, so the worst case is the
   // month's image allowance, and nothing reaches a customer.
   generate_graphic: { actionType: "create", riskLevel: "high", description: "Spend money generating one AI image, against the plan's monthly image allowance", requiresApproval: true },
+  // E1 (28 Nov 2026): the rest of a product, from chat or WhatsApp, each
+  // through its own approval card (the founder's decision D). Risk agrees
+  // with publish/types ACTION_RISK — tests/publishContract holds the two.
+  update_product_inventory: { actionType: "edit", riskLevel: "medium", description: "Change a product's stock in the merchant's own store", requiresApproval: true },
+  update_product_compare_price: { actionType: "edit", riskLevel: "high", description: "Set or clear a product's \"was\" price — a discount customers see", requiresApproval: true },
+  update_product_category: { actionType: "edit", riskLevel: "medium", description: "Change a product's category in the merchant's own store", requiresApproval: true },
+  update_product_visibility: { actionType: "edit", riskLevel: "medium", description: "Show or hide a product in the merchant's own store", requiresApproval: true },
   update_product_name: { actionType: "edit", riskLevel: "medium", description: "Change a product's public name in the merchant's store", requiresApproval: true },
   update_product_description: { actionType: "edit", riskLevel: "medium", description: "Change a product's public description in the merchant's store", requiresApproval: true },
   publish_post: { actionType: "publish", riskLevel: "high", description: "Publish a post or page to the merchant's live site", requiresApproval: true },
