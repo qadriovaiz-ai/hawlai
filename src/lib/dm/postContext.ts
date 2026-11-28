@@ -43,21 +43,24 @@ export function readPostRef(message: unknown): PostRef | null {
 }
 
 /**
- * The caption of the shop's own post, or null. Never throws: a caption
- * that can't be read is a degraded answer, not a missing one.
+ * The caption and photo of the shop's own post, or nulls. Never throws: a
+ * post that can't be read is a degraded answer, not a missing one. A
+ * video's photo is its thumbnail (T3, 28 Nov 2026).
  */
-export async function fetchCaption(accessToken: string, mediaId: string): Promise<string | null> {
+export async function fetchPost(accessToken: string, mediaId: string): Promise<{ caption: string | null; imageUrl: string | null }> {
+  const nothing = { caption: null, imageUrl: null };
   try {
-    const res = await fetch(`https://graph.instagram.com/v26.0/${mediaId}?fields=caption`, {
+    const res = await fetch(`https://graph.instagram.com/v26.0/${mediaId}?fields=caption,media_type,media_url,thumbnail_url`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) return nothing;
     const data = await res.json().catch(() => null);
     const caption = typeof data?.caption === "string" ? data.caption.trim() : "";
-    return caption || null;
+    const photo = data?.media_type === "VIDEO" ? data?.thumbnail_url : data?.media_url;
+    return { caption: caption || null, imageUrl: typeof photo === "string" && /^https:\/\//.test(photo) ? photo : null };
   } catch {
-    return null;
+    return nothing;
   }
 }
 
@@ -79,10 +82,21 @@ export function productFromCaption(caption: string | null, catalog: { name: stri
  * The customer's message as the reply reads it: what they pointed at,
  * then what they wrote. The caption is the shop's own published words.
  */
-export function withPostContext(text: string, ref: PostRef, caption: string | null, product: string | null): string {
+export function withPostContext(
+  text: string,
+  ref: PostRef,
+  caption: string | null,
+  product: string | null,
+  guess: { product: string | null; confidence: "high" | "low" | "none" } | null = null
+): string {
   const what = ref.kind === "story" ? "replied to your Instagram story" : "shared your Instagram post";
   const said = text.trim() ? `Their message: "${text.trim()}"` : "They sent no message with it.";
   if (product) return `[The customer ${what} showing the product "${product}".] ${said}`;
+  // T3: A PHOTO GUESS IS NEVER A FACT — the reply must ask first.
+  if (guess?.product && guess.confidence === "high") {
+    return `[The customer ${what}. From its photo it MAY show "${guess.product}" — this is a guess: ask them "is it the ${guess.product}?" before giving any price.] ${said}`;
+  }
+  if (guess?.confidence === "low") return `[The customer ${what}. It isn't clear from its photo which product it shows — ask which product they mean.] ${said}`;
   if (caption) return `[The customer ${what}. Its caption: "${caption.slice(0, 300).replace(/\s+/g, " ")}"] ${said}`;
   return `[The customer ${what}, which couldn't be read — ask which product they mean.] ${said}`;
 }

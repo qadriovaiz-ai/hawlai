@@ -7395,3 +7395,34 @@ guessed, the handler skipping context, and an echo answered.
 Gates with every file staged: `tsc` 0, `vitest` 0 (**467 files, 8558
 passed**), `next build` 0. **UNVERIFIED LIVE**: whether a story's id can be
 read for its caption.
+
+---
+
+## 2026-11-28 — T3: which product a post's photo shows (migration 248)
+
+When a shared post or story's caption names no product (no `#HawlaiTag`),
+`src/lib/dm/postVision.ts` compares **the post's photo** (a video's
+thumbnail) with **the catalog's own product photos** in one AI call
+through `lib/ai/claude.ts`.
+
+- **A guess is never stated as fact** (plan decision 6). A sure match makes
+  the reply ask **"is it the X?" before any price**. An unsure one asks
+  which product. The answer must be one of the names the model was shown,
+  or it is no match.
+- **Cached per post** (`instagram_post_guesses`, migration 248), so the same
+  post is never paid for twice. **A cache that can't be read means no
+  call**: cost is not risked on a database hiccup. A failed or unreadable
+  model answer is not cached, so the next message can try again.
+- **At most 8 products per call**: sellable, active, with a photo.
+  Services are left out.
+- A tagged post never pays for a comparison. Only `https` photo URLs are
+  used.
+
+**Safe to deploy before 248**: with no table, the cache read fails, no
+call is made, and the reply asks which product. Listed in `oneDoorForCopy`'s
+`NOT_COPY` (it returns a name and a confidence, no customer-facing words).
+
+Nine mutations, all caught. Gates with every file staged: `tsc` 0,
+`vitest` 0 (**468 files, 8569 passed**), `next build` 0. **Unverified
+live**: Instagram's media URL fetched by the AI provider, and the quality
+of the match on real photos.

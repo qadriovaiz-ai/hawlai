@@ -18,7 +18,8 @@ import { SELLER_MODE_TAKES_ORDERS } from "@/lib/dm/sellerMode";
 import { handleOrderTurn, type OrderTurn } from "@/lib/dm/orderConversation";
 import { buildOrderTurnDeps } from "@/lib/dm/orderTurnDeps";
 import { describeMessageShape } from "@/lib/dm/messageShape";
-import { fetchCaption, productFromCaption, readPostRef, withPostContext } from "@/lib/dm/postContext";
+import { fetchPost, productFromCaption, readPostRef, withPostContext } from "@/lib/dm/postContext";
+import { guessProductFromPhoto } from "@/lib/dm/postVision";
 // The Instagram transport moved to its own module on 28 Nov 2026 (O4′):
 // the invoice sends through it too.
 import { sendInstagramDmReply, sendInstagramDmImage } from "@/lib/instagram/dm";
@@ -244,8 +245,12 @@ export async function handleAutoReplyEntry(entry: any, supabase: any, source: "m
       let text: string | undefined = rawText;
       const postRef = channel === "instagram" && senderId && !msgEvent?.message?.is_echo ? readPostRef(msgEvent?.message) : null;
       if (postRef) {
-        const caption = postRef.mediaId ? await fetchCaption(replyToken, postRef.mediaId) : null;
-        text = withPostContext(rawText ?? "", postRef, caption, productFromCaption(caption, catalogItems));
+        const post = postRef.mediaId ? await fetchPost(replyToken, postRef.mediaId) : { caption: null, imageUrl: null };
+        const tagged = productFromCaption(post.caption, catalogItems);
+        // T3: no tag → the photo, compared with the catalog's photos, cached
+        // per post, and only ever a guess the reply must ask about.
+        const guess = !tagged && postRef.mediaId && post.imageUrl ? await guessProductFromPhoto(supabase, dealership.id, postRef.mediaId, post.imageUrl, catalogItems) : null;
+        text = withPostContext(rawText ?? "", postRef, post.caption, tagged, guess);
       }
       if (!senderId || !text || msgEvent?.message?.is_echo) continue;
 

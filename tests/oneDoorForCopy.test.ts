@@ -225,6 +225,12 @@ const NOT_COPY: Record<string, string> = {
   // customer is sent in the order flow is written by code from the
   // records (catalog prices, the Seller Mode fee, the pricing function
   // the order is written with), pinned by tests/orderConversation.
+  // Seller Mode T3, added 2026-11-28. Compares a post's photo with the
+  // catalog's photos and returns one of the names it was shown (or none)
+  // and a confidence. No customer-facing words; the reply that follows is
+  // the ordinary guarded path, told the guess must be asked about.
+  "src/lib/dm/postVision.ts":
+    "returns which catalog product a post photo may show, as a name it was given plus a confidence; writes no customer-facing words",
   "src/lib/dm/orderConversation.ts":
     "reads an Instagram DM into order fields for code to act on; every message the customer sees is written by code from the records",
 };
